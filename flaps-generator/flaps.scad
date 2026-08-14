@@ -36,6 +36,9 @@ charColorLayer = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
 // Per Character Font Size overwrite
 charSizeOffset = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,5,0,0,0,0,0,0,0,0,0,0,0];
 
+// Per Character X Position overwrite -> default is centered
+charXposOffset = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+
 // Per Character Y Position overwrite -> default is centered
 charYposOffset = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-3.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9,0,9,0,0,0,9,1.5,-12,0,0,0,0,0,0];
 
@@ -46,47 +49,45 @@ module PreviewFlaps(){
         for ( x = [0 : 7] ){
             char = (y*8)+x;
             translate([34+(x*34),22+(y*43),0])
-            flapPreview(char); 
+            flapPreview(char);
         }
     }
-    
+
 }
 
-module MakeFlaps(part){
+module MakeFlaps(col){
     for ( y = [0 : 5] ){
         for ( x = [0 : 2 : 12] ){
             char = (y*14)+x;
-            if (char>56){
             if (char<64) {
                 if (char==0){
                  translate([17+(x*17),22+(y*43),0])
-                 flap(63, char, char+1, part); }
+                 flap(63, char, char+1, col); }
                 else if (char==63) {
                  translate([17+(x*17),22+(y*43),0])
-                 flap(char-1, char, 0, part); }
+                 flap(char-1, char, 0, col); }
                 else {
                  translate([17+(x*17),22+(y*43),0])
-                 flap(char-1, char, char+1, part);} 
-            }
+                 flap(char-1, char, char+1, col);}
             }
         }
     }
 }
 
 module flapPreview(c1){
-     difference(){ 
+     difference(){
          union(){
          color(colors[flapColor[c1]])
-         linear_extrude(h=(layers*layerheight))
+         linear_extrude(height=(layers*layerheight))
          import("flap.dxf");
-         
+
          color(colors[flapColor[c1]])
              difference(){
-             linear_extrude(h=(layers*layerheight))
+             linear_extrude(height=(layers*layerheight))
              rotate([0,0,180])
              import("flap.dxf");
 
-             translate([0,-21.16+(blackmargin/2),(layerheight*layers)/2])            
+             translate([0,-21.16+(blackmargin/2),(layerheight*layers)/2])
              cube([34,blackmargin,layerheight*layers], center=true);
          }
 
@@ -94,149 +95,149 @@ module flapPreview(c1){
              color(colors[0])
              translate([0,0,layerheight*2])
              difference(){
-                linear_extrude(h=(layerheight))
+                linear_extrude(height=(layerheight))
                  rotate([0,0,180])
                  import("flap.dxf");
-                 translate([-17,-21.16+blackmargin,0])            
+                 translate([-17,-21.16+blackmargin,0])
                  cube([34,21.16-blackmargin,layerheight]);
          }
-         
+
          }
          charPreview(c1);
      }
-    charPreview(c1); 
+    charPreview(c1);
 }
 
-module flap(c1,c2,c3, part){
+module flap(c1,c2,c3, col){
     //print flaps with character cutout
-    
-     difference(){ 
+
+     difference(){
      union(){
-     if (flapColor[c3]==part) {
-         
+     if (flapColor[c3]==col) {
+
          //color(colors[flapColor[c3]])
-         //linear_extrude(h=(layerheight))
+         //linear_extrude(height=(layerheight))
          //import("flap.dxf");
-         
+
          if (flapColor[c3] != 0) {
          color(colors[flapColor[c3]])
          translate([0,0,0])
              difference(){
-                 linear_extrude(h=(layerheight))
+                 linear_extrude(height=(layerheight))
                  import("flap.dxf");
-                 translate([0,21.16-(blackmargin/2),layerheight/2])            
+                 translate([0,21.16-(blackmargin/2),layerheight/2])
                  cube([34,blackmargin,layerheight], center=true);
-                 
+
              }
          }
          else {
              color(colors[0])
              translate([0,0,0])
-             linear_extrude(h=(layerheight))
+             linear_extrude(height=(layerheight))
              import("flap.dxf");
-         } 
-         
-         
+         }
+
+
      }
-     
-     if (part==0){  // Always generate middle layer black
+
+     if (col==0){  // Always generate middle layer black
       color(colors[0])
       translate([0,0,layerheight])
-      linear_extrude(h=(layerheight))
+      linear_extrude(height=(layerheight))
       import("flap.dxf");
      }
-     
-     if (flapColor[c2]==part) {
+
+     if (flapColor[c2]==col) {
          color(colors[flapColor[c2]])
          translate([0,0,layerheight*2])
-         linear_extrude(h=(layerheight))
+         linear_extrude(height=(layerheight))
          import("flap.dxf");
      }
-     
-     if (flapColor[c1]==part) {
+
+     if (flapColor[c1]==col) {
          color(colors[flapColor[c1]])
-         linear_extrude(h=(layerheight))
+         linear_extrude(height=(layerheight))
          rotate([0,0,180])
          import("flap.dxf");
      }
-         
-     if (part==0){
+
+     if (col==0){
       color(colors[0])
       translate([0,0,layerheight])
-      linear_extrude(h=(layerheight))
+      linear_extrude(height=(layerheight))
       rotate([0,0,180])
       import("flap.dxf");
-      
-      
+
+
       //top layer bottom margin
       color(colors[0])
              translate([0,0,layerheight*2])
              difference(){
-                linear_extrude(h=(layerheight))
+                linear_extrude(height=(layerheight))
                  rotate([0,0,180])
                  import("flap.dxf");
-                 translate([-17,-21.16+blackmargin,0])            
+                 translate([-17,-21.16+blackmargin,0])
                  cube([34,21.16-blackmargin,layerheight]);
          }
-      
+
       //bottom layer bottom margin
       color(colors[0])
              translate([0,0,0])
              difference(){
-                linear_extrude(h=(layerheight))
+                linear_extrude(height=(layerheight))
                  import("flap.dxf");
-                translate([-17,-21.16+blackmargin,0])            
+                translate([-17,-21.16+blackmargin,0])
                  cube([34,21.16-blackmargin,layerheight]);
          }
-         
-         
-      
+
+
+
      }
-     
-     if (flapColor[c2]==part) {
+
+     if (flapColor[c2]==col) {
          if (flapColor[c2] != 0) {
          color(colors[flapColor[c2]])
          translate([0,0,layerheight*2])
              difference(){
-                 linear_extrude(h=(layerheight))
+                 linear_extrude(height=(layerheight))
                  rotate([0,0,180])
                  import("flap.dxf");
-                 translate([0,-21.16+(blackmargin/2),layerheight/2])            
+                 translate([0,-21.16+(blackmargin/2),layerheight/2])
                  cube([34,blackmargin,layerheight], center=true);
-                 
+
              }
          }
          else {
              color(colors[0])
              translate([0,0,layerheight*2])
-             linear_extrude(h=(layerheight))
+             linear_extrude(height=(layerheight))
              rotate([0,0,180])
              import("flap.dxf");
-         } 
-     
-         
+         }
+
+
      }
      }
      char1(c1);
      char2(c2);
      char3(c3);
      }
-    
+
 
     //print just the characters
-    if (charColorLayer[c1] == part) { char1(c1); }
-    if (charColorLayer[c2] == part) { char2(c2); }
-    if (charColorLayer[c3] == part) { char3(c3); }
+    if (charColorLayer[c1] == col) { char1(c1); }
+    if (charColorLayer[c2] == col) { char2(c2); }
+    if (charColorLayer[c3] == col) { char3(c3); }
 
 }
 
 module charPreview(c){
 difference(){
      color(colors[charColorLayer[c]])
-     translate([0,charYposOffset[c],layerheight*(layers-1)])
-     linear_extrude(h=layerheight)
+     translate([charXposOffset[c],charYposOffset[c],layerheight*(layers-1)])
+     linear_extrude(height=layerheight)
      text(chars[c], size=fontsize+charSizeOffset[c], font=fonts[charFont[c]], halign="center", valign="center");
-     
+
      translate([-20,-0.25,layerheight*(layers-1)])
      cube([50,0.5,layerheight]);
 }
@@ -245,11 +246,11 @@ difference(){
 module char1(c){
  difference(){
      color(colors[charColorLayer[c]])
-     translate([0,-charYposOffset[c],0])
-     linear_extrude(h=layerheight)
+     translate([charXposOffset[c],-charYposOffset[c],0])
+     linear_extrude(height=layerheight)
      rotate([180,0,0])
      text(chars[c], size=fontsize+charSizeOffset[c], font=fonts[charFont[c]], halign="center", valign="center");
-     
+
      translate([-20,-0.25,0])
      cube([50,20,layerheight]);
  }
@@ -258,29 +259,26 @@ module char1(c){
 module char2(c){
 difference(){
      color(colors[charColorLayer[c]])
-     translate([0,charYposOffset[c],layerheight*(layers-1)])
-     linear_extrude(h=layerheight)
+     translate([charXposOffset[c],charYposOffset[c],layerheight*(layers-1)])
+     linear_extrude(height=layerheight)
      text(chars[c], size=fontsize+charSizeOffset[c], font=fonts[charFont[c]], halign="center", valign="center");
-     
+
      translate([-20,-0.25,layerheight*(layers-1)])
      cube([50,0.5,layerheight]);
-     
+
 }
 }
 
 module char3(c){
  difference(){
      color(colors[charColorLayer[c]])
-     translate([0,-charYposOffset[c],0])
-     linear_extrude(h=layerheight)
+     translate([charXposOffset[c],-charYposOffset[c],0])
+     linear_extrude(height=layerheight)
      rotate([180,0,0])
      text(chars[c], size=fontsize+charSizeOffset[c], font=fonts[charFont[c]], halign="center", valign="center");
-     
+
      translate([-20,-20+0.25,0])
      cube([50,20,layerheight]);
  }
 }
-
-
-
 

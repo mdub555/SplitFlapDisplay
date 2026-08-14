@@ -1,0 +1,30 @@
+This is a major refactor of splitflapfirmwarev7, splitting out functionality
+into separate files and cleaning the RS-485 parsing logic.
+
+This was written and tested on an ATTiny816 instead of an ATTiny1616 like
+the original. If you want to use this on an larger ATTiny board, simply change
+the FQBN tags in the sketch.yaml file to match your board. If your board has a
+different pinout than mine, you may also have to change which pins are used
+in the various files.
+
+!! BEWARE !!
+If you decide to change the pinouts, especially for the debug serial output
+and the RS-485 RX/TX, make sure the pins you're using support this
+functionality.
+
+For my board, this is how I ended up organizing my pins. The Arduino breakout
+board I was using for testing and development doesn't break everything out,
+so I didn't have everything at my disposal.
+
+Function    | Arduino Pin | ATTiny816 Pin
+------------|-------------|--------------
+RS-485 TX   |          14 | PA1
+RS-485 RX   |          15 | PA2
+RS-485 DE   |           0 | PA4
+UPDI        |   Unlabeled | PA0
+Debug TX    |          11 | PC1
+Home sensor |           3 | PA7
+Motor IN1   |           7 | PB2
+Motor IN2   |           6 | PB3
+Motor IN3   |           5 | PB4
+Motor IN4   |           4 | PB5

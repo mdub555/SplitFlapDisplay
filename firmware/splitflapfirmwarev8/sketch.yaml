@@ -1,0 +1,17 @@
+profiles:
+  uno:
+    fqbn: arduino:avr:uno
+    platforms:
+      - platform: arduino:avr (1.8.8)
+
+  attiny816:
+    fqbn: megaTinyCore:megaavr:atxy6:chip=816,clock=10internal
+    platforms:
+      - platform: megaTinyCore:megaavr (2.6.11)
+        platform_index_url: https://raw.githubusercontent.com/SpenceKonde/ReleaseScripts/master/package_drazzy.com_index.json
+    programmer: serialupdi
+    libraries:
+
+default_profile: attiny816
+default_port: /dev/ttyUSB0
+default_protocol: serial
