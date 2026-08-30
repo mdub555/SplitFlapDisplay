@@ -1,0 +1,15 @@
+Designator,Val,Package,Mid X,Mid Y,Rotation,Layer
+C1,100u,C_Elec_5x5.4,118.9375,-113.0,180.0,top
+C10,100n,C_0603_1608Metric,125.5,-81.95,-90.0,top
+C5,10u,C_0603_1608Metric,118.5875,-106.05,0.0,top
+C6,10n,C_0603_1608Metric,118.5875,-100.05,0.0,top
+D1,LED,LED_0603_1608Metric,130.5,-89.0,180.0,top
+J1,Home,PinSocket_1x02_P2.54mm_Vertical,120.23,-81.95,90.0,top
+J3,Stepper,JST_XH_B5B-XH-A_1x05_P2.50mm_Vertical,125.1,-120.575,0.0,top
+J5,Prog & Debug,PinHeader_1x04_P2.54mm_Vertical,119.0,-91.81,0.0,top
+R2,65,R_0603_1608Metric,130.5,-91.0,0.0,top
+R3,10K,R_0603_1608Metric,128.5,-82.0,90.0,top
+U1,ULN2003A,SOIC-16_3.9x9.9mm_P1.27mm,129.0,-112.525,180.0,top
+U2,SP3485CN,SOIC-8_3.9x4.9mm_P1.27mm,131.0,-96.975,0.0,top
+U4,ATtiny816-M,VQFN-20-1EP_3x3mm_P0.4mm_EP1.7x1.7mm,131.55,-104.675,270.0,top
+U5,SPX3819M5-L-3-3,SOT-23-5,119.0,-103.0,90.0,top

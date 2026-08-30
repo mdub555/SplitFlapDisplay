@@ -13,12 +13,18 @@ Thumbs.db
 *.kicad_pcb.lck
 *.kicad_pro.lck
 ~*.lck
+*-backups/
 
 # FreeCad backup files
 *.FCBak
+*.FCStd1
 
 # STL files, so they don't have to be kept in sync with the FreeCad files
 *.stl
+*.3mf
 
 # Flap scad custom presets
 flaps.json
+
+# Frontend configs
+!.dockerignore
