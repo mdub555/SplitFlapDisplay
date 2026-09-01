@@ -35,7 +35,7 @@ namespace {
 
 namespace EepromStore {
 void begin(uint8_t hardcodedId) {
-  if (isInitialized()) {
+  if (!isInitialized()) {
     writeDefaults(hardcodedId);
   }
   load();

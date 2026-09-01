@@ -2,10 +2,7 @@
 
 #include <Arduino.h>
 
-#define IN1 PIN_PB2  // 7
-#define IN2 PIN_PB3  // 6
-#define IN3 PIN_PB4  // 5
-#define IN4 PIN_PB5  // 4
+#include "pinout.h"
 
 namespace {
   const int STEP_DELAY = 1;  // Milliseconds between each half-step pulse
@@ -26,34 +23,34 @@ namespace {
   };
 
   void applyStep(const uint8_t *step) {
-    digitalWrite(IN1, step[0]);
-    digitalWrite(IN2, step[1]);
-    digitalWrite(IN3, step[2]);
-    digitalWrite(IN4, step[3]);
+    digitalWrite(MOTOR_IN1, step[0]);
+    digitalWrite(MOTOR_IN2, step[1]);
+    digitalWrite(MOTOR_IN3, step[2]);
+    digitalWrite(MOTOR_IN4, step[3]);
   }
 }
 
 namespace Motor{
   void begin() {
-    pinMode(IN1, OUTPUT);
-    pinMode(IN2, OUTPUT);
-    pinMode(IN3, OUTPUT);
-    pinMode(IN4, OUTPUT);
+    pinMode(MOTOR_IN1, OUTPUT);
+    pinMode(MOTOR_IN2, OUTPUT);
+    pinMode(MOTOR_IN3, OUTPUT);
+    pinMode(MOTOR_IN4, OUTPUT);
   }
 
   void step() {
-    currentPhase++;
-    if (currentPhase >= 8) currentPhase = 0;
+    currentPhase--;
+    if (currentPhase < 0) currentPhase = 7;
 
     applyStep(halfStepSequence[currentPhase]);
     delay(STEP_DELAY);
   }
 
   void release() {
-    digitalWrite(IN1, 0);
-    digitalWrite(IN2, 0);
-    digitalWrite(IN3, 0);
-    digitalWrite(IN4, 0);
+    digitalWrite(MOTOR_IN1, 0);
+    digitalWrite(MOTOR_IN2, 0);
+    digitalWrite(MOTOR_IN3, 0);
+    digitalWrite(MOTOR_IN4, 0);
   }
 }
 

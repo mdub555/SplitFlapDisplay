@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define HOME_PIN PIN_PA7  // Arduino Pin 3;
+#include "pinout.h"
 
 namespace {
   bool lastHomeState = false;

@@ -21,6 +21,7 @@
 #include "eeprom_store.h"
 #include "home_sensor.h"
 #include "motor.h"
+#include "pinout.h"
 #include "splitflap.h"
 #include "tranceiver.h"
 
@@ -29,19 +30,21 @@
 const uint8_t HARDCODED_ID = 38;
 
 const long RS485_BAUD = 9600;
+const long DEBUG_BAUD = 19200;
 
 Tranceiver tranceiver;
-SoftwareSerial debugSerial(255, PIN_PC1);  // no RX needed; TX on pin 5 (PB4)
+SoftwareSerial debugSerial(255, DEBUG_PIN);  // no RX needed; TX on pin 5 (PB4)
 SplitFlap splitFlap(&debugSerial);
 Command command;
 
 // Start up the various components inside the module.
 void setup() {
+  pinMode(STATUS_LED, OUTPUT);
   EepromStore::begin(HARDCODED_ID);
   HomeSensor::begin();
   Motor::begin();
   tranceiver.begin(RS485_BAUD);
-  debugSerial.begin(19200);
+  debugSerial.begin(DEBUG_BAUD);
   splitFlap.begin();
 }
 
@@ -85,7 +88,6 @@ void loop() {
       case NUDGE:
         debugSerial.print("Nudge: ");
         debugSerial.println(command.data.dataInt);
-        splitFlap.nudge(command.data.dataInt);
         break;
 
       case MOVE_TO_STEP:
