@@ -32,11 +32,18 @@ void SplitFlap::begin() {
 void SplitFlap::stepAdvance(uint16_t steps) {
   for (uint16_t k = 0; k < steps; k++) {
     Motor::step();
+    currentStepPos++;
     bool edge = HomeSensor::detectRisingEdge();
     if (edge) {
+      if (currentStepPos < EepromStore::getTotalSteps() / 2) {
+        // Assume we've overshot the steps, go fewer steps
+        k += currentStepPos;
+      } else {
+        // Assume we've undershot home, go extra steps
+        steps += EepromStore::getTotalSteps() - currentStepPos;
+      }
       currentStepPos = EepromStore::getTotalSteps() - EepromStore::getHomeOffset();
     }
-    currentStepPos++;
     if (currentStepPos >= EepromStore::getTotalSteps()) currentStepPos = 0;
   }
 }
@@ -107,7 +114,7 @@ uint16_t SplitFlap::calibrate() {
 void SplitFlap::moveToIndex(uint8_t targetIndex) {
   debug->print("[Splitflap] moving to index: ");
   debug->println(targetIndex);
-  if (targetIndex < 0 || targetIndex >= NUM_FLAPS) return;
+  if (targetIndex >= NUM_FLAPS) return;
 
   // Already showing the right flap — nothing to do
   if (currentFlapIdx == targetIndex) return;

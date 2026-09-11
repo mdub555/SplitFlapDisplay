@@ -25,9 +25,9 @@
 #include "splitflap.h"
 #include "tranceiver.h"
 
-// !!! CHANGE THIS FOR EACH MODULE TODAY !!!
+// Default unset ID, to be updated via the frontend on installation.
 // This is burned into EEPROM on first boot if no saved ID exists.
-const uint8_t HARDCODED_ID = 38;
+const uint8_t HARDCODED_ID = 255;
 
 const long RS485_BAUD = 9600;
 const long DEBUG_BAUD = 19200;

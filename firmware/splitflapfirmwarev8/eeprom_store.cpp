@@ -4,6 +4,15 @@
 #include <EEPROM.h>
 
 namespace {
+  const uint16_t TOTAL_STEPS = 4096;
+  const uint16_t NUM_FLAPS = 64;
+  const uint16_t STEPS_PER_FLAP = TOTAL_STEPS/NUM_FLAPS;
+  // With the wire-based home sensor, home is detected immediatly when the
+  // blank flap is visible. Home is on the white flap, which is 7 flaps
+  // from the black flap. Set the home 7.5 flaps past home, making each
+  // flap right in the middle of their expected position.
+  const uint16_t HOME_OFFSET = STEPS_PER_FLAP*7 + STEPS_PER_FLAP/2;
+
   struct Config {
     uint16_t homeOffset = 0;   // Steps past magnet trigger to reach flap 0
     uint16_t totalSteps = 0;   // Total steps for one full reel revolution
@@ -21,7 +30,7 @@ namespace {
 
   // Magic value written to ADDR_INIT to indicate EEPROM has been initialized.
   // Changing this value forces all modules to reset to defaults on next boot.
-  const uint8_t INIT_VALUE = 0x1B;
+  const uint8_t INIT_VALUE = 0x3B;
 
   Config config;
 
@@ -43,11 +52,8 @@ void begin(uint8_t hardcodedId) {
 
 void writeDefaults(uint8_t hardcodedId) {
   EEPROM.write(ADDR_INIT, INIT_VALUE);
-  // With the wire-based home sensor, home is detected immediatly when the
-  // blank flap is visible. 32 steps is half way to the next flap, making
-  // each flap right in the middle of their expected position.
-  saveHomeOffset(32);
-  saveTotalSteps(4096);
+  saveHomeOffset(HOME_OFFSET);
+  saveTotalSteps(TOTAL_STEPS);
   saveModuleId(hardcodedId);
   saveAutoHome(true);
 }

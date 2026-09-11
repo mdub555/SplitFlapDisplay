@@ -39,6 +39,6 @@ def stop_app():
 
 @bp.route('/home_all')
 def home_all():
-    send_raw('m**h')
+    send_raw('m*h')
     state.set_display(' ' * NUM_MODULES, [0] * NUM_MODULES)
     return jsonify(status='Homing All')
