@@ -23,7 +23,10 @@ class SplitFlap {
   // Advances `steps` half-steps, correcting currentStepPos using the known
   // home offset whenever the home sensor's rising edge is crossed. This is
   // the one place motor movement and split-flap position tracking meet.
-  void stepAdvance(uint16_t steps);
+  bool stepAdvance(uint16_t steps);
+  bool stepAdvance();
+
+  uint16_t stepsToTarget(uint16_t targetStepPos) const;
 
  public:
   SplitFlap(SoftwareSerial* debugSerial);

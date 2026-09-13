@@ -13,36 +13,24 @@ namespace {
     READING_DATA_INT,   // reading in multiple digits for one of many commands
   };
 
-  CommandType toCommandType(char c) {
+  __attribute__((noinline)) CommandType toCommandType(char c) {
     switch (c) {
-      case '-':
-        return DISPLAY_CHAR;
-      case '+':
-        return DISPLAY_INDEX;
-      case 'h':
-        return HOME;
-      case 'c':
-        return CALIBRATE;
-      case 'o':
-        return SET_OFFSET;
-      case 't':
-        return SET_TOTAL_STEPS;
-      case 's':
-        return NUDGE;
-      case 'g':
-        return MOVE_TO_STEP;
-      case 'i':
-        return SET_MODULE_ID;
-      case 'a':
-        return SET_AUTO_HOME;
-      case 'd':
-        return DUMP_STATE;
-      default:
-        return UNKNOWN_COMMAND;
+      case '-': return DISPLAY_CHAR;
+      case '+': return DISPLAY_INDEX;
+      case 'h': return HOME;
+      case 'c': return CALIBRATE;
+      case 'o': return SET_OFFSET;
+      case 't': return SET_TOTAL_STEPS;
+      case 's': return NUDGE;
+      case 'g': return MOVE_TO_STEP;
+      case 'i': return SET_MODULE_ID;
+      case 'a': return SET_AUTO_HOME;
+      case 'd': return DUMP_STATE;
+      default:  return UNKNOWN_COMMAND;
     }
   }
 
-  bool toCommand(Command& command, const char* buffer, uint8_t bufferLen) {
+  __attribute__((noinline)) bool toCommand(Command& command, const char* buffer, uint8_t bufferLen) {
     command.data.dataInt = 0;
     command.type = UNKNOWN_COMMAND;
     ParseState parseState = IDLE;
