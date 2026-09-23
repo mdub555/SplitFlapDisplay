@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build an image with the Python 3.12 image
-FROM python:3.12-alpine
+FROM python:3.14-slim
 
 # Set the working directory to `/code`
 WORKDIR /code
@@ -11,7 +11,11 @@ ENV FLASK_APP=app.py
 ENV FLASK_RUN_HOST=0.0.0.0
 
 # Install `gcc` and other dependencies
-RUN apk add --no-cache gcc musl-dev linux-headers
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     gcc \
+#     libc-dev \
+#     linux-headers-generic \
+#     && rm -rf /var/lib/apt/lists/*
 
 # Copy `requirements.txt`
 COPY requirements.txt .

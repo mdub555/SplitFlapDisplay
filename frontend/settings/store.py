@@ -24,8 +24,8 @@ def _app_defaults():
 
 def build_defaults():
     defaults = {
-        'offsets': {str(i): 2832 for i in range(NUM_MODULES)},
-        'calibrations': {str(i): 4096 for i in range(NUM_MODULES)},
+        'offsets': {},
+        'calibrations': {},
         'auto_home': True,
         'saved_playlists': {},
     }

@@ -134,6 +134,20 @@ function toggleAutoHome(){
   api.toggleAutoHome(document.getElementById('autoHomeToggle').checked);
 }
 
+
+function provisionModule(){
+  if(!confirm('Assign the next grid ID to the unprovisioned module on the bus?')) return;
+  showToast('Provisioning…', 'warn');
+  api.provisionModule().then(d=>{
+    if(d.status === 'success'){
+      showToast(`Module assigned ID ${d.assigned_id}`);
+      loadTuningData();
+    } else {
+      showToast(d.message || 'Provisioning failed', 'error');
+    }
+  }).catch(()=>showToast('Provisioning failed', 'error'));
+}
+
 function downloadBackup(){
   api.backupSettings().then(data=>{
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});

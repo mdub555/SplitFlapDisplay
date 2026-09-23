@@ -43,4 +43,5 @@ const api = {
   restoreSettings:    (data) => fetch('/restore_settings', {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
   }).then(r=>r.json()),
+  provisionModule:    () => fetch('/provision_module', {method:'POST'}).then(r => r.json()),
 };
