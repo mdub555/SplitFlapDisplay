@@ -26,6 +26,8 @@ namespace {
       case 'i': return SET_MODULE_ID;
       case 'a': return SET_AUTO_HOME;
       case 'd': return DUMP_STATE;
+      case 'w': return SET_MOTOR_CW;
+      case 'r': return SET_MOTOR_RELEASE;
       default:  return UNKNOWN_COMMAND;
     }
   }
@@ -75,6 +77,8 @@ namespace {
             case MOVE_TO_STEP:
             case SET_MODULE_ID:
             case SET_AUTO_HOME:
+            case SET_MOTOR_CW:
+            case SET_MOTOR_RELEASE:
               parseState = READING_DATA_INT;
               break;
             case HOME:
@@ -123,7 +127,13 @@ void Tranceiver::dump() {
   Serial.print("d:");
   Serial.print(EepromStore::getHomeOffset());
   Serial.print(":");
-  Serial.println(EepromStore::getTotalSteps());
+  Serial.print(EepromStore::getTotalSteps());
+  Serial.print(":");
+  Serial.print(EepromStore::isMotorClockwise() ? "1" : "0");
+  Serial.print(":");
+  Serial.print(EepromStore::autoHomeEnabled() ? "1" : "0");
+  Serial.print(":");
+  Serial.println(EepromStore::releaseMotorEnabled() ? "1" : "0");
 }
 
 bool Tranceiver::poll(Command& command) {

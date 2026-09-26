@@ -23,7 +23,6 @@ class SplitFlap {
   // Advances `steps` half-steps, correcting currentStepPos using the known
   // home offset whenever the home sensor's rising edge is crossed. This is
   // the one place motor movement and split-flap position tracking meet.
-  bool stepAdvance(uint16_t steps);
   bool stepAdvance();
 
   uint16_t stepsToTarget(uint16_t targetStepPos) const;
@@ -40,6 +39,12 @@ class SplitFlap {
   // Returns the current flap index, or -1 if it's unknown, or -2 if the step
   // is known but not the flap.
   int8_t currentFlapIndex() const;
+
+  // Returns the current step position.
+  uint16_t currentStepPosition() const;
+
+  // Move the motor `steps` steps.
+  bool stepAdvance(uint16_t steps);
 
   // Drives the reel to the physical zero position (flap 0 = blank space).
   void home();

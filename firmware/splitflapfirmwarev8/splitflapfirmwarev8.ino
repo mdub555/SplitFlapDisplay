@@ -76,7 +76,12 @@ void loop() {
       case SET_OFFSET:
         debugSerial.print("Set offset: ");
         debugSerial.println(command.data.dataInt);
-        EepromStore::saveHomeOffset(command.data.dataInt);
+        // 0 is a special case that means set the current position as the offset
+        if (command.data.dataInt == 0) {
+          EepromStore::saveHomeOffset(splitFlap.currentStepPosition());
+        } else {
+          EepromStore::saveHomeOffset(command.data.dataInt);
+        }
         break;
 
       case SET_TOTAL_STEPS:
@@ -88,6 +93,7 @@ void loop() {
       case NUDGE:
         debugSerial.print("Nudge: ");
         debugSerial.println(command.data.dataInt);
+        splitFlap.stepAdvance(command.data.dataInt);
         break;
 
       case MOVE_TO_STEP:
@@ -106,6 +112,23 @@ void loop() {
         debugSerial.print("Set Auto Home: ");
         debugSerial.println(command.data.dataInt);
         EepromStore::saveAutoHome(command.data.dataInt);
+        break;
+
+      case SET_MOTOR_CW:
+        debugSerial.print("Set Motor Clockwise: ");
+        debugSerial.println(command.data.dataInt);
+        EepromStore::saveMotorDir(/* clockwise= */ command.data.dataInt);
+        break;
+
+      case SET_MOTOR_RELEASE:
+        debugSerial.print("Set Motor Release: ");
+        debugSerial.println(command.data.dataInt);
+        EepromStore::saveReleaseMotor(command.data.dataInt);
+        if (command.data.dataInt) {
+          Motor::release();
+        } else {
+          Motor::tense();
+        }
         break;
 
       case DUMP_STATE:

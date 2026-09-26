@@ -31,21 +31,23 @@
 //         a, Enable or disable auto-home. data must be 0 for disable, 1 for
 //            enable
 //         d, Dump the module state back to the Raspberry Pi in the format
-//            m<ID>d:<homeOffset>:<totalSteps>. No data expected
+//            m<ID>d:<homeOffset>:<totalSteps>:<motorDir>:<autoHome>. No data expected
 // =============================================================================
 enum CommandType {
   UNKNOWN_COMMAND,
-  DISPLAY_CHAR,     // '-'
-  DISPLAY_INDEX,    // '+'
-  HOME,             // 'h'
-  CALIBRATE,        // 'c'
-  SET_OFFSET,       // 'o'
-  SET_TOTAL_STEPS,  // 't'
-  NUDGE,            // 's'
-  MOVE_TO_STEP,     // 'g'
-  SET_MODULE_ID,    // 'i'
-  SET_AUTO_HOME,    // 'a'
-  DUMP_STATE,       // 'd'
+  DISPLAY_CHAR,       // '-'
+  DISPLAY_INDEX,      // '+'
+  HOME,               // 'h'
+  CALIBRATE,          // 'c'
+  SET_OFFSET,         // 'o'
+  SET_TOTAL_STEPS,    // 't'
+  NUDGE,              // 's'
+  MOVE_TO_STEP,       // 'g'
+  SET_MODULE_ID,      // 'i'
+  SET_AUTO_HOME,      // 'a'
+  DUMP_STATE,         // 'd'
+  SET_MOTOR_CW,       // 'w'
+  SET_MOTOR_RELEASE,  // 'r'
 };
 
 struct Command {
@@ -78,7 +80,7 @@ class Tranceiver {
   // messages with a missed or absent terminator).
   bool poll(Command& poll);
 
-  // Sends: m<ID>d:<homeOffset>:<totalSteps>
+  // Sends: m<ID>d:<homeOffset>:<totalSteps>:<clockwise>:<autoHome>:<releaseMotor>
   void dump();
 };
 

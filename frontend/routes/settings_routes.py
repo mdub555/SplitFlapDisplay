@@ -82,10 +82,10 @@ def provision_module():
     time.sleep(0.2)
 
     # 3. Push default offset/calibration so it's immediately usable
-    send_raw(f"m{new_id:02d}o32")
+    send_raw(f"m{new_id:02d}o480")
     send_raw(f"m{new_id:02d}t4096")
 
-    settings['offsets'][str(new_id)] = 32
+    settings['offsets'][str(new_id)] = 480
     settings['calibrations'][str(new_id)] = 4096
     save_settings(settings)
 

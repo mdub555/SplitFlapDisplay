@@ -15,6 +15,10 @@ namespace Motor{
   // Release the power on all stepper pins. Friction and the magnets should
   // hold it in place well enough.
   void release();
+
+  // Add power back to the stepper pins. This doesn't change which step
+  // the motor is on.
+  void tense();
 }
 
 #endif

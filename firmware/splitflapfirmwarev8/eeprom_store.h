@@ -26,6 +26,12 @@ namespace EepromStore {
 
   void saveAutoHome(bool enabled);
   bool autoHomeEnabled();
+
+  bool isMotorClockwise();
+  void saveMotorDir(bool clockwise);
+
+  bool releaseMotorEnabled();
+  void saveReleaseMotor(bool releaseMotor);
 }
 
 #endif

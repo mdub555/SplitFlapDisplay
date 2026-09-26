@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 
+#include "eeprom_store.h"
 #include "pinout.h"
 
 namespace {
@@ -39,8 +40,13 @@ namespace Motor{
   }
 
   void step() {
-    currentPhase--;
+    if (EepromStore::isMotorClockwise()) {
+      currentPhase--;
+    } else {
+      currentPhase++;
+    }
     if (currentPhase < 0) currentPhase = 7;
+    if (currentPhase > 7) currentPhase = 0;
 
     applyStep(halfStepSequence[currentPhase]);
     delay(STEP_DELAY);
@@ -51,6 +57,10 @@ namespace Motor{
     digitalWrite(MOTOR_IN2, 0);
     digitalWrite(MOTOR_IN3, 0);
     digitalWrite(MOTOR_IN4, 0);
+  }
+
+  void tense() {
+    applyStep(halfStepSequence[currentPhase]);
   }
 }
 

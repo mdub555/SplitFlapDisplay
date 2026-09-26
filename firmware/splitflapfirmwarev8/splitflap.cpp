@@ -26,7 +26,9 @@ void SplitFlap::begin() {
     delay(EepromStore::getModuleId() * 150);
   }
 
-  home();
+  if (EepromStore::autoHomeEnabled()) {
+    home();
+  }
 }
 
 bool SplitFlap::stepAdvance(uint16_t steps) {
@@ -53,6 +55,8 @@ bool SplitFlap::stepAdvance() {
 
 int8_t SplitFlap::currentFlapIndex() const { return currentFlapIdx; }
 
+uint16_t SplitFlap::currentStepPosition() const { return currentStepPos; }
+
 bool SplitFlap::isHome() {
   return HomeSensor::homeActive();
 }
@@ -73,7 +77,9 @@ void SplitFlap::home() {
 
   currentStepPos = 0;
   currentFlapIdx = 0;
-  Motor::release();
+  if (EepromStore::releaseMotorEnabled()) {
+    Motor::release();
+  }
 }
 
 uint16_t SplitFlap::calibrate() {
@@ -141,7 +147,9 @@ void SplitFlap::moveToIndex(uint8_t targetIndex) {
     }
   }
 
-  Motor::release();
+  if (EepromStore::releaseMotorEnabled()) {
+    Motor::release();
+  }
   currentFlapIdx = targetIndex;
 }
 
@@ -166,7 +174,9 @@ void SplitFlap::goToRawStep(uint16_t targetStep) {
   if (stepsToMove < 0) stepsToMove += EepromStore::getTotalSteps(); // Wrap
 
   stepAdvance(stepsToMove);
-  Motor::release();
+  if (EepromStore::releaseMotorEnabled()) {
+    Motor::release();
+  }
   currentFlapIdx = -2; // Position known in steps but not as a named character
 }
 

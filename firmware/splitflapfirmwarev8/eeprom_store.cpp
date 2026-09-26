@@ -12,12 +12,17 @@ namespace {
   // from the black flap. Set the home 7.5 flaps past home, making each
   // flap right in the middle of their expected position.
   const uint16_t HOME_OFFSET = STEPS_PER_FLAP*7 + STEPS_PER_FLAP/2;
+  const uint8_t MASK_AUTO_HOME = 1<<1;
+  const uint8_t MASK_MOTOR_CW = 1<<2;
+  const uint8_t MASK_RELEASE_MOTOR = 1<<3;
 
   struct Config {
     uint16_t homeOffset = 0;   // Steps past magnet trigger to reach flap 0
     uint16_t totalSteps = 0;   // Total steps for one full reel revolution
     uint8_t  moduleId = 0;     // This module's bus ID (0–254; 255 = unset)
     bool     autoHome = false; // Whether to home on every boot
+    bool     motorClockwise = true; // Whether the motor defaults to rotating clockwise
+    bool     releaseMotor = true;   // Whether the motor defaults to rotating clockwise
   };
 
   // ---- EEPROM Address Map ----
@@ -26,11 +31,11 @@ namespace {
   const uint16_t ADDR_HOME_OFFSET = 1;   // 2 bytes — Steps past magnet trigger to reach flap 0
   const uint16_t ADDR_TOTAL_STEPS = 3;   // 2 bytes — Total steps for one full reel revolution
   const uint16_t ADDR_MODULE_ID   = 5;   // 1 byte  — This module's bus ID (0–254; 255 = unset)
-  const uint16_t ADDR_AUTO_HOME   = 6;   // 1 byte  — 1 = home on boot, 0 = restore saved position
+  const uint16_t ADDR_BOOLEANS    = 6;   // 1 byte  — boolean configs, see masks above
 
   // Magic value written to ADDR_INIT to indicate EEPROM has been initialized.
   // Changing this value forces all modules to reset to defaults on next boot.
-  const uint8_t INIT_VALUE = 0x3B;
+  const uint8_t INIT_VALUE = 0x03;
 
   Config config;
 
@@ -38,7 +43,14 @@ namespace {
     EEPROM.get(ADDR_HOME_OFFSET, config.homeOffset);
     EEPROM.get(ADDR_TOTAL_STEPS, config.totalSteps);
     config.moduleId = EEPROM.read(ADDR_MODULE_ID);
-    config.autoHome = (EEPROM.read(ADDR_AUTO_HOME) == 1);
+    uint8_t booleans = EEPROM.read(ADDR_BOOLEANS);
+    config.autoHome = booleans & MASK_AUTO_HOME;
+    config.motorClockwise = booleans & MASK_MOTOR_CW;
+    config.releaseMotor = booleans & MASK_RELEASE_MOTOR;
+  }
+
+  void saveBooleans() {
+    EEPROM.write(ADDR_BOOLEANS, config.autoHome | config.motorClockwise | config.releaseMotor);
   }
 }
 
@@ -55,7 +67,9 @@ void writeDefaults(uint8_t hardcodedId) {
   saveHomeOffset(HOME_OFFSET);
   saveTotalSteps(TOTAL_STEPS);
   saveModuleId(hardcodedId);
-  saveAutoHome(true);
+  saveAutoHome(false);
+  saveMotorDir(/* clockwise= */ true);
+  saveReleaseMotor(true);
 }
 
 bool isInitialized() {
@@ -91,9 +105,23 @@ uint8_t getModuleId() {
 
 void saveAutoHome(bool enabled) {
   config.autoHome = enabled;
-  EEPROM.write(ADDR_AUTO_HOME, enabled ? 1 : 0);
+  saveBooleans();
+}
+
+void saveMotorDir(bool clockwise) {
+  config.motorClockwise = clockwise;
+  saveBooleans();
+}
+
+void saveReleaseMotor(bool releaseMotor) {
+  config.releaseMotor = releaseMotor;
+  saveBooleans();
 }
 
 bool autoHomeEnabled() { return config.autoHome; }
+
+bool isMotorClockwise() { return config.motorClockwise; }
+
+bool releaseMotorEnabled() { return config.releaseMotor; }
 }
 
