@@ -63,40 +63,76 @@ function initLiveGrids() {
   });
 }
 
-function startLivePolling() {
-  setInterval(()=>{
-    api.currentState().then(data=>{
-      if (!data) return; // failed tick — no toast (see api.js), just skip this update
+// Pulled out from the SSE wiring below so it can be exercised directly in
+// tests (and reused for anything else that ever wants to push a snapshot
+// into the UI) without needing a real or mocked EventSource in the loop.
+function applyLiveState(data) {
+  if (!data) return;
 
-      ['control','apps'].forEach(tab=>{
-        const el = document.getElementById(`homing-${tab}`);
-        if(el) el.style.display = data.is_homed ? 'none' : 'flex';
-      });
+  ['control','apps'].forEach(tab=>{
+    const el = document.getElementById(`homing-${tab}`);
+    if(el) el.style.display = data.is_homed ? 'none' : 'flex';
+  });
 
-      const s = data.state || '';
-      ['control','apps'].forEach(tab=>{
-        const fa = liveFlaps[tab];
-        for(let i=0; i<fa.length; i++){
-          const ch = s[i] || ' ';
-          const idx = CHAR_MAP.indexOf(ch);
-          fa[i].setTarget(idx >= 0 ? idx : 0, i * 5);
-        }
-      });
+  const s = data.state || '';
+  ['control','apps'].forEach(tab=>{
+    const fa = liveFlaps[tab];
+    for(let i=0; i<fa.length; i++){
+      const ch = s[i] || ' ';
+      const idx = CHAR_MAP.indexOf(ch);
+      fa[i].setTarget(idx >= 0 ? idx : 0, i * 5);
+    }
+  });
 
-      const app = data.active_app;
-      const appInfo = app ? (window.appsByKey[app] || {name: app}) : null;
-      ['control','apps'].forEach(tab=>{
-        const banner = document.getElementById(`${tab}-banner`);
-        const nameEl = document.getElementById(`${tab}-app-name`);
-        if(banner){
-          banner.classList.toggle('visible', !!app);
-          if(app && nameEl) nameEl.textContent = appInfo.name;
-        }
-      });
+  const app = data.active_app;
+  const appInfo = app ? (window.appsByKey[app] || {name: app}) : null;
+  ['control','apps'].forEach(tab=>{
+    const banner = document.getElementById(`${tab}-banner`);
+    const nameEl = document.getElementById(`${tab}-app-name`);
+    if(banner){
+      banner.classList.toggle('visible', !!app);
+      if(app && nameEl) nameEl.textContent = appInfo.name;
+    }
+  });
 
-      document.querySelectorAll('.app-card').forEach(c=>{
-        c.classList.toggle('running', c.dataset.app === app);
-      });
-    });
-  }, 1000);
+  document.querySelectorAll('.app-card').forEach(c=>{
+    c.classList.toggle('running', c.dataset.app === app);
+  });
+}
+
+// Replaces the old setInterval(...)-based polling of /current_state with a
+// persistent connection to /current_state/stream: the backend pushes a
+// snapshot only when something actually changes (see DisplayState._broadcast
+// in display/state.py), so updates are near-instant instead of up to 1s
+// stale, and there's no request firing every second when nothing's moving.
+function startLiveUpdates() {
+  const source = new EventSource('/current_state/stream');
+  const statusEl = document.getElementById('streamStatus');
+
+  source.onopen = () => {
+    // Fires on the initial connect AND every successful auto-reconnect —
+    // either way, the stream is live again, so clear the "reconnecting" banner.
+    if (statusEl) statusEl.classList.remove('visible');
+  };
+
+  source.onmessage = (event) => {
+    let data;
+    try {
+      data = JSON.parse(event.data);
+    } catch (err) {
+      console.error('Bad SSE payload:', event.data, err);
+      return;
+    }
+    applyLiveState(data);
+  };
+
+  source.onerror = () => {
+    // The browser retries the connection automatically (that's part of the
+    // EventSource spec) — surface it in the UI too, not just the console,
+    // so a dropped connection doesn't look identical to "nothing changed."
+    console.warn('Live state stream disconnected — the browser will retry automatically.');
+    if (statusEl) statusEl.classList.add('visible');
+  };
+
+  return source;
 }

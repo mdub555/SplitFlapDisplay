@@ -26,6 +26,14 @@
     </button>
   </div>
 
+  <!-- Shown only while the live-state stream (SSE) is disconnected — the
+       browser retries automatically, this is just so a dropped connection
+       is visibly different from "genuinely nothing is happening." -->
+  <div id="streamStatus" class="stream-status">
+    <div class="stream-status-dot"></div>
+    <span>Reconnecting to display…</span>
+  </div>
+
   <!-- ══════════ CONTROL PAGE ══════════ -->
   <div id="page-control" class="page active">
     <div id="control-banner" class="active-app-banner">

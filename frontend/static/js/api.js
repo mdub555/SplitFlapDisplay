@@ -8,9 +8,10 @@
 //     ...
 //   });
 //
-// Pass `errorMessage: null` (see currentState below) to suppress the toast
-// for calls that poll frequently, where a toast on every failed tick would
-// spam the user — the failure is still logged to console either way.
+// Pass `errorMessage: null` to suppress the toast for a call that's expected
+// to fail transiently and retry on its own — the failure is still logged to
+// console either way. (No current caller needs this, but the option's kept
+// since live state used to be one before it moved to the SSE stream below.)
 
 async function apiFetchJson(url, options, errorMessage) {
   let res;
@@ -44,7 +45,9 @@ const jsonHeaders = {'Content-Type': 'application/json'};
 
 const api = {
   config:             () => apiFetchJson('/config', {}, 'Could not load configuration'),
-  currentState:       () => apiFetchJson('/current_state', {}, null), // polled every second — no toast spam
+  // Live state now arrives over /current_state/stream (see live-flap.js's
+  // startLiveUpdates) instead of being polled — no api.currentState() wrapper
+  // needed here anymore.
 
   apps:               () => apiFetchJson('/apps', {}, 'Could not load app list'),
   saveAppSettings:    (key, data) => apiFetchJson(`/apps/${key}/settings`, {

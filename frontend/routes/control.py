@@ -1,4 +1,7 @@
-from flask import Blueprint, request, jsonify
+import json
+import queue
+
+from flask import Blueprint, Response, request, jsonify, stream_with_context
 
 from config import NUM_MODULES
 from display.state import state
@@ -9,7 +12,43 @@ bp = Blueprint('control', __name__)
 
 @bp.route('/current_state')
 def current_state():
+    """One-off snapshot — handy for a quick curl/debug check. The live UI
+    uses /current_state/stream instead so it doesn't have to poll this."""
     return jsonify(**state.snapshot())
+
+
+@bp.route('/current_state/stream')
+def current_state_stream():
+    """Server-Sent Events stream: pushes a fresh snapshot every time the
+    display actually changes (see DisplayState._broadcast), instead of the
+    frontend polling /current_state on a timer. A heartbeat comment goes out
+    every 15s so idle proxies/browsers don't treat the connection as dead.
+
+    Requires the Flask dev server to run with threaded=True (see app.py) —
+    each open SSE connection holds its thread for as long as the browser tab
+    stays on the page, so a single-worker server would serve exactly one
+    client before every other request starts blocking behind it. The same
+    caveat applies to a production WSGI server: a sync worker pool needs
+    enough threads/workers to cover concurrent SSE clients, or an async
+    worker class (gevent/eventlet) that isn't limited by thread count.
+    """
+    def gen():
+        q = state.subscribe()
+        try:
+            while True:
+                try:
+                    data = q.get(timeout=15)
+                    yield f"data: {json.dumps(data)}\n\n"
+                except queue.Empty:
+                    yield ": keep-alive\n\n"
+        finally:
+            state.unsubscribe(q)
+
+    return Response(
+        stream_with_context(gen()),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
 
 
 @bp.route('/update_playlist', methods=['POST'])
@@ -18,21 +57,21 @@ def update_playlist():
     state.current_playlist = data.get('pages', [])
     state.loop_delay = data.get('delay', 5)
     state.last_sent_page = None
-    state.active_app = None
+    state.set_active_app(None)
     state.request_stop()
     return jsonify(status='success')
 
 
 @bp.route('/run_app', methods=['POST'])
 def run_app():
-    state.active_app = (request.json or {}).get('app')
+    state.set_active_app((request.json or {}).get('app'))
     state.request_stop()
     return jsonify(status=f"App {state.active_app} started")
 
 
 @bp.route('/stop_app', methods=['POST'])
 def stop_app():
-    state.active_app = None
+    state.set_active_app(None)
     state.request_stop()
     return jsonify(status='stopped')
 

@@ -26,6 +26,11 @@ h3{margin-top:0;color:var(--text)}
 .page.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 
+/* ── LIVE STREAM STATUS ── */
+.stream-status{display:none;align-items:center;gap:10px;background:#2a1a1a;border:1px solid var(--red);border-radius:8px;padding:10px 16px;margin-bottom:15px;font-size:.9rem;font-weight:600}
+.stream-status.visible{display:flex}
+.stream-status-dot{width:10px;height:10px;border-radius:50%;background:var(--red);animation:pulse 1.2s infinite}
+
 /* ── ACTIVE APP BANNER ── */
 .active-app-banner{display:none;align-items:center;gap:10px;background:#1a2a1a;border:1px solid var(--green);border-radius:8px;padding:10px 16px;margin-bottom:15px}
 .active-app-banner.visible{display:flex}

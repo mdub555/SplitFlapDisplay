@@ -1,4 +1,4 @@
-const { dom, window, calls, setFailNextCurrentState } = require('./harness');
+const { dom, window, calls, MockEventSource } = require('./harness');
 
 const document = window.document;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -24,9 +24,16 @@ function change(el) {
 }
 
 async function main() {
-  // Fire DOMContentLoaded to run main.js's bootstrap.
-  document.dispatchEvent(new window.Event('DOMContentLoaded', { bubbles: true }));
-  await sleep(50); // let the config/apps fetches + rendering settle
+  // jsdom fires its own DOMContentLoaded once the document finishes parsing
+  // (standard behavior for any full HTML document under runScripts:
+  // 'dangerously', independent of whether <script> tags are present) — that
+  // alone runs main.js's bootstrap. Dispatching a second one manually here
+  // used to double-run it silently (every step of main.js's bootstrap
+  // happens to be idempotent, so it went unnoticed — until now: a second
+  // EventSource getting opened is exactly the kind of thing a duplicate
+  // bootstrap run would cause in a real browser too, so this is worth
+  // catching rather than masking with a redundant manual dispatch).
+  await sleep(50); // let jsdom's native DOMContentLoaded + the config/apps fetches settle
 
   console.log('\n--- Boot ---');
   check('GRID_COLS picked up from /config (16)', globalVar('GRID_COLS') === 16);
@@ -119,12 +126,44 @@ async function main() {
   await sleep(20);
   check('loadSavedPlaylist fetched /playlists', calls.some(c => c.url === '/playlists' && c.method === 'GET'));
 
-  console.log('\n--- Error handling: failed request shows a toast and does not crash ---');
-  await sleep(1100); // let one polling tick pass normally first
-  setFailNextCurrentState(true);
-  await sleep(1100); // this tick's fetch throws inside the mock
-  check('a failed /current_state tick does not throw / app still responsive',
-    document.getElementById('tab-tuning') !== null);
+  console.log('\n--- Live state arrives over SSE, not polling ---');
+  check('exactly one EventSource was opened, at /current_state/stream',
+    MockEventSource.instances.length === 1 && MockEventSource.instances[0].url === '/current_state/stream');
+  check('no /current_state polling request was ever made', !calls.some(c => c.url === '/current_state'));
+
+  const source = MockEventSource.instances[0];
+  await sleep(10); // let the mock's async onopen fire
+
+  source.emit({ is_homed: false, state: ' '.repeat(64), active_app: 'weather' });
+  await sleep(10);
+  check('a pushed snapshot toggles the homing overlay',
+    document.getElementById('homing-control').style.display === 'flex');
+  check('a pushed snapshot updates the active-app banner',
+    document.getElementById('control-banner').classList.contains('visible') &&
+    document.getElementById('control-app-name').textContent === 'Weather');
+
+  source.emit({ is_homed: true, state: 'X'.repeat(64), active_app: null });
+  await sleep(10);
+  check('homing overlay clears once is_homed is true',
+    document.getElementById('homing-control').style.display === 'none');
+  check('banner hides once active_app is null',
+    !document.getElementById('control-banner').classList.contains('visible'));
+
+  console.log('\n--- Malformed SSE payload logged and skipped, not thrown ---');
+  let threw = false;
+  try { source.emitRaw('not valid json'); } catch (e) { threw = true; }
+  await sleep(10);
+  check('a malformed message does not throw / app still responsive', !threw && document.getElementById('tab-tuning') !== null);
+
+  console.log('\n--- Stream disconnect shows the status banner; reconnect clears it ---');
+  const streamStatus = document.getElementById('streamStatus');
+  check('status banner starts hidden', !streamStatus.classList.contains('visible'));
+  source.simulateError();
+  await sleep(10);
+  check('status banner becomes visible on stream error', streamStatus.classList.contains('visible'));
+  source.simulateReconnect();
+  await sleep(10);
+  check('status banner hides again once the stream reconnects', !streamStatus.classList.contains('visible'));
 
   click(document.getElementById('tab-tuning'));
   await sleep(30);

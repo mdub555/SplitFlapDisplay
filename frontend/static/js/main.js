@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // page isn't.
     setGridConfig(cfg || {grid_rows: GRID_ROWS, grid_cols: GRID_COLS, num_modules: NUM_MODULES});
     initLiveGrids();
-    startLivePolling();
+    startLiveUpdates();
     initControlPage();
     buildAppsGrid();   // pre-populates window.appsByKey so live-flap app-name lookups work immediately
   });

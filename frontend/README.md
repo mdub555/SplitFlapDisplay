@@ -89,18 +89,50 @@ Every `api.*` call (`static/js/api.js`) resolves to `null` on failure — networ
 error or non-2xx response — after logging details to the console and showing
 a toast (using the backend's error message when one is provided). Callers
 only need `if (!result) return;`; nothing needs its own try/catch or silently
-swallows a failed request. The one exception is `api.currentState()`, which
-passes a `null` error message to suppress toast spam on its once-per-second
-poll — failures there are logged but not surfaced as a popup.
+swallows a failed request.
+
+## Live state: Server-Sent Events, not polling
+
+The flap grid, homing overlay, and active-app banner used to refresh via
+`setInterval(..., 1000)` hitting `GET /current_state` once a second, whether
+or not anything had actually changed. That's gone — `static/js/live-flap.js`
+now opens one `EventSource('/current_state/stream')` connection instead, and
+`display/state.py`'s `DisplayState` doubles as the broadcast hub: every
+`set_display()`, `mark_module_char()`, or `set_active_app()` call pushes a
+fresh snapshot to every subscribed client immediately, so updates land as
+soon as they happen instead of up to a second late, and there's no request
+firing at all while the display is idle.
+
+A few things that come with that:
+
+- **`app.run(..., threaded=True)`** in `app.py` is required, not optional.
+  Each open SSE connection holds its request thread for as long as a browser
+  tab stays on the page; a single-worker dev server would serve exactly one
+  client and every other request — including a second tab's initial page
+  load — would hang behind it. A production WSGI server needs the same
+  consideration: enough sync workers/threads to cover concurrent SSE
+  clients, or an async worker class (gevent/eventlet) that isn't limited by
+  thread count.
+- **`GET /current_state`** (the old polling endpoint) still exists as a
+  one-off snapshot — handy for a quick `curl` check — it's just not what the
+  live UI uses anymore.
+- **Reconnection is mostly free**: `EventSource` retries automatically on
+  its own per spec. `#streamStatus` (a small banner, see `base.css`) shows
+  up on `onerror` and clears on `onopen` so a dropped connection is visibly
+  different from "genuinely nothing is happening," instead of failing silently.
+- The stream sends a `: keep-alive` comment every 15s while idle so proxies
+  and browsers don't time out or reap the connection.
 
 ## Testing
 
 `tests/` contains a headless DOM test (via jsdom) that loads the real
 `templates/index.html` and `static/js/*.js` files — the same way a browser
-would — with `fetch` mocked, then exercises the actual click/change event
-pipeline: tab switching, running an app, opening/saving app settings,
-playlist add/edit/delete, and several failure-path checks (a dropped
-network request, a simulated HTTP 500, optimistic UI reverting correctly).
+would — with `fetch` **and `EventSource`** mocked, then exercises the actual
+click/change event pipeline: tab switching, running an app, opening/saving
+app settings, playlist add/edit/delete, the live SSE stream driving the flap
+grid and banners, a malformed-payload guard, the reconnect status banner,
+and several failure-path checks (a dropped network request, a simulated
+HTTP 500, optimistic UI reverting correctly).
 
 ```
 cd tests

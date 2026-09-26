@@ -1,3 +1,4 @@
+import queue
 import threading
 
 from config import NUM_MODULES
@@ -7,7 +8,13 @@ class DisplayState:
     """Central, lock-aware home for everything the playlist loop and the
     Flask routes both need to read or write. Replaces the ~10 loose
     module-level globals (current_indices, active_app, stop_event, ...)
-    that used to live directly in app.py."""
+    that used to live directly in app.py.
+
+    Also doubles as the SSE broadcast hub: any change made through
+    set_display(), mark_module_char(), or set_active_app() pushes a fresh
+    snapshot to every subscribed client (see subscribe()/unsubscribe()),
+    which is what /current_state/stream in routes/control.py streams out.
+    """
 
     def __init__(self):
         self.lock = threading.Lock()
@@ -28,6 +35,14 @@ class DisplayState:
         # rather than finishing the current page's full delay first.
         self.stop_event = threading.Event()
 
+        # SSE subscribers. Each is a Queue(maxsize=1) holding only the latest
+        # snapshot — a client that hasn't drained the previous update yet
+        # gets it overwritten rather than queued, since nobody needs a
+        # backlog of intermediate flap states, only the most current one.
+        # Kept as a set (not a list) so unsubscribe on disconnect is O(1).
+        self._subscribers = set()
+        self._subscribers_lock = threading.Lock()
+
     def request_stop(self):
         self.stop_event.set()
 
@@ -35,13 +50,19 @@ class DisplayState:
         self.stop_event.clear()
 
     def snapshot(self):
-        """Read-only dict for the /current_state polling endpoint."""
+        """Read-only dict shared by the plain GET /current_state endpoint
+        and every value pushed over the SSE stream."""
         with self.lock:
             return {
                 'is_homed': self.is_homed,
                 'state': self.current_display_string,
                 'active_app': self.active_app,
             }
+
+    def set_active_app(self, app_key):
+        with self.lock:
+            self.active_app = app_key
+        self._broadcast()
 
     def mark_module_char(self, module_id, char):
         """Optimistically update one module's displayed char in local state
@@ -52,12 +73,51 @@ class DisplayState:
             if 0 <= module_id < NUM_MODULES:
                 sl[module_id] = char
             self.current_display_string = ''.join(sl)
+        self._broadcast()
 
     def set_display(self, text, indices):
         with self.lock:
             self.current_display_string = text
             self.current_indices = indices
             self.is_homed = True
+        self._broadcast()
+
+    # --- SSE pub/sub ---------------------------------------------------
+
+    def subscribe(self):
+        """Register a new SSE client. Returns a Queue that receives a fresh
+        snapshot every time the display state changes. The caller (the
+        stream route's generator) must call unsubscribe() with the same
+        queue once the client disconnects, or this subscriber leaks."""
+        q = queue.Queue(maxsize=1)
+        q.put_nowait(self.snapshot())  # so a new client draws immediately, not on the next change
+        with self._subscribers_lock:
+            self._subscribers.add(q)
+        return q
+
+    def unsubscribe(self, q):
+        with self._subscribers_lock:
+            self._subscribers.discard(q)
+
+    def _broadcast(self):
+        data = self.snapshot()
+        with self._subscribers_lock:
+            subs = list(self._subscribers)
+        for q in subs:
+            try:
+                q.put_nowait(data)
+            except queue.Full:
+                # Slow/stalled client — drop its stale pending update in
+                # favor of this newer one rather than blocking the thread
+                # that's publishing (often the playlist loop itself).
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    q.put_nowait(data)
+                except queue.Full:
+                    pass
 
 
 # Single shared instance — imported by player.py and every route module.

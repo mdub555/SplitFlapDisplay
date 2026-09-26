@@ -19,9 +19,50 @@ const { window } = dom;
 // jsdom doesn't implement requestAnimationFrame — polyfill for toast.js.
 window.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 
+// jsdom has no EventSource implementation either. This mock behaves like the
+// real thing closely enough for tests: one persistent instance per URL (a
+// real EventSource doesn't get reconstructed on auto-retry, it just flips
+// readyState and re-fires onerror/onopen on the SAME object), with test-only
+// helper methods to simulate the server pushing a message, a connection
+// drop, or the browser's automatic reconnect succeeding.
+class MockEventSource {
+  constructor(url) {
+    this.url = url;
+    this.readyState = 0; // CONNECTING
+    this.onopen = null;
+    this.onmessage = null;
+    this.onerror = null;
+    MockEventSource.instances.push(this);
+    // Real EventSource connects asynchronously — mirror that so code relying
+    // on "onopen hasn't fired yet" immediately after construction still works.
+    setTimeout(() => {
+      this.readyState = 1; // OPEN
+      if (this.onopen) this.onopen(new window.Event('open'));
+    }, 0);
+  }
+  emit(data) {
+    if (this.onmessage) this.onmessage({ data: JSON.stringify(data) });
+  }
+  emitRaw(rawString) {
+    if (this.onmessage) this.onmessage({ data: rawString });
+  }
+  simulateError() {
+    this.readyState = 0; // CONNECTING — matches the real spec's auto-retry state
+    if (this.onerror) this.onerror(new window.Event('error'));
+  }
+  simulateReconnect() {
+    this.readyState = 1;
+    if (this.onopen) this.onopen(new window.Event('open'));
+  }
+  close() {
+    this.readyState = 2; // CLOSED
+  }
+}
+MockEventSource.instances = [];
+window.EventSource = MockEventSource;
+
 // --- Mock fetch: log every call, return canned responses per-route ---
 const calls = [];
-let failNextCurrentState = false;
 
 window.fetch = async (url, options = {}) => {
   calls.push({ url, method: options.method || 'GET', body: options.body });
@@ -34,10 +75,6 @@ window.fetch = async (url, options = {}) => {
 
   if (url === '/config') {
     return ok({ grid_rows: 4, grid_cols: 16, num_modules: 64, hardware_connected: false });
-  }
-  if (url === '/current_state') {
-    if (failNextCurrentState) { failNextCurrentState = false; throw new Error('simulated network drop'); }
-    return ok({ is_homed: true, state: ' '.repeat(64), active_app: null });
   }
   if (url === '/apps') {
     return ok([
@@ -79,6 +116,9 @@ window.fetch = async (url, options = {}) => {
   if (url === '/home_all') {
     return ok({ status: 'Homing All' });
   }
+  if (url === '/provision_module') {
+    return ok({ status: 'success', assigned_id: 7 });
+  }
 
   throw new Error(`Unmocked fetch: ${url}`);
 };
@@ -99,4 +139,4 @@ for (const f of files) {
   window.document.head.appendChild(scriptEl);
 }
 
-module.exports = { dom, window, calls, setFailNextCurrentState: v => (failNextCurrentState = v) };
+module.exports = { dom, window, calls, MockEventSource };
