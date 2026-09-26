@@ -16,7 +16,7 @@ function buildLineInputs(){
     input.id = id;
     input.className = 'line-input';
     input.placeholder = `LINE ${i + 1}`;
-    input.oninput = updatePreview;
+    input.addEventListener('input', updatePreview);
     ['focus','keyup','click'].forEach(ev=>input.addEventListener(ev, e=>{
       lastFocusedInput = e.target;
       lastCursorPos = e.target.selectionStart||0;
@@ -33,7 +33,7 @@ function buildColorPalette(){
     btn.className = 'color-btn';
     btn.title = COLOR_TITLES[emoji] || '';
     btn.textContent = emoji;
-    btn.onclick = () => insertColor(emoji);
+    btn.addEventListener('click', () => insertColor(emoji));
     wrap.appendChild(btn);
   });
 }
@@ -64,7 +64,7 @@ function updatePreview(){
   for(let ch of Array.from(full)){
     const div = document.createElement('div');
     div.className='flap-unit';
-    div.innerText = ch===' '?'':ch;
+    div.textContent = ch===' '?'':ch;
     grid.appendChild(div);
   }
   return full;
@@ -103,6 +103,15 @@ function updatePlaylistItem(idx, key, value){
   else playlist[idx][key]=value;
 }
 
+// Reads (idx, field) off the row's data attributes rather than having each
+// input's onchange string-interpolate the index and field name — the row
+// wrapper carries data-idx once, each control inside it just adds data-field.
+function updatePlaylistItemFromInput(el){
+  const row = el.closest('[data-idx]');
+  if(!row) return;
+  updatePlaylistItem(parseInt(row.dataset.idx, 10), el.dataset.field, el.value);
+}
+
 function saveMessage(){
   const raw = {};
   lineInputIds().forEach((id, i) => raw[`raw${i}`] = document.getElementById(id).value);
@@ -125,6 +134,104 @@ function saveMessage(){
   renderPlaylist();
 }
 
+function buildPlaylistRow(item, idx){
+  const arr = Array.from(item.text);
+  const rows = [];
+  for(let r=0;r<GRID_ROWS;r++){
+    rows.push(arr.slice(r*GRID_COLS, (r+1)*GRID_COLS).join(''));
+  }
+
+  const row = document.createElement('div');
+  row.className = 'playlist-item';
+  row.style.cssText = 'flex-direction:column;align-items:stretch;gap:8px';
+  row.dataset.idx = idx;
+
+  // Header: page number + move/edit/delete buttons
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center';
+
+  const label = document.createElement('span');
+  label.style.cssText = 'color:var(--accent);font-weight:bold';
+  label.textContent = `Page ${idx + 1}`;
+  header.appendChild(label);
+
+  const btnGroup = document.createElement('div');
+  btnGroup.style.cssText = 'display:flex;gap:4px';
+  const addBtn = (text, cls, onclick, dir) => {
+    const b = document.createElement('button');
+    b.className = cls;
+    b.textContent = text;
+    b.dataset.onclick = onclick;
+    if (dir !== undefined) b.dataset.dir = dir;
+    btnGroup.appendChild(b);
+  };
+  addBtn('▲', 'btn btn-secondary btn-sm', 'movePlaylist', -1);
+  addBtn('▼', 'btn btn-secondary btn-sm', 'movePlaylist', 1);
+  addBtn('EDIT', 'btn btn-secondary btn-sm', 'editPlaylist');
+  addBtn('DEL', 'btn-del', 'removeFromPlaylist');
+  header.appendChild(btnGroup);
+  row.appendChild(header);
+
+  // Text preview — built with <br> between rows, but each row's text goes
+  // through textContent-safe construction (no raw HTML from flap content).
+  const preview = document.createElement('div');
+  preview.style.cssText = "background:#111;padding:10px;border-radius:4px;font-family:'Courier New',monospace;font-size:1rem;line-height:1.5;text-align:center;letter-spacing:1px;border:1px solid #333";
+  rows.forEach((r, i) => {
+    if (i > 0) preview.appendChild(document.createElement('br'));
+    // A run of spaces would otherwise collapse visually; render as &nbsp;
+    // via a text node with the non-breaking space character (safe — no HTML
+    // parsing involved) instead of the old innerHTML + regex-replace.
+    preview.appendChild(document.createTextNode(r.replace(/ /g, '\u00A0')));
+  });
+  row.appendChild(preview);
+
+  // Per-page delay / style / speed controls
+  const controls = document.createElement('div');
+  controls.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:8px 10px;background:#1a1a1a;border-radius:5px;border-top:1px solid #2a2a2a';
+
+  const delayLabel = document.createElement('label');
+  delayLabel.style.cssText = 'font-size:.78rem;color:#aaa;display:flex;align-items:center;gap:4px';
+  delayLabel.append('⏱ ');
+  const delayInput = document.createElement('input');
+  delayInput.type = 'number';
+  delayInput.value = item.delay || 5;
+  delayInput.min = '0.5'; delayInput.max = '60'; delayInput.step = '0.5';
+  delayInput.style.cssText = 'width:50px;background:#111;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 5px;font-size:.8rem;text-align:center';
+  delayInput.dataset.onchange = 'updatePlaylistItemFromInput';
+  delayInput.dataset.field = 'delay';
+  delayLabel.appendChild(delayInput);
+  delayLabel.append(' s');
+  controls.appendChild(delayLabel);
+
+  const styleLabel = document.createElement('label');
+  styleLabel.style.cssText = 'font-size:.78rem;color:#aaa;display:flex;align-items:center;gap:4px';
+  styleLabel.append('↔ ');
+  const styleSelect = document.createElement('select');
+  styleSelect.style.cssText = 'background:#111;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 5px;font-size:.78rem';
+  styleSelect.innerHTML = buildStyleOptions(item.style || 'ltr'); // static, trusted markup — see constants.js
+  styleSelect.dataset.onchange = 'updatePlaylistItemFromInput';
+  styleSelect.dataset.field = 'style';
+  styleLabel.appendChild(styleSelect);
+  controls.appendChild(styleLabel);
+
+  const speedLabel = document.createElement('label');
+  speedLabel.style.cssText = 'font-size:.78rem;color:#aaa;display:flex;align-items:center;gap:4px';
+  speedLabel.append('⚡ ');
+  const speedInput = document.createElement('input');
+  speedInput.type = 'number';
+  speedInput.value = item.speed || 15;
+  speedInput.min = '0'; speedInput.max = '500'; speedInput.step = '5';
+  speedInput.style.cssText = 'width:50px;background:#111;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 5px;font-size:.8rem;text-align:center';
+  speedInput.dataset.onchange = 'updatePlaylistItemFromInput';
+  speedInput.dataset.field = 'speed';
+  speedLabel.appendChild(speedInput);
+  speedLabel.append(' ms');
+  controls.appendChild(speedLabel);
+
+  row.appendChild(controls);
+  return row;
+}
+
 function renderPlaylist(){
   const list = document.getElementById('playlistList');
   if(!playlist.length){
@@ -132,54 +239,11 @@ function renderPlaylist(){
     return;
   }
   list.innerHTML='';
-  playlist.forEach((item,idx)=>{
-    const arr=Array.from(item.text);
-    const rows = [];
-    for(let r=0;r<GRID_ROWS;r++){
-      rows.push(arr.slice(r*GRID_COLS, (r+1)*GRID_COLS).join('').replace(/ /g,'&nbsp;'));
-    }
-    const div=document.createElement('div');
-    div.className='playlist-item';
-    div.style.cssText='flex-direction:column;align-items:stretch;gap:8px';
-    div.innerHTML=`
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="color:var(--accent);font-weight:bold">Page ${idx+1}</span>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-secondary btn-sm" onclick="movePlaylist(${idx},-1)">▲</button>
-          <button class="btn btn-secondary btn-sm" onclick="movePlaylist(${idx},1)">▼</button>
-          <button class="btn btn-secondary btn-sm" onclick="editPlaylist(${idx})">EDIT</button>
-          <button class="btn-del" onclick="removeFromPlaylist(${idx})">DEL</button>
-        </div>
-      </div>
-      <div style="background:#111;padding:10px;border-radius:4px;font-family:'Courier New',monospace;font-size:1rem;line-height:1.5;text-align:center;letter-spacing:1px;border:1px solid #333">${rows.join('<br>')}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:8px 10px;background:#1a1a1a;border-radius:5px;border-top:1px solid #2a2a2a">
-        <label style="font-size:.78rem;color:#aaa;display:flex;align-items:center;gap:4px">
-          ⏱
-          <input type="number" value="${item.delay||5}" min="0.5" max="60" step="0.5"
-            style="width:50px;background:#111;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 5px;font-size:.8rem;text-align:center"
-            onchange="updatePlaylistItem(${idx},'delay',this.value)">
-          s
-        </label>
-        <label style="font-size:.78rem;color:#aaa;display:flex;align-items:center;gap:4px">
-          ↔
-          <select style="background:#111;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 5px;font-size:.78rem"
-            onchange="updatePlaylistItem(${idx},'style',this.value)">
-            ${buildStyleOptions(item.style||'ltr')}
-          </select>
-        </label>
-        <label style="font-size:.78rem;color:#aaa;display:flex;align-items:center;gap:4px">
-          ⚡
-          <input type="number" value="${item.speed||15}" min="0" max="500" step="5"
-            style="width:50px;background:#111;color:#fff;border:1px solid #444;border-radius:3px;padding:3px 5px;font-size:.8rem;text-align:center"
-            onchange="updatePlaylistItem(${idx},'speed',this.value)">
-          ms
-        </label>
-      </div>`;
-    list.appendChild(div);
-  });
+  playlist.forEach((item, idx) => list.appendChild(buildPlaylistRow(item, idx)));
 }
 
-function editPlaylist(idx){
+function editPlaylist(el){
+  const idx = parseInt(el.closest('[data-idx]').dataset.idx, 10);
   editingIndex=idx;
   const item=playlist[idx];
   lineInputIds().forEach((id,i)=>{ document.getElementById(id).value = (item.raw && item.raw[`raw${i}`]) || ''; });
@@ -191,7 +255,9 @@ function editPlaylist(idx){
   updatePreview();
 }
 
-function movePlaylist(idx,dir){
+function movePlaylist(el){
+  const idx = parseInt(el.closest('[data-idx]').dataset.idx, 10);
+  const dir = parseInt(el.dataset.dir, 10);
   if(idx+dir<0||idx+dir>=playlist.length) return;
   [playlist[idx],playlist[idx+dir]]=[playlist[idx+dir],playlist[idx]];
   if(editingIndex===idx) editingIndex=idx+dir;
@@ -199,7 +265,8 @@ function movePlaylist(idx,dir){
   renderPlaylist();
 }
 
-function removeFromPlaylist(idx){
+function removeFromPlaylist(el){
+  const idx = parseInt(el.closest('[data-idx]').dataset.idx, 10);
   playlist.splice(idx,1);
   if(editingIndex===idx) clearDisplay();
   else if(editingIndex>idx) editingIndex--;
@@ -219,16 +286,48 @@ function sync(){
       speed: parseInt(document.getElementById('speedInput').value)||15,
     }];
   }
-  api.updatePlaylist(pages, delay);
-  showToast('Pushed to display');
+  api.updatePlaylist(pages, delay).then(result=>{
+    if (result) showToast('Pushed to display');
+  });
 }
 
 function stopApp(){
-  api.stopApp().then(()=>showToast('App stopped'));
+  api.stopApp().then(result=>{
+    if (result) showToast('App stopped');
+  });
 }
 
 function loadSavedPlaylists(){
-  api.playlists().then(renderSavedPlaylists);
+  api.playlists().then(data=>renderSavedPlaylists(data || {}));
+}
+
+function buildSavedPlaylistRow(name, item){
+  const row = document.createElement('div');
+  row.className = 'saved-pl-item';
+  row.dataset.name = name;
+
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'saved-pl-name';
+  nameSpan.textContent = name; // textContent — safe regardless of what characters the name contains
+  row.appendChild(nameSpan);
+
+  const meta = document.createElement('span');
+  meta.style.cssText = 'color:#666;font-size:.8rem';
+  meta.textContent = `${item.pages.length}p·${item.delay}s`;
+  row.appendChild(meta);
+
+  const addBtn = (text, cls, onclick) => {
+    const b = document.createElement('button');
+    b.className = cls;
+    b.textContent = text;
+    b.dataset.onclick = onclick;
+    row.appendChild(b);
+  };
+  addBtn('Load', 'btn btn-secondary btn-sm', 'loadSavedPlaylist');
+  addBtn('Run', 'btn btn-success btn-sm', 'runSavedPlaylist');
+  addBtn('✕', 'btn-del', 'deleteSavedPlaylist');
+
+  return row;
 }
 
 function renderSavedPlaylists(data){
@@ -239,18 +338,7 @@ function renderSavedPlaylists(data){
     return;
   }
   list.innerHTML='';
-  names.forEach(name=>{
-    const item = data[name];
-    const div = document.createElement('div');
-    div.className='saved-pl-item';
-    div.innerHTML=`
-      <span class="saved-pl-name">${name}</span>
-      <span style="color:#666;font-size:.8rem">${item.pages.length}p·${item.delay}s</span>
-      <button class="btn btn-secondary btn-sm" onclick="loadSavedPlaylist('${encodeURIComponent(name)}')">Load</button>
-      <button class="btn btn-success btn-sm" onclick="runSavedPlaylist('${encodeURIComponent(name)}')">Run</button>
-      <button class="btn-del" onclick="deleteSavedPlaylist('${encodeURIComponent(name)}')">✕</button>`;
-    list.appendChild(div);
-  });
+  names.forEach(name => list.appendChild(buildSavedPlaylistRow(name, data[name])));
 }
 
 function saveCurrentPlaylist(){
@@ -265,16 +353,23 @@ function saveCurrentPlaylist(){
               style:document.getElementById('styleInput').value||'ltr',
               speed:parseInt(document.getElementById('speedInput').value)||15}];
   }
-  api.savePlaylist(name, pages, delay).then(()=>{
+  api.savePlaylist(name, pages, delay).then(result=>{
+    if (!result) return;
     showToast(`Saved "${name}"`);
     document.getElementById('savePlaylistName').value='';
     loadSavedPlaylists();
   });
 }
 
-function loadSavedPlaylist(encodedName){
-  const name = decodeURIComponent(encodedName);
+// name now arrives as the raw string (via el.dataset.name) rather than a
+// URL-encoded fragment pulled out of an onclick="..." attribute — dataset
+// handles arbitrary characters safely, so no encode/decode dance is needed
+// here anymore. api.deletePlaylist still URL-encodes internally, which is
+// still correct — that's a real requirement of building the request path.
+function loadSavedPlaylist(el){
+  const name = el.closest('[data-name]').dataset.name;
   api.playlists().then(data=>{
+    if (!data) return;
     const item = data[name];
     if(!item) return;
     playlist = item.pages.map(p=>{
@@ -294,20 +389,26 @@ function loadSavedPlaylist(encodedName){
   });
 }
 
-function runSavedPlaylist(encodedName){
-  const name = decodeURIComponent(encodedName);
+function runSavedPlaylist(el){
+  const name = el.closest('[data-name]').dataset.name;
   api.playlists().then(data=>{
+    if (!data) return;
     const item = data[name];
     if(!item) return;
-    api.updatePlaylist(item.pages, item.delay);
-    showToast(`Running "${name}"`);
+    api.updatePlaylist(item.pages, item.delay).then(result=>{
+      if (result) showToast(`Running "${name}"`);
+    });
   });
 }
 
-function deleteSavedPlaylist(encodedName){
-  const name = decodeURIComponent(encodedName);
+function deleteSavedPlaylist(el){
+  const name = el.closest('[data-name]').dataset.name;
   if(!confirm(`Delete playlist "${name}"?`)) return;
-  api.deletePlaylist(name).then(()=>{ showToast(`Deleted "${name}"`,'warn'); loadSavedPlaylists(); });
+  api.deletePlaylist(name).then(result=>{
+    if (!result) return;
+    showToast(`Deleted "${name}"`,'warn');
+    loadSavedPlaylists();
+  });
 }
 
 function initControlPage(){
@@ -318,3 +419,10 @@ function initControlPage(){
   updatePreview();
   loadSavedPlaylists();
 }
+
+registerActions({
+  clearDisplay, saveMessage, sync, saveCurrentPlaylist, stopApp,
+  toggleMultiMode, updatePreview, updatePlaylistItemFromInput,
+  movePlaylist, editPlaylist, removeFromPlaylist,
+  loadSavedPlaylist, runSavedPlaylist, deleteSavedPlaylist,
+});

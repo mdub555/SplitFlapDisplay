@@ -15,13 +15,13 @@
 
   <!-- TAB BAR -->
   <div class="tab-bar">
-    <button id="tab-control" class="tab-btn active" onclick="switchTab('control')">
+    <button id="tab-control" class="tab-btn active" data-onclick="switchTab" data-tab="control">
       <span class="tab-label-full">CONTROL</span><span class="tab-label-short">CTRL</span>
     </button>
-    <button id="tab-apps" class="tab-btn" onclick="switchTab('apps')">
+    <button id="tab-apps" class="tab-btn" data-onclick="switchTab" data-tab="apps">
       <span class="tab-label-full">APPS</span><span class="tab-label-short">APPS</span>
     </button>
-    <button id="tab-tuning" class="tab-btn" onclick="switchTab('tuning')">
+    <button id="tab-tuning" class="tab-btn" data-onclick="switchTab" data-tab="tuning">
       <span class="tab-label-full">TUNING &amp; SETTINGS</span><span class="tab-label-short">TUNE</span>
     </button>
   </div>
@@ -31,7 +31,7 @@
     <div id="control-banner" class="active-app-banner">
       <div class="aab-dot"></div>
       <span class="aab-label">▶ <span id="control-app-name">APP</span> is running</span>
-      <button class="aab-stop" onclick="stopApp()">⏹ STOP</button>
+      <button class="aab-stop" data-onclick="stopApp">⏹ STOP</button>
     </div>
 
     <div class="section-label">LIVE DISPLAY</div>
@@ -44,9 +44,9 @@
     <div class="preview-wrapper"><div class="preview-grid" id="preview"></div></div>
 
     <div class="control-panel">
-      <label style="cursor:pointer"><input type="checkbox" id="modeToggle" onchange="toggleMultiMode()"> <strong>Multi-Page Playlist</strong></label>
-      <label style="cursor:pointer"><input type="checkbox" id="centerToggle" onchange="updatePreview()"> Center Text</label>
-      <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="clearDisplay()">Clear</button>
+      <label style="cursor:pointer"><input type="checkbox" id="modeToggle" data-onchange="toggleMultiMode"> <strong>Multi-Page Playlist</strong></label>
+      <label style="cursor:pointer"><input type="checkbox" id="centerToggle" data-onchange="updatePreview"> Center Text</label>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto" data-onclick="clearDisplay">Clear</button>
     </div>
 
     <div class="color-palette" id="colorPalette"></div>
@@ -54,7 +54,7 @@
     <div id="lineInputs"></div>
 
     <div id="multiControls" style="display:none" class="playlist-area">
-      <button class="btn btn-success" id="saveMsgBtn" style="width:100%" onclick="saveMessage()">+ Add to Playlist</button>
+      <button class="btn btn-success" id="saveMsgBtn" style="width:100%" data-onclick="saveMessage">+ Add to Playlist</button>
       <div id="playlistList" style="margin-top:12px"></div>
       <div style="margin-top:12px;padding-top:10px;border-top:1px solid #444;display:flex;flex-wrap:wrap;gap:14px;align-items:center">
         <label style="font-size:.85rem;color:#aaa;display:flex;align-items:center;gap:6px">
@@ -76,7 +76,7 @@
       </div>
     </div>
 
-    <button class="btn btn-primary" onclick="sync()">PUSH TO DISPLAY</button>
+    <button class="btn btn-primary" data-onclick="sync">PUSH TO DISPLAY</button>
 
     <!-- Saved Playlists -->
     <div class="playlist-area" style="margin-top:18px">
@@ -84,7 +84,7 @@
         <h3 style="margin:0;font-size:.95rem">📂 Saved Playlists</h3>
         <div style="display:flex;gap:8px;align-items:center">
           <input type="text" id="savePlaylistName" placeholder="Playlist name…" style="background:#111;color:#fff;border:1px solid #555;padding:6px 10px;border-radius:4px;width:150px;font-size:.85rem">
-          <button class="btn btn-success btn-sm" onclick="saveCurrentPlaylist()">Save</button>
+          <button class="btn btn-success btn-sm" data-onclick="saveCurrentPlaylist">Save</button>
         </div>
       </div>
       <div id="savedPlaylistList"><div class="empty-note">No saved playlists yet.</div></div>
@@ -96,7 +96,7 @@
     <div id="apps-banner" class="active-app-banner">
       <div class="aab-dot"></div>
       <span class="aab-label">▶ <span id="apps-app-name">APP</span> is running</span>
-      <button class="aab-stop" onclick="stopApp()">⏹ STOP</button>
+      <button class="aab-stop" data-onclick="stopApp">⏹ STOP</button>
     </div>
 
     <div class="section-label">LIVE DISPLAY</div>
@@ -121,9 +121,9 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
         <h3 style="margin:0">Hardware Inspector</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-success btn-sm" onclick="provisionModule()">+ ADD MODULE</button>
-          <button class="btn btn-success btn-sm" onclick="syncAllFromHardware()">SYNC ALL (EEPROM)</button>
-          <button class="btn btn-warning btn-sm" onclick="homeAll()">HOME ALL</button>
+          <button class="btn btn-success btn-sm" data-onclick="provisionModule">+ ADD MODULE</button>
+          <button class="btn btn-success btn-sm" data-onclick="syncAllFromHardware">SYNC ALL (EEPROM)</button>
+          <button class="btn btn-warning btn-sm" data-onclick="homeAll">HOME ALL</button>
         </div>
       </div>
 
@@ -134,27 +134,27 @@
       <div class="inspector-panel" id="inspectorPanel" style="display:none">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <h3 style="margin:0;color:#fff" id="inspectTitle">MODULE 00</h3>
-          <button class="btn btn-secondary btn-sm" onclick="syncOneFromHardware()">Sync EEPROM</button>
+          <button class="btn btn-secondary btn-sm" data-onclick="syncOneFromHardware">Sync EEPROM</button>
         </div>
         <div class="inspector-stats">
           <div class="stat-box"><span class="stat-label">Home Offset</span><span class="stat-val" id="inspectOffset">2832</span></div>
           <div class="stat-box"><span class="stat-label">Total Steps</span><span class="stat-val" id="inspectCalib" style="color:var(--orange)">4096</span></div>
         </div>
         <div class="adj-controls">
-          <button class="btn-adj neg" onclick="adjustOffset(-32)">-32</button>
-          <button class="btn-adj neg" onclick="adjustOffset(-16)">-16</button>
-          <button class="btn-adj neg" onclick="adjustOffset(-4)">-4</button>
-          <button class="btn-adj neg" onclick="adjustOffset(-1)">-1</button>
+          <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="-32">-32</button>
+          <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="-16">-16</button>
+          <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="-4">-4</button>
+          <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="-1">-1</button>
           <span style="color:#888;display:flex;align-items:center;padding:0 8px;font-size:.85rem">OFFSET</span>
-          <button class="btn-adj pos" onclick="adjustOffset(1)">+1</button>
-          <button class="btn-adj pos" onclick="adjustOffset(4)">+4</button>
-          <button class="btn-adj pos" onclick="adjustOffset(16)">+16</button>
-          <button class="btn-adj pos" onclick="adjustOffset(32)">+32</button>
+          <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="1">+1</button>
+          <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="4">+4</button>
+          <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="16">+16</button>
+          <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="32">+32</button>
         </div>
         <div style="text-align:center;color:#666;font-size:.75rem;margin-top:-6px">(Saves instantly; press Home to verify)</div>
         <div style="display:flex;gap:10px;margin-top:4px">
-          <button class="btn" style="flex:1;background:#444;color:#fff" onclick="homeSelected()">HOME MOTOR</button>
-          <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" onclick="calibrateSelected()">MEASURE REEL (360°)</button>
+          <button class="btn" style="flex:1;background:#444;color:#fff" data-onclick="homeSelected">HOME MOTOR</button>
+          <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
         </div>
       </div>
     </div>
@@ -165,13 +165,13 @@
         <h3>Global Settings</h3>
         <div style="display:flex;align-items:center;gap:10px;background:#2a2a2a;padding:8px 12px;border-radius:8px">
           <span style="font-size:.85rem;color:#ccc">Auto-Home on Boot</span>
-          <label class="switch"><input type="checkbox" id="autoHomeToggle" onchange="toggleAutoHome()"><span class="slider"></span></label>
+          <label class="switch"><input type="checkbox" id="autoHomeToggle" data-onchange="toggleAutoHome"><span class="slider"></span></label>
         </div>
       </div>
       <div class="settings-grid" id="globalSettingsGrid">
         <!-- Populated from /global_fields by tuning.js -->
       </div>
-      <button class="btn btn-secondary" style="margin-top:14px" onclick="saveGlobal()">Save Settings</button>
+      <button class="btn btn-secondary" style="margin-top:14px" data-onclick="saveGlobal">Save Settings</button>
     </div>
 
     <!-- Backup / Restore -->
@@ -179,10 +179,10 @@
       <h3>Calibration Backup &amp; Restore</h3>
       <p style="color:#888;font-size:.85rem;margin-top:0">Export/import all home offsets and step calibrations.</p>
       <div class="backup-row">
-        <button class="btn btn-secondary" onclick="downloadBackup()">⬇ Download Backup JSON</button>
+        <button class="btn btn-secondary" data-onclick="downloadBackup">⬇ Download Backup JSON</button>
         <div style="display:flex;gap:8px;align-items:center;flex:1">
-          <input type="file" id="backupFile" accept=".json" style="display:none" onchange="uploadBackup(this)">
-          <button class="btn btn-warning" style="flex:1" onclick="document.getElementById('backupFile').click()">⬆ Restore from JSON</button>
+          <input type="file" id="backupFile" accept=".json" style="display:none" data-onchange="uploadBackup">
+          <button class="btn btn-warning" style="flex:1" data-onclick="triggerBackupFileInput">⬆ Restore from JSON</button>
           <span id="restoreStatus" style="font-size:.8rem;color:#888"></span>
         </div>
       </div>
@@ -197,8 +197,8 @@
     <h3 id="appSettingsTitle" style="color:var(--accent);margin-bottom:16px">App Settings</h3>
     <div id="appSettingsFields"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-success" style="flex:1" onclick="saveAppSettings()">Save &amp; Close</button>
-      <button class="btn" style="background:#333;color:#aaa;border:1px solid #555" onclick="closeAppSettings()">Cancel</button>
+      <button class="btn btn-success" style="flex:1" data-onclick="saveAppSettings">Save &amp; Close</button>
+      <button class="btn" style="background:#333;color:#aaa;border:1px solid #555" data-onclick="closeAppSettings">Cancel</button>
     </div>
   </div>
 </div>
@@ -206,9 +206,10 @@
 <!-- TOAST -->
 <div class="toast-container" id="toastContainer"></div>
 
+<script src="{{ url_for('static', filename='js/actions.js') }}"></script>
 <script src="{{ url_for('static', filename='js/constants.js') }}"></script>
-<script src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live-flap.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tabs.js') }}"></script>
 <script src="{{ url_for('static', filename='js/control.js') }}"></script>

@@ -4,6 +4,7 @@ let currentSettings = null;
 function loadTuningData(){
   document.getElementById('modMatrix').innerHTML='<div class="loading-note">Loading…</div>';
   Promise.all([api.getSettings(), api.globalFields()]).then(([settingsData, fields])=>{
+    if (!settingsData || !fields) return; // error toast already shown by the api layer
     currentSettings = settingsData;
     renderGlobalSettingsForm(fields, settingsData);
     document.getElementById('autoHomeToggle').checked = settingsData.auto_home;
@@ -49,12 +50,15 @@ function renderGlobalSettingsForm(fields, settingsData){
 
 function saveGlobal(){
   api.globalFields().then(fields=>{
+    if (!fields) return;
     const payload = {};
     fields.forEach(f=>{
       const el = document.getElementById(`gsf_${f.key}`);
       if(el) payload[f.key] = el.value;
     });
-    api.saveGlobalSettings(payload).then(()=>showToast('Settings saved'));
+    api.saveGlobalSettings(payload).then(result=>{
+      if (result) showToast('Settings saved');
+    });
   });
 }
 
@@ -66,7 +70,8 @@ function renderModuleGrid(){
     const cell=document.createElement('div');
     cell.className=`mod-cell${i===selectedModule?' active':''}`;
     cell.textContent=i.toString().padStart(2,'0');
-    cell.onclick=()=>selectModule(i);
+    cell.dataset.onclick = 'selectModuleAction';
+    cell.dataset.id = i;
     grid.appendChild(cell);
   }
 }
@@ -80,42 +85,60 @@ function selectModule(id){
   document.getElementById('inspectCalib').textContent=currentSettings.calibrations[id.toString()]||4096;
 }
 
-function adjustOffset(delta){
+function selectModuleAction(el){
+  selectModule(parseInt(el.dataset.id, 10));
+}
+
+function adjustOffset(el){
+  const delta = parseInt(el.dataset.delta, 10);
   api.adjustOffset(selectedModule, delta).then(d=>{
+    if (!d) return;
     currentSettings.offsets[selectedModule.toString()]=d.new_offset;
     document.getElementById('inspectOffset').textContent=d.new_offset;
   });
 }
 
 function homeSelected(){
-  api.homeModule(selectedModule);
-  showToast(`Homing module ${selectedModule.toString().padStart(2,'0')}`);
+  api.homeModule(selectedModule).then(result=>{
+    if (result) showToast(`Homing module ${selectedModule.toString().padStart(2,'0')}`);
+  });
 }
 
 function homeAll(){
   if(!confirm(`Re-home all ${NUM_MODULES} modules via broadcast?`)) return;
-  api.homeAll().then(()=>showToast('Homing all modules','warn'));
+  api.homeAll().then(result=>{
+    if (result) showToast('Homing all modules','warn');
+  });
 }
 
 function calibrateSelected(){
   if(!confirm(`Calibrate Module ${selectedModule}? It will spin 360° to measure steps.`)) return;
+  const prevCalib = currentSettings.calibrations[selectedModule.toString()] || 4096;
   document.getElementById('inspectCalib').textContent='Measuring…';
   api.calibrateModule(selectedModule).then(d=>{
-    if(d.status==='success'){
-      currentSettings.calibrations[selectedModule.toString()]=d.steps;
-      document.getElementById('inspectCalib').textContent=d.steps;
-      showToast(`Module ${selectedModule}: ${d.steps} steps`);
-    } else {
-      showToast('Calibration timeout','error');
+    if (!d) {
+      // Revert the optimistic "Measuring…" label — error toast already shown.
+      document.getElementById('inspectCalib').textContent = prevCalib;
+      return;
     }
+    currentSettings.calibrations[selectedModule.toString()]=d.steps;
+    document.getElementById('inspectCalib').textContent=d.steps;
+    showToast(`Module ${selectedModule}: ${d.steps} steps`);
   });
 }
 
 function syncOneFromHardware(){
+  const prevOffset = currentSettings.offsets[selectedModule.toString()] || 2832;
   document.getElementById('inspectOffset').textContent='Syncing…';
   api.syncModule(selectedModule).then(d=>{
-    if(d.status==='success'){ currentSettings=d.settings; selectModule(selectedModule); showToast('Synced'); }
-    else showToast('Sync failed','error');
+    if(d && d.status==='success'){
+      currentSettings=d.settings;
+      selectModule(selectedModule);
+      showToast('Synced');
+    } else {
+      document.getElementById('inspectOffset').textContent = prevOffset;
+      if (d) showToast('Sync failed','error'); // a null d already got its own toast
+    }
   });
 }
 
@@ -124,16 +147,19 @@ function syncAllFromHardware(){
   document.body.style.cursor='wait';
   api.syncAllModules().then(d=>{
     document.body.style.cursor='default';
+    if (!d) return;
     currentSettings=d.settings;
     selectModule(selectedModule);
     showToast('All modules synced');
   });
 }
 
-function toggleAutoHome(){
-  api.toggleAutoHome(document.getElementById('autoHomeToggle').checked);
+function toggleAutoHome(el){
+  const enabled = el.checked;
+  api.toggleAutoHome(enabled).then(result=>{
+    if (!result) el.checked = !enabled; // revert the optimistic toggle if the save failed
+  });
 }
-
 
 function provisionModule(){
   if(!confirm('Assign the next grid ID to the unprovisioned module on the bus?')) return;
@@ -150,6 +176,7 @@ function provisionModule(){
 
 function downloadBackup(){
   api.backupSettings().then(data=>{
+    if (!data) return;
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
@@ -159,23 +186,44 @@ function downloadBackup(){
   });
 }
 
+function triggerBackupFileInput(){
+  document.getElementById('backupFile').click();
+}
+
 function uploadBackup(input){
   if(!input.files.length) return;
   const reader=new FileReader();
   reader.onload=e=>{
+    let data;
     try{
-      const data=JSON.parse(e.target.result);
-      if(!confirm(`Restore calibration data and push to all modules?`)) return;
-      document.getElementById('restoreStatus').textContent='Restoring…';
-      api.restoreSettings(data).then(d=>{
-        document.getElementById('restoreStatus').textContent=d.status==='success'?'✓ Done':'✗ Error';
-        if(d.status==='success'){ showToast('Restore complete'); loadTuningData(); }
-        else showToast('Restore error','error');
-      });
+      data = JSON.parse(e.target.result);
     }catch(err){
       showToast('Invalid JSON file','error');
+      input.value='';
+      return;
     }
+    if(!confirm(`Restore calibration data and push to all modules?`)){
+      input.value='';
+      return;
+    }
+    document.getElementById('restoreStatus').textContent='Restoring…';
+    api.restoreSettings(data).then(d=>{
+      if(d && d.status==='success'){
+        document.getElementById('restoreStatus').textContent='✓ Done';
+        showToast('Restore complete');
+        loadTuningData();
+      } else {
+        document.getElementById('restoreStatus').textContent='✗ Error';
+        if (d) showToast('Restore error','error'); // a null d already got its own toast
+      }
+    });
     input.value='';
   };
   reader.readAsText(input.files[0]);
 }
+
+registerActions({
+  selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected,
+  syncOneFromHardware, syncAllFromHardware, toggleAutoHome,
+  saveGlobal, downloadBackup, triggerBackupFileInput, uploadBackup,
+});

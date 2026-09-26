@@ -66,6 +66,8 @@ function initLiveGrids() {
 function startLivePolling() {
   setInterval(()=>{
     api.currentState().then(data=>{
+      if (!data) return; // failed tick — no toast (see api.js), just skip this update
+
       ['control','apps'].forEach(tab=>{
         const el = document.getElementById(`homing-${tab}`);
         if(el) el.style.display = data.is_homed ? 'none' : 'flex';
@@ -95,6 +97,6 @@ function startLivePolling() {
       document.querySelectorAll('.app-card').forEach(c=>{
         c.classList.toggle('running', c.dataset.app === app);
       });
-    }).catch(()=>{});
+    });
   }, 1000);
 }

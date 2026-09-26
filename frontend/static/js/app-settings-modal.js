@@ -6,13 +6,17 @@ async function openAppSettings(appKey){
   if(!appInfo) return;
 
   const currentSettings = await api.getSettings();
+  if (!currentSettings) return; // error toast already shown by the api layer
 
   document.getElementById('appSettingsTitle').textContent = `${appInfo.icon} ${appInfo.name} Settings`;
   const fields = document.getElementById('appSettingsFields');
   fields.innerHTML='';
 
   if(!appInfo.settings_fields.length){
-    fields.innerHTML='<p style="color:#888;text-align:center">No configurable settings for this app.</p>';
+    const note = document.createElement('p');
+    note.style.cssText = 'color:#888;text-align:center';
+    note.textContent = 'No configurable settings for this app.';
+    fields.appendChild(note);
   } else {
     appInfo.settings_fields.forEach(f=>{
       const div = document.createElement('div');
@@ -67,6 +71,22 @@ function saveAppSettings(){
     const el = document.getElementById(`asf_${f.key}`);
     if(el) payload[f.key] = el.value;
   });
-  api.saveAppSettings(currentAppSettingsKey, payload)
-    .then(()=>{ showToast('Settings saved'); closeAppSettings(); });
+  api.saveAppSettings(currentAppSettingsKey, payload).then(result=>{
+    if (!result) return;
+    showToast('Settings saved');
+    closeAppSettings();
+  });
 }
+
+// The gear button lives inside an .app-card that carries data-app; the
+// button itself doesn't need its own copy of the key.
+function openAppSettingsAction(el){
+  const card = el.closest('[data-app]');
+  if (card) openAppSettings(card.dataset.app);
+}
+
+registerActions({
+  openAppSettings: openAppSettingsAction,
+  saveAppSettings,
+  closeAppSettings,
+});
