@@ -24,8 +24,7 @@ def _app_defaults():
 
 def build_defaults():
     defaults = {
-        'offsets': {},
-        'calibrations': {},
+        'modules': {},
         'auto_home': True,
         'saved_playlists': {},
     }
@@ -39,8 +38,7 @@ def load_settings():
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, 'r') as f:
-                data = json.load(f)
-                defaults.update(data)
+                defaults.update(json.load(f))
         except Exception as e:
             logging.error(f"Failed to load {CONFIG_PATH}, using defaults: {e}")
     return defaults

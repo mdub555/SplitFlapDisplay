@@ -68,7 +68,8 @@ function renderModuleGrid(){
   grid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
   for(let i=0;i<NUM_MODULES;i++){
     const cell=document.createElement('div');
-    cell.className=`mod-cell${i===selectedModule?' active':''}`;
+    const isUnprovisioned = !currentSettings.modules || !currentSettings.modules[i.toString()];
+    cell.className=`mod-cell${i===selectedModule?' active':''} ${isUnprovisioned?' unprovisioned':''}`;
     cell.textContent=i.toString().padStart(2,'0');
     cell.dataset.onclick = 'selectModuleAction';
     cell.dataset.id = i;
@@ -81,8 +82,15 @@ function selectModule(id){
   renderModuleGrid();
   document.getElementById('inspectorPanel').style.display='flex';
   document.getElementById('inspectTitle').textContent=`MODULE ${id.toString().padStart(2,'0')}`;
-  document.getElementById('inspectOffset').textContent=currentSettings.offsets[id.toString()]||2832;
-  document.getElementById('inspectCalib').textContent=currentSettings.calibrations[id.toString()]||4096;
+
+  const mod = currentSettings.modules ? currentSettings.modules[id.toString()] : null;
+  if (mod) {
+      document.getElementById('inspectOffset').textContent = mod.homeOffset !== undefined ? mod.homeOffset : 480;
+      document.getElementById('inspectCalib').textContent = mod.totalSteps !== undefined ? mod.totalSteps : 4096;
+  } else {
+      document.getElementById('inspectOffset').textContent = '---';
+      document.getElementById('inspectCalib').textContent = '---';
+  }
 }
 
 function selectModuleAction(el){
@@ -93,8 +101,12 @@ function adjustOffset(el){
   const delta = parseInt(el.dataset.delta, 10);
   api.adjustOffset(selectedModule, delta).then(d=>{
     if (!d) return;
-    currentSettings.offsets[selectedModule.toString()]=d.new_offset;
-    document.getElementById('inspectOffset').textContent=d.new_offset;
+    if (!currentSettings.modules) currentSettings.modules = {};
+    if (!currentSettings.modules[selectedModule.toString()]) {
+        currentSettings.modules[selectedModule.toString()] = {'homeOffset': 480, 'totalSteps': 4096, 'autoHome': true, 'motorClockwise': true, 'motorRelease': false};
+    }
+    currentSettings.modules[selectedModule.toString()].homeOffset = d.new_offset;
+    document.getElementById('inspectOffset').textContent = d.new_offset;
   });
 }
 
@@ -113,22 +125,29 @@ function homeAll(){
 
 function calibrateSelected(){
   if(!confirm(`Calibrate Module ${selectedModule}? It will spin 360° to measure steps.`)) return;
-  const prevCalib = currentSettings.calibrations[selectedModule.toString()] || 4096;
+
+  const mod = currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
+  const prevCalib = mod ? (mod.totalSteps || 4096) : 4096;
+
   document.getElementById('inspectCalib').textContent='Measuring…';
   api.calibrateModule(selectedModule).then(d=>{
     if (!d) {
-      // Revert the optimistic "Measuring…" label — error toast already shown.
       document.getElementById('inspectCalib').textContent = prevCalib;
       return;
     }
-    currentSettings.calibrations[selectedModule.toString()]=d.steps;
-    document.getElementById('inspectCalib').textContent=d.steps;
+    if (!currentSettings.modules) currentSettings.modules = {};
+    if (!currentSettings.modules[selectedModule.toString()]) {
+        currentSettings.modules[selectedModule.toString()] = {'homeOffset': 480, 'totalSteps': 4096, 'autoHome': true, 'motorClockwise': true, 'motorRelease': false};
+    }
+    currentSettings.modules[selectedModule.toString()].totalSteps = d.steps;
+    document.getElementById('inspectCalib').textContent = d.steps;
     showToast(`Module ${selectedModule}: ${d.steps} steps`);
   });
 }
 
 function syncOneFromHardware(){
-  const prevOffset = currentSettings.offsets[selectedModule.toString()] || 2832;
+  const mod = currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
+  const prevOffset = mod ? (mod.homeOffset || 480) : 480;
   document.getElementById('inspectOffset').textContent='Syncing…';
   api.syncModule(selectedModule).then(d=>{
     if(d && d.status==='success'){
@@ -137,7 +156,7 @@ function syncOneFromHardware(){
       showToast('Synced');
     } else {
       document.getElementById('inspectOffset').textContent = prevOffset;
-      if (d) showToast('Sync failed','error'); // a null d already got its own toast
+      if (d) showToast('Sync failed','error');
     }
   });
 }
@@ -157,14 +176,15 @@ function syncAllFromHardware(){
 function toggleAutoHome(el){
   const enabled = el.checked;
   api.toggleAutoHome(enabled).then(result=>{
-    if (!result) el.checked = !enabled; // revert the optimistic toggle if the save failed
+    if (!result) el.checked = !enabled;
   });
 }
 
 function provisionModule(){
-  if(!confirm('Assign the next grid ID to the unprovisioned module on the bus?')) return;
+  const target_id = selectedModule; // Provision the currently selected module
+  if(!confirm(`Assign ID ${target_id} to the unprovisioned module on the bus?`)) return;
   showToast('Provisioning…', 'warn');
-  api.provisionModule().then(d=>{
+  api.provisionModule({id: target_id}).then(d=>{
     if(d.status === 'success'){
       showToast(`Module assigned ID ${d.assigned_id}`);
       loadTuningData();

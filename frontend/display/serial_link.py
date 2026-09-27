@@ -34,6 +34,7 @@ def send_raw(cmd: str):
 def read_dump(mod_id: int, timeout: float = 5.0):
     """m<ID>d — request and parse an EEPROM dump (home offset + total steps).
     Returns a dict or None on timeout/parse failure."""
+    # Sends: m<ID>d:<homeOffset>:<totalSteps>:<clockwise>:<autoHome>:<releaseMotor>
     if not ser:
         return None
     with serial_lock:
@@ -49,15 +50,26 @@ def read_dump(mod_id: int, timeout: float = 5.0):
                     chunk = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
                     buffer += chunk
                     if target in buffer and '\n' in buffer[buffer.find(target):]:
-                        valid_part = buffer[buffer.find(target):].split('\n')[0]
-                        data = valid_part.split('d:', 1)[1]
-                        parts = data.split(':')
-                        if len(parts) >= 2:
-                            return {'home_offset': int(parts[0]), 'total_steps': int(parts[1])}
+                        return parse_buffer(buffer)
                 except Exception as e:
                     logging.error(f"Parse error reading module {mod_id} dump: {e}")
             time.sleep(0.05)
     return None
+
+
+def parse_buffer(buffer):
+    if target in buffer and '\n' in buffer[buffer.find(target):]:
+        valid_part = buffer[buffer.find(target):].split('\n')[0]
+        data = valid_part.split('d:', 1)[1]
+        parts = data.split(':')
+        if len(parts) >= 5:
+            return {
+                'home_offset': int(parts[0]),
+                'total_steps': int(parts[1]),
+                'clockwise': bool(parts[2]),
+                'auto_home': bool(parts[3]),
+                'release_motor': bool(parts[4])
+            }
 
 
 def calibrate_module(mod_id: int, timeout: float = 45.0):

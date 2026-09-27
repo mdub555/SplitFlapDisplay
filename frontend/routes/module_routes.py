@@ -11,8 +11,13 @@ bp = Blueprint('module_routes', __name__)
 @bp.route('/modules/<int:mod_id>/adjust', methods=['POST'])
 def adjust_offset(mod_id):
     delta = int((request.json or {}).get('delta', 0))
-    new_offset = int(settings['offsets'].get(str(mod_id), 2832)) + delta
-    settings['offsets'][str(mod_id)] = new_offset
+    mod_id_str = str(mod_id)
+
+    if mod_id_str not in settings['modules']:
+        return jsonify(status='failed', settings=settings)
+
+    new_offset = int(settings['modules'][mod_id_str]['homeOffset']) + delta
+    settings['modules'][mod_id_str]['homeOffset'] = new_offset
     save_settings(settings)
     send_raw(f"m{mod_id:02d}o{new_offset}")
     return jsonify(new_offset=new_offset)
@@ -27,10 +32,14 @@ def home_one(mod_id):
 
 @bp.route('/modules/<int:mod_id>/calibrate', methods=['POST'])
 def calibrate(mod_id):
+    mod_id_str = str(mod_id)
+    if mod_id_str not in settings['modules']:
+        return jsonify(status='error', message='Unprovisioned module'), 500
     steps = calibrate_module(mod_id)
     if steps is None:
         return jsonify(status='error', message='Timeout'), 500
-    settings['calibrations'][str(mod_id)] = steps
+
+    settings['modules'][mod_id_str]['totalSteps'] = steps
     save_settings(settings)
     return jsonify(status='success', steps=steps)
 
@@ -40,8 +49,10 @@ def sync_one(mod_id):
     dump = read_dump(mod_id)
     if not dump:
         return jsonify(status='failed', settings=settings)
-    settings['offsets'][str(mod_id)] = dump['home_offset']
-    settings['calibrations'][str(mod_id)] = dump['total_steps']
+
+    mod_id_str = str(mod_id)
+    settings['modules'][mod_id_str] = dump
+
     save_settings(settings)
     return jsonify(status='success', settings=settings)
 
@@ -51,8 +62,8 @@ def sync_all():
     for i in range(NUM_MODULES):
         dump = read_dump(i)
         if dump:
-            settings['offsets'][str(i)] = dump['home_offset']
-            settings['calibrations'][str(i)] = dump['total_steps']
+            mod_id_str = str(i)
+            settings['modules'][mod_id_str] = dump
     save_settings(settings)
     return jsonify(status='success', settings=settings)
 

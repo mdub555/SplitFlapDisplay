@@ -45,6 +45,11 @@ def handle_settings():
 def toggle_autohome():
     enabled = (request.json or {}).get('enabled', True)
     settings['auto_home'] = enabled
+
+    # Sync with per-module autoHome
+    for mod_id in settings['modules']:
+        settings['modules'][mod_id]['autoHome'] = enabled
+
     save_settings(settings)
     send_raw(f"m**a{1 if enabled else 0}")
     return jsonify(status='Auto-home updated')
@@ -55,12 +60,20 @@ def provision_module():
     if not is_connected():
         return jsonify(status='error', message='Hardware not connected'), 503
 
-    existing = {int(k) for k in settings.get('offsets', {}).keys()}
-    new_id = next((i for i in range(NUM_MODULES) if i not in existing), None)
-    if new_id is None:
-        return jsonify(status='error', message='All module slots are already filled'), 400
+    target_id = (request.json or {}).get('id')
+
+    if target_id is not None:
+        new_id = int(target_id)
+        if str(new_id) in settings['modules']:
+            return jsonify(status='error', message='Module already provisioned'), 400
+    else:
+        existing = {int(k) for k in settings['modules'].keys()}
+        new_id = next((i for i in range(NUM_MODULES) if i not in existing), None)
+        if new_id is None:
+            return jsonify(status='error', message='All module slots are already filled'), 400
 
     # 1. Confirm exactly one unprovisioned module is present
+    dump = None
     with serial_lock:
         ser.reset_input_buffer()
         ser.write(b"m255d\n")
@@ -71,6 +84,7 @@ def provision_module():
                 buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
                 if "m255d:" in buffer and '\n' in buffer:
                     found = True
+                    dump = parse_buffer(buffer)
                     break
             time.sleep(0.05)
 
@@ -81,12 +95,8 @@ def provision_module():
     send_raw(f"m255i{new_id}")
     time.sleep(0.2)
 
-    # 3. Push default offset/calibration so it's immediately usable
-    send_raw(f"m{new_id:02d}o480")
-    send_raw(f"m{new_id:02d}t4096")
-
-    settings['offsets'][str(new_id)] = 480
-    settings['calibrations'][str(new_id)] = 4096
+    # 3. Use its current settings from hardware
+    settings['modules'][str(new_id)] = dump
     save_settings(settings)
 
     return jsonify(status="success", assigned_id=new_id)
