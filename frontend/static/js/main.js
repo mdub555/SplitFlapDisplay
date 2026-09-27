@@ -1,3 +1,10 @@
+/**
+ * main.js
+ *
+ * Central entry point for the Split-Flap OS frontend.
+ * Handles initialization of various sub-systems.
+ */
+
 document.addEventListener('DOMContentLoaded', () => {
   api.config().then(cfg => {
     // If /config itself fails, fall back to the placeholder grid size from

@@ -20,7 +20,7 @@ def current_state():
 @bp.route('/current_state/stream')
 def current_state_stream():
     """Server-Sent Events stream: pushes a fresh snapshot every time the
-    display actually changes (see DisplayState._broadcast), instead of the
+    display actually changes (see DisplayState._broadcast in display/state.py), instead of the
     frontend polling /current_state on a timer. A heartbeat comment goes out
     every 15s so idle proxies/browsers don't treat the connection as dead.
 
@@ -29,8 +29,8 @@ def current_state_stream():
     stays on the page, so a single-worker server would serve exactly one
     client before every other request starts blocking behind it. The same
     caveat applies to a production WSGI server: a sync worker pool needs
-    enough threads/workers to cover concurrent SSE clients, or an async
-    worker class (gevent/eventlet) that isn't limited by thread count.
+    enough threads/workers to cover concurrent SSE clients, especially
+    with many open tabs.
     """
     def gen():
         q = state.subscribe()
@@ -49,6 +49,41 @@ def current_state_stream():
         mimetype='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
     )
+
+
+@bp.route('/serial_log/stream')
+def serial_log_stream():
+    """Server-Sent Events stream: pushes every serial message (sent/received)."""
+    def gen():
+        q = state.subscribe_serial()
+        try:
+            while True:
+                try:
+                    # We want to be responsive, so a short timeout is fine.
+                    # The connection stays alive via keep-alives if needed,
+                    # but here we just rely on the client's browser behavior.
+                    data = q.get(timeout=15)
+                    yield f"data: {json.dumps({'msg': data})}\n\n"
+                except queue.Empty:
+                    yield ": keep-alive\n\n"
+        finally:
+            state.unsubscribe_serial(q)
+
+    return Response(
+        stream_with_context(gen()),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
+
+
+@bp.route('/serial/send', methods=['POST'])
+def serial_send():
+    """Accepts a command string and sends it over the serial link."""
+    cmd = (request.json or {}).get('cmd')
+    if not cmd:
+        return jsonify(status='error', message='No command provided'), 400
+    send_raw(cmd)
+    return jsonify(status='success')
 
 
 @bp.route('/update_playlist', methods=['POST'])

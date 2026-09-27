@@ -8,7 +8,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/control.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/apps.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tuning.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modals.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/modals.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
 </head>
 <body>
 <div class="container">
@@ -24,7 +25,34 @@
     <button id="tab-tuning" class="tab-btn" data-onclick="switchTab" data-tab="tuning">
       <span class="tab-label-full">TUNING &amp; SETTINGS</span><span class="tab-label-short">TUNE</span>
     </button>
+    <button id="tab-debug" class="tab-btn" data-onclick="toggleDebug">
+      <span class="tab-label-full">SERIAL DEBUG</span><span class="tab-label-short">DBG</span>
+    </button>
   </div>
+
+  <!-- ══════════ DEBUG PANEL ══════════ -->
+  <div id="debug-panel" class="debug-panel">
+    <div class="debug-panel-header">
+      <h3 style="margin:0; font-size: 0.9rem;">SERIAL DEBUG</h3>
+      <button class="btn btn-sm" data-onclick="toggleDebug">CLOSE</button>
+    </div>
+    <div class="debug-panel-content">
+      <div class="debug-command-row">
+        <select class="debug-cmd-select">
+          <option value="">-- Quick Command --</option>
+          <option value="m*h">Home All (m*h)</option>
+          <option value="m01d">Dump Mod 01 (m01d)</option>
+          <option value="m01c">Calib Mod 01 (m01c)</option>
+        </select>
+      </div>
+      <div class="debug-command-row">
+        <input type="text" class="debug-cmd-input" placeholder="Arbitrary command...">
+        <button class="btn btn-primary btn-sm debug-cmd-send">SEND</button>
+      </div>
+      <div class="debug-log"></div>
+    </div>
+  </div>
+
 
   <!-- Shown only while the live-state stream (SSE) is disconnected — the
        browser retries automatically, this is just so a dropped connection

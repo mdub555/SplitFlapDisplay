@@ -35,13 +35,18 @@ class DisplayState:
         # rather than finishing the current page's full delay first.
         self.stop_event = threading.Event()
 
-        # SSE subscribers. Each is a Queue(maxsize=1) holding only the latest
+        # SSE subscribers for state updates. Each is a Queue(maxsize=1) holding only the latest
         # snapshot — a client that hasn't drained the previous update yet
         # gets it overwritten rather than queued, since nobody needs a
         # backlog of intermediate flap states, only the most current one.
         # Kept as a set (not a list) so unsubscribe on disconnect is O(1).
         self._subscribers = set()
         self._subscribers_lock = threading.Lock()
+
+        # SSE subscribers for serial logs. Each is a Queue holding log entries.
+        # Unlike state updates, we want to deliver every log entry.
+        self._serial_subscribers = set()
+        self._serial_subscribers_lock = threading.Lock()
 
     def request_stop(self):
         self.stop_event.set()
@@ -118,6 +123,26 @@ class DisplayState:
                     q.put_nowait(data)
                 except queue.Full:
                     pass
+
+    def subscribe_serial(self):
+        """Register a new SSE client for serial logs. Returns a Queue that
+        receives every log entry. The caller must call unsubscribe_serial()
+        once the client disconnects."""
+        q = queue.Queue()
+        with self._serial_subscribers_lock:
+            self._serial_subscribers.add(q)
+        return q
+
+    def unsubscribe_serial(self, q):
+        with self._serial_subscribers_lock:
+            self._serial_subscribers.discard(q)
+
+    def _broadcast_serial(self, msg):
+        """Broadcast a single serial log message to all subscribers."""
+        with self._serial_subscribers_lock:
+            subs = list(self._serial_subscribers)
+        for q in subs:
+            q.put(msg)
 
 
 # Single shared instance — imported by player.py and every route module.

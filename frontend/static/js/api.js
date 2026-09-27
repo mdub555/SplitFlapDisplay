@@ -12,7 +12,7 @@
 // to fail transiently and retry on its own — the failure is still logged to
 // console either way. (No current caller needs this, but the option's kept
 // since live state used to be one before it moved to the SSE stream below.)
-
+//
 async function apiFetchJson(url, options, errorMessage) {
   let res;
   try {
@@ -91,4 +91,7 @@ const api = {
     method:'POST', headers: jsonHeaders, body: JSON.stringify(data)
   }, 'Restore failed'),
   provisionModule:    () => apiFetchJson('/provision_module', {method:'POST'}, 'Could not provision module'),
+  serialSend:         (cmd) => apiFetchJson('/serial/send', {
+    method:'POST', headers: jsonHeaders, body: JSON.stringify({cmd})
+  }, 'Could not send serial command'),
 };
