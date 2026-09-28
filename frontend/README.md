@@ -142,18 +142,19 @@ npm test
 
 
 
-- **Firmware charset mismatch**: `display/charset.py`'s `FLAP_CHARS` matches
-  the v7 firmware's character order but NOT `firmware/splitflapfirmwarev8/splitflap.cpp`'s
-  `FLAP_CHARS`, which uses a different order. If v8 is what's deployed,
-  index-based commands will show the wrong character until one side is
-  updated to match the other.
+- **Charset**: `display/charset.py`'s `FLAP_CHARS` and `static/js/constants.js`'s
+  `CHAR_MAP` must both match `firmware/splitflapfirmwarev8/splitflap.cpp`'s
+  `FLAP_CHARS` exactly (same characters, same order). They currently do; change
+  all three together. Characters with no flap (e.g. `;` and `'`) are sent as a
+  blank. On the v8 reels `d` and `h` are the degree sign and heart, which the
+  compose UI accepts as `°` and `♥`.
 - Per-character EEPROM fine-tuning (`w<idx>:<pos>`, the old Auto Fine-Tune
   wizard) has been removed from both the backend and frontend per the
   "modules don't need fine tuning" decision — only home offset and total
   steps/revolution remain configurable. If any modules DO need per-character
   correction later, that functionality no longer exists and would need to be
   rebuilt.
-- No backend automated tests yet (a frontend suite now exists — see
-  Testing above). The backend hardware dependency would mean mocking
-  `display/serial_link.py`; the module boundary is drawn to make that
-  straightforward, but nothing calls it yet.
+- Backend tests are minimal: `tests/test_serial_link.py` covers the module
+  dump parser (run `python -m unittest tests.test_serial_link` from
+  `frontend/`). Anything else touching the serial port would still need
+  `display/serial_link.py` mocked.

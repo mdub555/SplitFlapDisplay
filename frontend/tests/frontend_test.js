@@ -43,6 +43,13 @@ async function main() {
   check('live flap grids built (control)', document.querySelectorAll('.live-grid-control .live-flap').length === 64);
   check('apps grid pre-populated by main.js', Object.keys(window.appsByKey).length === 2);
 
+  console.log('\n--- Serial debug panel ---');
+  const debugPanelEl = document.getElementById('debug-panel');
+  click(document.getElementById('tab-debug'));
+  check('SERIAL DEBUG tab opens the debug panel', debugPanelEl.classList.contains('visible'));
+  click(debugPanelEl.querySelector('[data-onclick="toggleDebug"]'));
+  check('CLOSE button hides the debug panel again', !debugPanelEl.classList.contains('visible'));
+
   console.log('\n--- Tab switching (data-onclick delegation) ---');
   const appsTab = document.getElementById('tab-apps');
   click(appsTab);
@@ -127,11 +134,14 @@ async function main() {
   check('loadSavedPlaylist fetched /playlists', calls.some(c => c.url === '/playlists' && c.method === 'GET'));
 
   console.log('\n--- Live state arrives over SSE, not polling ---');
-  check('exactly one EventSource was opened, at /current_state/stream',
-    MockEventSource.instances.length === 1 && MockEventSource.instances[0].url === '/current_state/stream');
+  const stateStreams = MockEventSource.instances.filter(s => s.url === '/current_state/stream');
+  check('exactly one EventSource was opened at /current_state/stream', stateStreams.length === 1);
+  check('the only other EventSource is the debug panel\'s /serial_log/stream',
+    MockEventSource.instances.length === 2 &&
+    MockEventSource.instances.filter(s => s.url === '/serial_log/stream').length === 1);
   check('no /current_state polling request was ever made', !calls.some(c => c.url === '/current_state'));
 
-  const source = MockEventSource.instances[0];
+  const source = stateStreams[0];
   await sleep(10); // let the mock's async onopen fire
 
   source.emit({ is_homed: false, state: ' '.repeat(64), active_app: 'weather' });
@@ -199,6 +209,14 @@ async function main() {
   await sleep(20);
   check('adjust request sent with delta=1 from dataset', calls.some(c => c.url.match(/\/modules\/\d+\/adjust/) && JSON.parse(c.body).delta === 1));
   check('offset display updated from response', document.getElementById('inspectOffset').textContent === '2900');
+
+  console.log('\n--- ADD MODULE button provisions the selected module ---');
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="provisionModule"]'));
+  await sleep(20);
+  check('provision request was sent (action is registered)', calls.some(c => c.url === '/provision_module' && c.method === 'POST'));
+  check('provision body carries the selected module id as a plain number',
+    calls.some(c => c.url === '/provision_module' && JSON.parse(c.body).id === globalVar('selectedModule')));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

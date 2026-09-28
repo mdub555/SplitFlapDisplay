@@ -78,17 +78,16 @@ def provision_module():
         ser.reset_input_buffer()
         ser.write(b"m255d\n")
         ser.flush()
-        start, buffer, found = time.time(), "", False
+        start, buffer = time.time(), ""
         while time.time() - start < 2.0:
             if ser.in_waiting:
                 buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
-                if "m255d:" in buffer and '\n' in buffer:
-                    found = True
-                    dump = parse_buffer(buffer)
+                dump = parse_buffer(buffer, 255)
+                if dump is not None:
                     break
             time.sleep(0.05)
 
-    if not found:
+    if dump is None:
         return jsonify(status="error", message="No unprovisioned module found on bus"), 404
 
     # 2. Assign it the target ID

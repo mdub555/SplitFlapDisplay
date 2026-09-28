@@ -23,6 +23,10 @@ def send_to_display(text, order=None, raw=False, step_delay_ms=15):
     for emoji, char in COLOR_MAP.items():
         clean_text = clean_text.replace(emoji, char)
     clean_text = clean_text.replace(QUOTE_CHAR, QUOTE_SUBSTITUTE)
+    # A character with no physical flap (e.g. ';' or "'" on the v8 reels) is
+    # ignored by the module, leaving the old character up while our state
+    # claimed otherwise. Send a blank instead so state and hardware agree.
+    clean_text = ''.join(c if c in FLAP_CHARS else ' ' for c in clean_text)
     clean_text = clean_text.ljust(NUM_MODULES)[:NUM_MODULES]
     logging.info(f"DISPLAY: {clean_text}")
 

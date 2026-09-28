@@ -4,6 +4,10 @@ from config import NUM_MODULES
 from settings.store import settings, save_settings
 from display.serial_link import send_raw, is_connected
 
+# Must match the firmware defaults (HOME_OFFSET / TOTAL_STEPS in eeprom_store.cpp).
+DEFAULT_HOME_OFFSET = 480
+DEFAULT_TOTAL_STEPS = 4096
+
 
 def build_backup():
     return {
@@ -34,12 +38,8 @@ def restore_backup(data: dict) -> bool:
 
     for i in range(NUM_MODULES):
         s = str(i)
-        mod = settings['modules'].get(s)
-        if mod:
-            send_raw(f"m{i:02d}o{int(mod.get('homeOffset', 2832))}")
-            send_raw(f"m{i:02d}t{int(mod.get('totalSteps', 4096))}")
-        else:
-            # If no config, use defaults
-            send_raw(f"m{i:02d}o2832")
-            send_raw(f"m{i:02d}t4096")
+        # If no config, fall back to the firmware defaults
+        mod = settings['modules'].get(s) or {}
+        send_raw(f"m{i:02d}o{int(mod.get('homeOffset', DEFAULT_HOME_OFFSET))}")
+        send_raw(f"m{i:02d}t{int(mod.get('totalSteps', DEFAULT_TOTAL_STEPS))}")
     return True

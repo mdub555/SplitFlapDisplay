@@ -30,6 +30,10 @@
 //         i, Set the module ID. data must be a number
 //         a, Enable or disable auto-home. data must be 0 for disable, 1 for
 //            enable
+//         w, Set the motor direction. data must be 1 for clockwise, 0 for
+//            counter-clockwise
+//         r, Enable or disable releasing the motor coils when idle. data must
+//            be 1 to release, 0 to keep them energized
 //         d, Dump the module state back to the Raspberry Pi in the format
 //            m<ID>d:<homeOffset>:<totalSteps>:<motorDir>:<autoHome>:<releaseMotor>.
 //            No data expected

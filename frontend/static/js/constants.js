@@ -6,10 +6,11 @@ let GRID_COLS = 15;
 let NUM_MODULES = 45;
 
 // Must match display/charset.py FLAP_CHARS exactly.
-const CHAR_MAP = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$&()-+=;q:%'.,/?*roygbpw";
+const CHAR_MAP = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!,.q:@#$&()+-*/=%dhwroygbp";
 
 const STATE_DISPLAY = {
-  'r':'🟥','o':'🟧','y':'🟨','g':'🟩','b':'🟦','p':'🟪','w':'⬜','q':'"'
+  'r':'🟥','o':'🟧','y':'🟨','g':'🟩','b':'🟦','p':'🟪','w':'⬜','q':'"',
+  'd':'°','h':'♥'
 };
 
 const COLOR_PALETTE = ['🟥','🟧','🟨','🟩','🟦','🟪','⬜','⬛'];

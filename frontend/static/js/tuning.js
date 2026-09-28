@@ -184,7 +184,7 @@ function provisionModule(){
   const target_id = selectedModule; // Provision the currently selected module
   if(!confirm(`Assign ID ${target_id} to the unprovisioned module on the bus?`)) return;
   showToast('Provisioning…', 'warn');
-  api.provisionModule({id: target_id}).then(d=>{
+  api.provisionModule(target_id).then(d=>{
     if (!d) return;
     if(d.status === 'success'){
       showToast(`Module assigned ID ${d.assigned_id}`);
@@ -245,6 +245,6 @@ function uploadBackup(input){
 
 registerActions({
   selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected,
-  syncOneFromHardware, syncAllFromHardware, toggleAutoHome,
+  syncOneFromHardware, syncAllFromHardware, toggleAutoHome, provisionModule,
   saveGlobal, downloadBackup, triggerBackupFileInput, uploadBackup,
 });
