@@ -31,7 +31,8 @@
 //         a, Enable or disable auto-home. data must be 0 for disable, 1 for
 //            enable
 //         d, Dump the module state back to the Raspberry Pi in the format
-//            m<ID>d:<homeOffset>:<totalSteps>:<motorDir>:<autoHome>. No data expected
+//            m<ID>d:<homeOffset>:<totalSteps>:<motorDir>:<autoHome>:<releaseMotor>.
+//            No data expected
 // =============================================================================
 enum CommandType {
   UNKNOWN_COMMAND,

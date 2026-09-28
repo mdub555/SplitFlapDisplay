@@ -11,7 +11,7 @@ namespace {
   // blank (the "home" flap). The index corresponds to a physical flap.
   // PROGMEM puts this into flash and doesn't consume SRAM (good since this is
   // so limited). This requires using pgm_read_byte() to read from flash.
-  const char FLAP_CHARS[] PROGMEM = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!,.\":@#$&()+-*/=\%dhwroygbp";
+  const char FLAP_CHARS[] PROGMEM = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!,.q:@#$&()+-*/=\%dhwroygbp";
   // -1 removes the trailing null
   const uint8_t NUM_FLAPS = sizeof(FLAP_CHARS) - 1;
 }
@@ -170,8 +170,7 @@ void SplitFlap::moveToChar(char targetChar) {
 void SplitFlap::goToRawStep(uint16_t targetStep) {
   debug->print("[Splitflap] going to step: ");
   debug->println(targetStep);
-  uint16_t stepsToMove = targetStep - currentStepPos;
-  if (stepsToMove < 0) stepsToMove += EepromStore::getTotalSteps(); // Wrap
+  uint16_t stepsToMove = stepsToTarget(targetStep);
 
   stepAdvance(stepsToMove);
   if (EepromStore::releaseMotorEnabled()) {

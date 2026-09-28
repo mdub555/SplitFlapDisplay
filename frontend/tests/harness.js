@@ -131,7 +131,7 @@ const files = [
   'static/js/actions.js', 'static/js/constants.js', 'static/js/toast.js',
   'static/js/api.js', 'static/js/live-flap.js', 'static/js/tabs.js',
   'static/js/control.js', 'static/js/apps.js', 'static/js/app-settings-modal.js',
-  'static/js/tuning.js', 'static/js/main.js',
+  'static/js/tuning.js', 'static/js/main.js', 'static/js/debug.js',
 ];
 for (const f of files) {
   const scriptEl = window.document.createElement('script');

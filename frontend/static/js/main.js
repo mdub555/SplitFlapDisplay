@@ -16,5 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
     startLiveUpdates();
     initControlPage();
     buildAppsGrid();   // pre-populates window.appsByKey so live-flap app-name lookups work immediately
+    debugPanel.init();
   });
 });

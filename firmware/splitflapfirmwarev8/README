@@ -22,8 +22,9 @@ RS-485 TX   |          14 | PA1
 RS-485 RX   |          15 | PA2
 RS-485 DE   |           0 | PA4
 UPDI        |   Unlabeled | PA0
+Home sensor |             | PC0
 Debug TX    |          11 | PC1
-Home sensor |           3 | PA7
+Status LED  |             | PC2
 Motor IN1   |           7 | PB2
 Motor IN2   |           6 | PB3
 Motor IN3   |           5 | PB4

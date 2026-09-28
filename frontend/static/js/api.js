@@ -90,7 +90,9 @@ const api = {
   restoreSettings:    (data) => apiFetchJson('/restore_settings', {
     method:'POST', headers: jsonHeaders, body: JSON.stringify(data)
   }, 'Restore failed'),
-  provisionModule:    () => apiFetchJson('/provision_module', {method:'POST'}, 'Could not provision module'),
+  provisionModule:    (id) => apiFetchJson('/provision_module', {
+    method:'POST', headers: jsonHeaders, body: JSON.stringify({id})
+  }, 'Could not provision module'),
   serialSend:         (cmd) => apiFetchJson('/serial/send', {
     method:'POST', headers: jsonHeaders, body: JSON.stringify({cmd})
   }, 'Could not send serial command'),

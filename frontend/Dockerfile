@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Build an image with the Python 3.12 image
+# Build an image with the Python 3.14 image
 FROM python:3.14-slim
 
 # Set the working directory to `/code`

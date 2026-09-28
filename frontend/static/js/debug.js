@@ -76,4 +76,8 @@ const debugPanel = {
   }
 };
 
+registerActions({
+  toggleDebug,
+});
+
 // We'll call debugPanel.init() from main.js

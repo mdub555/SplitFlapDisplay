@@ -65,15 +65,15 @@ def read_dump(mod_id: int, timeout: float = 5.0):
 
 
 def parse_buffer(buffer):
-    data = valid_part.split('\n')[0].split('d:', 1)[1]
+    data = buffer.split('\n')[0].split('d:', 1)[1]
     parts = data.split(':')
     if len(parts) >= 5:
         return {
             'home_offset': int(parts[0]),
             'total_steps': int(parts[1]),
-            'clockwise': bool(parts[2]),
-            'auto_home': bool(parts[3]),
-            'release_motor': bool(parts[4])
+            'clockwise': parts[2] == "1",
+            'auto_home': parts[3] == "1",
+            'release_motor': parts[4] == "1"
         }
 
 
@@ -82,4 +82,7 @@ def calibrate_module(mod_id: int, timeout: float = 45.0):
     it back as the module's new total-steps value. Returns the step count,
     or None on timeout."""
     send_raw(f"m{mod_id:02d}c\n")
-    return read_dump(mod_id)['total_steps']
+    dump = read_dump(mod_id, timeout)
+    if dump is None:
+      return None
+    return dump['total_steps']

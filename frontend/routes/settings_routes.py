@@ -4,7 +4,7 @@ import time
 from config import GRID_ROWS, GRID_COLS, NUM_MODULES
 from settings.store import settings, save_settings
 from settings.schema import GLOBAL_FIELDS
-from display.serial_link import send_raw, is_connected, ser, serial_lock
+from display.serial_link import is_connected, parse_buffer, send_raw, ser, serial_lock
 
 bp = Blueprint('settings_routes', __name__)
 

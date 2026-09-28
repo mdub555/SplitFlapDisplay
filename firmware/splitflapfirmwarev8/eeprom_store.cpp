@@ -12,9 +12,9 @@ namespace {
   // from the black flap. Set the home 7.5 flaps past home, making each
   // flap right in the middle of their expected position.
   const uint16_t HOME_OFFSET = STEPS_PER_FLAP*7 + STEPS_PER_FLAP/2;
-  const uint8_t MASK_AUTO_HOME = 1<<1;
-  const uint8_t MASK_MOTOR_CW = 1<<2;
-  const uint8_t MASK_RELEASE_MOTOR = 1<<3;
+  const uint8_t MASK_AUTO_HOME = 1;
+  const uint8_t MASK_MOTOR_CW = 1<<1;
+  const uint8_t MASK_RELEASE_MOTOR = 1<<2;
 
   struct Config {
     uint16_t homeOffset = 0;   // Steps past magnet trigger to reach flap 0
@@ -35,7 +35,7 @@ namespace {
 
   // Magic value written to ADDR_INIT to indicate EEPROM has been initialized.
   // Changing this value forces all modules to reset to defaults on next boot.
-  const uint8_t INIT_VALUE = 0x03;
+  const uint8_t INIT_VALUE = 0x04;
 
   Config config;
 
@@ -50,7 +50,9 @@ namespace {
   }
 
   void saveBooleans() {
-    EEPROM.write(ADDR_BOOLEANS, config.autoHome | config.motorClockwise | config.releaseMotor);
+    EEPROM.write(
+        ADDR_BOOLEANS,
+        config.autoHome | config.motorClockwise<<1 | config.releaseMotor<<2);
   }
 }
 
