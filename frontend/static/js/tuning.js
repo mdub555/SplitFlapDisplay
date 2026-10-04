@@ -70,7 +70,7 @@ function renderModuleGrid(){
     const cell=document.createElement('div');
     const isUnprovisioned = !currentSettings.modules || !currentSettings.modules[i.toString()];
     cell.className=`mod-cell${i===selectedModule?' active':''} ${isUnprovisioned?' unprovisioned':''}`;
-    cell.textContent=i.toString().padStart(2,'0');
+    cell.textContent=formatModuleId(i);
     cell.dataset.onclick = 'selectModuleAction';
     cell.dataset.id = i;
     grid.appendChild(cell);
@@ -81,7 +81,7 @@ function selectModule(id){
   selectedModule=id;
   renderModuleGrid();
   document.getElementById('inspectorPanel').style.display='flex';
-  document.getElementById('inspectTitle').textContent=`MODULE ${id.toString().padStart(2,'0')}`;
+  document.getElementById('inspectTitle').textContent=`MODULE ${formatModuleId(id)}`;
 
   const mod = currentSettings.modules ? currentSettings.modules[id.toString()] : null;
   if (mod) {
@@ -146,7 +146,7 @@ function adjustOffset(el){
 
 function homeSelected(){
   api.homeModule(selectedModule).then(result=>{
-    if (result) showToast(`Homing module ${selectedModule.toString().padStart(2,'0')}`);
+    if (result) showToast(`Homing module ${formatModuleId(selectedModule)}`);
   });
 }
 
@@ -158,7 +158,7 @@ function homeAll(){
 }
 
 function calibrateSelected(){
-  if(!confirm(`Calibrate Module ${selectedModule}? It will spin 360° to measure steps.`)) return;
+  if(!confirm(`Calibrate Module ${formatModuleId(selectedModule)}? It will spin 360° to measure steps.`)) return;
 
   const mod = currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
   const prevCalib = mod ? (mod.totalSteps || 4096) : 4096;
@@ -175,7 +175,7 @@ function calibrateSelected(){
     }
     currentSettings.modules[selectedModule.toString()].totalSteps = d.steps;
     document.getElementById('inspectCalib').textContent = d.steps;
-    showToast(`Module ${selectedModule}: ${d.steps} steps`);
+    showToast(`Module ${formatModuleId(selectedModule)}: ${d.steps} steps`);
   });
 }
 
@@ -223,12 +223,12 @@ function toggleAutoHome(el){
 
 function provisionModule(){
   const target_id = selectedModule; // Provision the currently selected module
-  if(!confirm(`Assign ID ${target_id} to the unprovisioned module on the bus?`)) return;
+  if(!confirm(`Assign ID ${formatModuleId(target_id)} to the unprovisioned module on the bus?`)) return;
   showToast('Provisioning…', 'warn');
   api.provisionModule(target_id).then(d=>{
     if (!d) return;
     if(d.status === 'success'){
-      showToast(`Module assigned ID ${d.assigned_id}`);
+      showToast(`Module assigned ID ${formatModuleId(d.assigned_id)}`);
       loadTuningData();
     } else {
       showToast(d.message || 'Provisioning failed', 'error');

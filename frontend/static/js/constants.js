@@ -42,3 +42,13 @@ function setGridConfig(cfg){
   GRID_COLS = cfg.grid_cols;
   NUM_MODULES = cfg.num_modules;
 }
+
+// Module IDs are shown to the user in hex (easier to scan at a glance than
+// decimal once you get past a handful of modules) everywhere in the UI —
+// the module grid, the inspector title, and any toast/confirm message that
+// names a module. This is purely cosmetic: every network request and the
+// wire protocol itself still use the plain decimal id (see api.js and
+// tranceiver.h) — only text the user reads goes through this.
+function formatModuleId(id){
+  return id.toString(16).toUpperCase().padStart(2, '0');
+}

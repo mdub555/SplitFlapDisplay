@@ -106,6 +106,9 @@ window.fetch = async (url, options = {}) => {
   if (url.startsWith('/apps/') && url.endsWith('/settings')) {
     return ok({ status: 'saved' });
   }
+  if (url.match(/^\/modules\/\d+\/home$/)) {
+    return ok({ status: 'Homing' });
+  }
   if (url.match(/^\/modules\/\d+\/adjust$/)) {
     return ok({ new_offset: 2900 });
   }
@@ -124,7 +127,7 @@ window.fetch = async (url, options = {}) => {
     return ok({ status: 'Homing All' });
   }
   if (url === '/provision_module') {
-    return ok({ status: 'success', assigned_id: 7 });
+    return ok({ status: 'success', assigned_id: 10 });
   }
 
   throw new Error(`Unmocked fetch: ${url}`);

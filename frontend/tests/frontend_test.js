@@ -259,6 +259,33 @@ async function main() {
   await sleep(20);
   check('selecting a provisioned module again re-enables its toggles', !modToggle('autoHome').disabled);
 
+  console.log('\n--- Module IDs are displayed in hex, not decimal ---');
+  check('grid cell for module 10 shows hex (0A), not decimal',
+    document.querySelector('#modMatrix .mod-cell[data-id="10"]').textContent === '0A');
+  check('grid cell for module 63 (the last one) shows hex (3F), not decimal',
+    document.querySelector('#modMatrix .mod-cell[data-id="63"]').textContent === '3F');
+
+  click(document.querySelector('#modMatrix .mod-cell[data-id="10"]'));
+  await sleep(20);
+  check('inspector title shows the selected module id in hex', document.getElementById('inspectTitle').textContent === 'MODULE 0A');
+
+  let lastConfirmMsg = null;
+  window.confirm = (msg) => { lastConfirmMsg = msg; return true; };
+  const lastToastText = () => document.getElementById('toastContainer').lastElementChild.textContent;
+
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="homeSelected"]'));
+  await sleep(20);
+  check('home request still addresses the module by its real decimal id', calls.some(c => c.url === '/modules/10/home'));
+  check('homing toast names the module in hex, not decimal', lastToastText() === 'Homing module 0A');
+
+  click(document.querySelector('[data-onclick="calibrateSelected"]'));
+  await sleep(20);
+  check('calibrate confirmation names the module in hex', lastConfirmMsg === 'Calibrate Module 0A? It will spin 360° to measure steps.');
+
+  click(document.querySelector('#modMatrix .mod-cell[data-id="0"]'));
+  await sleep(20);
+
   console.log('\n--- ADD MODULE button provisions the selected module ---');
   calls.length = 0;
   click(document.querySelector('[data-onclick="provisionModule"]'));
@@ -266,6 +293,9 @@ async function main() {
   check('provision request was sent (action is registered)', calls.some(c => c.url === '/provision_module' && c.method === 'POST'));
   check('provision body carries the selected module id as a plain number',
     calls.some(c => c.url === '/provision_module' && JSON.parse(c.body).id === globalVar('selectedModule')));
+  check('provision confirmation names the target module in hex', lastConfirmMsg === 'Assign ID 00 to the unprovisioned module on the bus?');
+  await sleep(20);
+  check('provisioned-module toast names the assigned id in hex, not decimal', lastToastText() === 'Module assigned ID 0A');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
