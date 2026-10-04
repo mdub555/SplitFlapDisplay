@@ -51,7 +51,7 @@ def toggle_autohome():
         settings['modules'][mod_id]['autoHome'] = enabled
 
     save_settings(settings)
-    send_raw(f"m**a{1 if enabled else 0}")
+    send_raw(f"m*a{1 if enabled else 0}")
     return jsonify(status='Auto-home updated')
 
 

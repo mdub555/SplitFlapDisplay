@@ -15,6 +15,7 @@ function check(label, cond) {
 // a shared lexical lookup, which window.eval() can do as long as it's only
 // *reading* an existing binding, not declaring a new one.
 const globalVar = (name) => window.eval(name);
+const MODULE_TOGGLES_ALL = () => ['autoHome', 'motorClockwise', 'motorRelease'];
 
 function click(el) {
   el.dispatchEvent(new window.Event('click', { bubbles: true }));
@@ -209,6 +210,54 @@ async function main() {
   await sleep(20);
   check('adjust request sent with delta=1 from dataset', calls.some(c => c.url.match(/\/modules\/\d+\/adjust/) && JSON.parse(c.body).delta === 1));
   check('offset display updated from response', document.getElementById('inspectOffset').textContent === '2900');
+
+  console.log('\n--- Per-module toggles in the Hardware Inspector ---');
+  const modToggle = (key) => document.getElementById(`modToggle-${key}`);
+  check('toggles reflect the selected module\'s stored settings',
+    modToggle('autoHome').checked === true && modToggle('motorClockwise').checked === true &&
+    modToggle('motorRelease').checked === false);
+  check('toggles are enabled for a provisioned module', !modToggle('autoHome').disabled);
+
+  calls.length = 0;
+  modToggle('motorRelease').checked = true;
+  change(modToggle('motorRelease'));
+  await sleep(20);
+  const settingCall = calls.find(c => c.url === '/modules/0/setting' && c.method === 'POST');
+  check('toggling posts to the per-module setting endpoint', !!settingCall);
+  check('body names the setting and carries a real boolean',
+    settingCall && JSON.parse(settingCall.body).setting === 'motorRelease' && JSON.parse(settingCall.body).value === true);
+  check('toggle stays on and is re-enabled after success',
+    modToggle('motorRelease').checked === true && !modToggle('motorRelease').disabled);
+  check('local settings updated, so switching modules keeps the value',
+    globalVar('currentSettings').modules['0'].motorRelease === true);
+
+  window.fetch = async (url, opts) => {
+    if (url === '/modules/0/setting') return { ok: false, status: 500, json: async () => ({message: 'boom'}) };
+    return realFetch(url, opts);
+  };
+  modToggle('autoHome').checked = false;
+  change(modToggle('autoHome'));
+  await sleep(20);
+  check('toggle reverts after a failed save', modToggle('autoHome').checked === true);
+  check('stored value is unchanged after a failed save', globalVar('currentSettings').modules['0'].autoHome === true);
+  check('toggle is re-enabled after a failed save', !modToggle('autoHome').disabled);
+  window.fetch = realFetch;
+
+  autoHomeToggle.checked = false;
+  change(autoHomeToggle);
+  await sleep(20);
+  check('global auto-home toggle is mirrored into the per-module toggle', modToggle('autoHome').checked === false);
+  check('global auto-home toggle is mirrored into stored module settings',
+    globalVar('currentSettings').modules['0'].autoHome === false);
+
+  click(document.querySelector('#modMatrix .mod-cell[data-id="5"]'));
+  await sleep(20);
+  check('toggles are disabled and cleared for an unprovisioned module',
+    MODULE_TOGGLES_ALL().every(k => modToggle(k).disabled && !modToggle(k).checked) &&
+    document.getElementById('moduleToggles').classList.contains('disabled'));
+  click(document.querySelector('#modMatrix .mod-cell[data-id="0"]'));
+  await sleep(20);
+  check('selecting a provisioned module again re-enables its toggles', !modToggle('autoHome').disabled);
 
   console.log('\n--- ADD MODULE button provisions the selected module ---');
   calls.length = 0;

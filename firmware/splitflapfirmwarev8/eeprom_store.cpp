@@ -50,9 +50,11 @@ namespace {
   }
 
   void saveBooleans() {
-    EEPROM.write(
-        ADDR_BOOLEANS,
-        config.autoHome | config.motorClockwise<<1 | config.releaseMotor<<2);
+    uint8_t booleans =
+      config.autoHome
+      | config.motorClockwise<<1
+      | config.releaseMotor<<2;
+    EEPROM.write(ADDR_BOOLEANS, booleans);
   }
 }
 

@@ -155,6 +155,8 @@ npm test
   correction later, that functionality no longer exists and would need to be
   rebuilt.
 - Backend tests are minimal: `tests/test_serial_link.py` covers the module
-  dump parser (run `python -m unittest tests.test_serial_link` from
-  `frontend/`). Anything else touching the serial port would still need
-  `display/serial_link.py` mocked.
+  dump parser, `tests/test_module_routes.py` the module adjust/setting
+  endpoints, and `tests/test_backup.py` backup restore (run
+  `python -m unittest tests.test_serial_link tests.test_module_routes tests.test_backup`
+  from `frontend/`; the route tests need Flask). Anything else touching the
+  serial port would still need `display/serial_link.py` mocked.

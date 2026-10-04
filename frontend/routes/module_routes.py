@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify
 from config import NUM_MODULES
 from settings.store import settings, save_settings
 from display.serial_link import send_raw, read_dump, calibrate_module
+from display.module_protocol import TOGGLE_COMMANDS, toggle_command
 from display.state import state
 
 bp = Blueprint('module_routes', __name__)
@@ -14,7 +15,7 @@ def adjust_offset(mod_id):
     mod_id_str = str(mod_id)
 
     if mod_id_str not in settings['modules']:
-        return jsonify(status='failed', settings=settings)
+        return jsonify(status='error', message='Unprovisioned module'), 404
 
     new_offset = int(settings['modules'][mod_id_str]['homeOffset']) + delta
     settings['modules'][mod_id_str]['homeOffset'] = new_offset
@@ -68,7 +69,29 @@ def sync_all():
     return jsonify(status='success', settings=settings)
 
 
+@bp.route('/modules/<int:mod_id>/setting', methods=['POST'])
+def set_module_setting(mod_id):
+    data = request.json or {}
+    key = data.get('setting')
+    value = data.get('value')
+
+    if not isinstance(key, str) or key not in TOGGLE_COMMANDS:
+        return jsonify(status='error', message=f'Unknown setting: {key}'), 400
+    # Strict: bool("false") is True, so a stringly-typed value must not slip through.
+    if not isinstance(value, bool):
+        return jsonify(status='error', message='value must be true or false'), 400
+
+    mod = settings['modules'].get(str(mod_id))
+    if mod is None:
+        return jsonify(status='error', message='Unprovisioned module'), 404
+
+    send_raw(toggle_command(mod_id, key, value))
+    mod[key] = value
+    save_settings(settings)
+    return jsonify(status='success', setting=key, value=value)
+
+
 @bp.route('/assign_id', methods=['POST'])
 def assign_id():
-    send_raw(f"m**i{int((request.json or {}).get('id', 0)):02d}")
+    send_raw(f"m*i{int((request.json or {}).get('id', 0)):02d}")
     return jsonify(status='ID Assigned')

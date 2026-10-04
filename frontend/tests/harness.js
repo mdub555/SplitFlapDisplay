@@ -94,7 +94,10 @@ window.fetch = async (url, options = {}) => {
   }
   if (url === '/settings') {
     if (options.method === 'POST') return ok({ status: 'Saved' });
-    return ok({ timezone: 'US/Eastern', zip_code: '02118', offsets: {'0': 2832}, calibrations: {'0': 4096}, auto_home: true });
+    // Same shape the real backend returns: per-module config lives under `modules`
+    // (only module 0 is provisioned here).
+    return ok({ timezone: 'US/Eastern', zip_code: '02118', auto_home: true,
+      modules: { '0': { homeOffset: 2832, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false } } });
   }
   if (url === '/playlists') {
     if (options.method === 'POST') return ok({ status: 'saved', name: 'Test' });
@@ -109,6 +112,10 @@ window.fetch = async (url, options = {}) => {
   if (url.match(/^\/modules\/\d+\/calibrate$/)) {
     // Simulate the real backend's timeout shape: HTTP 500 + message body.
     return ok({ status: 'error', message: 'Timeout' }, 500);
+  }
+  if (url.match(/^\/modules\/\d+\/setting$/)) {
+    const { setting, value } = JSON.parse(options.body);
+    return ok({ status: 'success', setting, value });
   }
   if (url === '/toggle_autohome') {
     return ok({ status: 'Auto-home updated' });

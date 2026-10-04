@@ -91,10 +91,44 @@ function selectModule(id){
       document.getElementById('inspectOffset').textContent = '---';
       document.getElementById('inspectCalib').textContent = '---';
   }
+  refreshModuleToggles();
 }
 
 function selectModuleAction(el){
   selectModule(parseInt(el.dataset.id, 10));
+}
+
+// Per-module boolean settings shown as toggles in the inspector. Each key is
+// the field name in settings.modules[id], the data-setting on its checkbox
+// (#modToggle-<key>), and what the backend maps to a firmware command.
+const MODULE_TOGGLE_KEYS = ['autoHome', 'motorClockwise', 'motorRelease'];
+
+// Redraws the toggles from stored settings for the selected module. Also the
+// way a failed save gets undone: redraw from what we actually know.
+function refreshModuleToggles(){
+  const mod = currentSettings && currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
+  document.getElementById('moduleToggles').classList.toggle('disabled', !mod);
+  MODULE_TOGGLE_KEYS.forEach(key=>{
+    const el = document.getElementById(`modToggle-${key}`);
+    el.checked = !!(mod && mod[key]);
+    el.disabled = !mod; // an unprovisioned module has nothing to configure
+  });
+}
+
+function toggleModuleSetting(el){
+  const key = el.dataset.setting;
+  const enabled = el.checked;
+  const modId = selectedModule; // the user may pick another module before the reply arrives
+  el.disabled = true;           // no overlapping toggles while a command is in flight
+  api.setModuleSetting(modId, key, enabled).then(result=>{
+    if (result) {
+      const mod = currentSettings.modules && currentSettings.modules[modId.toString()];
+      if (mod) mod[key] = enabled;
+    }
+    // On failure the api layer already showed a toast; either way redrawing
+    // from stored state re-enables the toggle and reverts a failed change.
+    refreshModuleToggles();
+  });
 }
 
 function adjustOffset(el){
@@ -176,7 +210,14 @@ function syncAllFromHardware(){
 function toggleAutoHome(el){
   const enabled = el.checked;
   api.toggleAutoHome(enabled).then(result=>{
-    if (!result) el.checked = !enabled;
+    if (!result) { el.checked = !enabled; return; }
+    // The backend applies this to every provisioned module; mirror that here
+    // so the inspector's per-module auto-home toggle doesn't go stale.
+    if (currentSettings) {
+      currentSettings.auto_home = enabled;
+      Object.values(currentSettings.modules || {}).forEach(m => { if (m) m.autoHome = enabled; });
+      refreshModuleToggles();
+    }
   });
 }
 
@@ -246,5 +287,6 @@ function uploadBackup(input){
 registerActions({
   selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected,
   syncOneFromHardware, syncAllFromHardware, toggleAutoHome, provisionModule,
+  toggleModuleSetting,
   saveGlobal, downloadBackup, triggerBackupFileInput, uploadBackup,
 });

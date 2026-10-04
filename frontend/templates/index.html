@@ -188,6 +188,29 @@
           <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="32">+32</button>
         </div>
         <div style="text-align:center;color:#666;font-size:.75rem;margin-top:-6px">(Saves instantly; press Home to verify)</div>
+        <div class="module-toggles" id="moduleToggles">
+          <div class="toggle-row">
+            <div>
+              <span class="toggle-name">Auto-home on boot</span>
+              <span class="toggle-hint">Find the home flap whenever this module powers up</span>
+            </div>
+            <label class="switch"><input type="checkbox" id="modToggle-autoHome" data-onchange="toggleModuleSetting" data-setting="autoHome"><span class="slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <span class="toggle-name">Motor clockwise</span>
+              <span class="toggle-hint">Off = counter-clockwise. Only change this if the reel turns the wrong way</span>
+            </div>
+            <label class="switch"><input type="checkbox" id="modToggle-motorClockwise" data-onchange="toggleModuleSetting" data-setting="motorClockwise"><span class="slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <span class="toggle-name">Release motor when idle</span>
+              <span class="toggle-hint">Cut coil power after each move so the motor runs cooler</span>
+            </div>
+            <label class="switch"><input type="checkbox" id="modToggle-motorRelease" data-onchange="toggleModuleSetting" data-setting="motorRelease"><span class="slider"></span></label>
+          </div>
+        </div>
         <div style="display:flex;gap:10px;margin-top:4px">
           <button class="btn" style="flex:1;background:#444;color:#fff" data-onclick="homeSelected">HOME MOTOR</button>
           <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
@@ -213,7 +236,7 @@
     <!-- Backup / Restore -->
     <div class="config-section">
       <h3>Calibration Backup &amp; Restore</h3>
-      <p style="color:#888;font-size:.85rem;margin-top:0">Export/import all home offsets and step calibrations.</p>
+      <p style="color:#888;font-size:.85rem;margin-top:0">Export/import all home offsets, step calibrations and per-module toggles (auto-home, motor direction, motor release).</p>
       <div class="backup-row">
         <button class="btn btn-secondary" data-onclick="downloadBackup">⬇ Download Backup JSON</button>
         <div style="display:flex;gap:8px;align-items:center;flex:1">

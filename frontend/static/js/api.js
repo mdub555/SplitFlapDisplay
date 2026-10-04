@@ -84,6 +84,9 @@ const api = {
   calibrateModule:    (modId) => apiFetchJson(`/modules/${modId}/calibrate`, {method:'POST'}, 'Calibration failed'),
   syncModule:         (modId) => apiFetchJson(`/modules/${modId}/sync`, {method:'POST'}, 'Sync failed'),
   syncAllModules:     () => apiFetchJson('/modules/sync_all', {method:'POST'}, 'Sync failed'),
+  setModuleSetting:   (modId, setting, value) => apiFetchJson(`/modules/${modId}/setting`, {
+    method:'POST', headers: jsonHeaders, body: JSON.stringify({setting, value})
+  }, 'Could not update module setting'),
   homeAll:            () => apiFetchJson('/home_all', {}, 'Could not home all modules'),
 
   backupSettings:     () => apiFetchJson('/backup_settings', {}, 'Could not generate backup'),
