@@ -45,17 +45,17 @@ namespace {
 
   // Magic value written to ADDR_INIT to indicate EEPROM has been initialized.
   // Changing this value forces all modules to reset to defaults on next boot.
-  const uint8_t INIT_VALUE = 0x04;
+  const uint8_t INIT_VALUE = 0x05;
 
   Config config;
 
   void load() {
     EEPROM.get(ADDR_HOME_OFFSET, config.homeOffset);
     EEPROM.get(ADDR_TOTAL_STEPS, config.totalSteps);
+    EEPROM.get(ADDR_DEBOUNCE_MS, config.debounceMs);
     config.moduleId = EEPROM.read(ADDR_MODULE_ID);
     config.stepDelay = EEPROM.read(ADDR_STEP_DELAY);
     config.homingStepDelay = EEPROM.read(ADDR_HOMING_STEP_DELAY);
-    config.debounceMs = EEPROM.read(ADDR_DEBOUNCE_MS);
     uint8_t booleans = EEPROM.read(ADDR_BOOLEANS);
     config.autoHome = booleans & MASK_AUTO_HOME;
     config.motorClockwise = booleans & MASK_MOTOR_CW;
@@ -146,7 +146,7 @@ uint8_t getHomingStepDelay() {
 
 void saveDebounceMs(uint16_t millis) {
   config.debounceMs = millis;
-  EEPROM.write(ADDR_DEBOUNCE_MS, millis);
+  EEPROM.put(ADDR_DEBOUNCE_MS, millis);
 }
 
 uint16_t getDebounceMs() {
