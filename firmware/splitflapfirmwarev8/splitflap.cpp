@@ -37,6 +37,7 @@ bool SplitFlap::stepAdvance(uint16_t steps) {
     if (stepAdvance()) {
       edgeHit = true;
     }
+    delay(EepromStore::getStepDelay());
   }
   return edgeHit;
 }
@@ -46,7 +47,9 @@ bool SplitFlap::stepAdvance() {
   currentStepPos++;
   if (HomeSensor::detectRisingEdge()) {
     debug->println("[Splitflap] hit home sensor");
-    currentStepPos = EepromStore::getTotalSteps() - EepromStore::getHomeOffset();
+    if (EepromStore::recalculateHome()) {
+      currentStepPos = EepromStore::getTotalSteps() - EepromStore::getHomeOffset();
+    }
     return true;
   }
   if (currentStepPos >= EepromStore::getTotalSteps()) currentStepPos = 0;
@@ -65,11 +68,10 @@ void SplitFlap::home() {
   debug->println("[Splitflap] homing");
   uint16_t safety = 0;
 
-  // Step until the Hall sensor triggers, or bail after slightly more than
-  // one full revolution (prevents infinite loops if sensor is broken/missing).
-  while (!HomeSensor::homeActive() && safety < (EepromStore::getTotalSteps() + 500)) {
-    stepAdvance();
+  // Advance until the next leading edge
+  while (!stepAdvance() && safety < (EepromStore::getTotalSteps() + 500)) {
     safety++;
+    delay(EepromStore::getHomingStepDelay());
   }
 
   // Advance the calibrated offset to reach flap 0
@@ -84,39 +86,33 @@ void SplitFlap::home() {
 
 uint16_t SplitFlap::calibrate() {
   debug->println("[Splitflap] calibrating");
-  // Phase 1: If already on the home sensor, move off it first
   uint16_t safety = 0;
-  while (HomeSensor::homeActive() && safety < 4000) {
-    stepAdvance();
+
+  // Advance until the first leading edge
+  while (!stepAdvance() && safety < (EepromStore::getTotalSteps() + 500)) {
     safety++;
-    delay(5);
+    delay(EepromStore::getHomingStepDelay());
   }
 
-  // Phase 2: Find the leading edge of the home sensor
-  safety = 0;
-  while (!HomeSensor::homeActive() && safety < 5000) {
-    stepAdvance();
-    safety++;
-  }
-
-  // Phase 3: Find the trailing edge (start counting from a clean edge)
-  while (HomeSensor::homeActive()) {
-    stepAdvance();
-  }
-
-  // Phase 4: Count steps for one full revolution (trailing edge → next trailing edge)
+  // Advance for one full rotation until the next leading edge
   uint16_t measuredSteps = 0;
-  while (!HomeSensor::homeActive() && measuredSteps < 5000) {
-    stepAdvance();
+  while (!stepAdvance() && measuredSteps < 5000) {
     measuredSteps++;
-  }
-  while (HomeSensor::homeActive()) {
-    stepAdvance();
-    measuredSteps++;
+    delay(EepromStore::getHomingStepDelay());
   }
 
+  debug->print("[Splitflap] steps measured: ");
+  debug->println(measuredSteps);
   EepromStore::saveTotalSteps(measuredSteps);
-  home();
+
+  // Go to home flap
+  stepAdvance(EepromStore::getHomeOffset());
+  currentStepPos = 0;
+  currentFlapIdx = 0;
+  if (EepromStore::releaseMotorEnabled()) {
+    Motor::release();
+  }
+
   return measuredSteps;
 }
 
@@ -139,8 +135,9 @@ void SplitFlap::moveToIndex(uint8_t targetIndex) {
 
   while (stepsRemaining > 0) {
     bool edge = stepAdvance();
+    delay(EepromStore::getStepDelay());
     stepsRemaining--;
-    if (edge) {
+    if (edge && EepromStore::recalculateHome()) {
       // currentStepPos was just snapped to ground truth, recompute the
       // remaining steps again to compensate for any drift.
       stepsRemaining = stepsToTarget(targetStepPos);

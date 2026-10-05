@@ -6,7 +6,6 @@
 #include "pinout.h"
 
 namespace {
-  const int STEP_DELAY = 1;  // Milliseconds between each half-step pulse
   int  currentPhase  = 0;    // Index into halfStepSequence[8]
 
   // Half-step sequence for a 4-wire stepper motor. Each row energizes the
@@ -49,7 +48,6 @@ namespace Motor{
     if (currentPhase > 7) currentPhase = 0;
 
     applyStep(halfStepSequence[currentPhase]);
-    delay(STEP_DELAY);
   }
 
   void release() {

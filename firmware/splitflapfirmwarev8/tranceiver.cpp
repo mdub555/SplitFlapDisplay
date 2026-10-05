@@ -28,6 +28,10 @@ namespace {
       case 'd': return DUMP_STATE;
       case 'w': return SET_MOTOR_CW;
       case 'r': return SET_MOTOR_RELEASE;
+      case 'j': return SET_RECALCULATE_HOME;
+      case 'k': return SET_STEP_DELAY;
+      case 'l': return SET_HOMING_STEP_DELAY;
+      case 'b': return SET_DEBOUNCE_MS;
       default:  return UNKNOWN_COMMAND;
     }
   }
@@ -73,12 +77,16 @@ namespace {
             case DISPLAY_INDEX:
             case SET_OFFSET:
             case SET_TOTAL_STEPS:
+            case SET_DEBOUNCE_MS:
             case NUDGE:
             case MOVE_TO_STEP:
             case SET_MODULE_ID:
             case SET_AUTO_HOME:
             case SET_MOTOR_CW:
             case SET_MOTOR_RELEASE:
+            case SET_RECALCULATE_HOME:
+            case SET_HOMING_STEP_DELAY:
+            case SET_STEP_DELAY:
               parseState = READING_DATA_INT;
               break;
             case HOME:
@@ -129,11 +137,19 @@ void Tranceiver::dump() {
   Serial.print(":");
   Serial.print(EepromStore::getTotalSteps());
   Serial.print(":");
+  Serial.print(EepromStore::getDebounceMs());
+  Serial.print(":");
+  Serial.print(EepromStore::getStepDelay());
+  Serial.print(":");
+  Serial.print(EepromStore::getHomingStepDelay());
+  Serial.print(":");
   Serial.print(EepromStore::isMotorClockwise() ? "1" : "0");
   Serial.print(":");
   Serial.print(EepromStore::autoHomeEnabled() ? "1" : "0");
   Serial.print(":");
-  Serial.println(EepromStore::releaseMotorEnabled() ? "1" : "0");
+  Serial.print(EepromStore::releaseMotorEnabled() ? "1" : "0");
+  Serial.print(":");
+  Serial.println(EepromStore::recalculateHome() ? "1" : "0");
 }
 
 bool Tranceiver::poll(Command& command) {

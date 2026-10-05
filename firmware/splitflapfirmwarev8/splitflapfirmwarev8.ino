@@ -90,6 +90,12 @@ void loop() {
         EepromStore::saveTotalSteps(command.data.dataInt);
         break;
 
+      case SET_DEBOUNCE_MS:
+        debugSerial.print("Set debounce ms: ");
+        debugSerial.println(command.data.dataInt);
+        EepromStore::saveDebounceMs(command.data.dataInt);
+        break;
+
       case NUDGE:
         debugSerial.print("Nudge: ");
         debugSerial.println(command.data.dataInt);
@@ -100,6 +106,18 @@ void loop() {
         debugSerial.print("Move to step: ");
         debugSerial.println(command.data.dataInt);
         splitFlap.goToRawStep(command.data.dataInt);
+        break;
+
+      case SET_HOMING_STEP_DELAY:
+        debugSerial.print("Set Homing Step Delay (ms): ");
+        debugSerial.println(command.data.dataInt);
+        EepromStore::saveHomingStepDelay(command.data.dataInt);
+        break;
+
+      case SET_STEP_DELAY:
+        debugSerial.print("Set Step Delay (ms): ");
+        debugSerial.println(command.data.dataInt);
+        EepromStore::saveStepDelay(command.data.dataInt);
         break;
 
       case SET_MODULE_ID:
@@ -129,6 +147,12 @@ void loop() {
         } else {
           Motor::tense();
         }
+        break;
+
+      case SET_RECALCULATE_HOME:
+        debugSerial.print("Set Recalculate Home: ");
+        debugSerial.println(command.data.dataInt);
+        EepromStore::saveRecalculateHome(command.data.dataInt);
         break;
 
       case DUMP_STATE:

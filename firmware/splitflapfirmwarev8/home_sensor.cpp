@@ -2,12 +2,12 @@
 
 #include <Arduino.h>
 
+#include "eeprom_store.h"
 #include "pinout.h"
 
 namespace {
   bool lastHomeState = false;
   uint32_t lastEdgeMillis = 0;
-  const uint32_t DEBOUNCE_MS = 20;
 }
 
 namespace HomeSensor {
@@ -27,7 +27,7 @@ namespace HomeSensor {
 
     if (risingEdge) {
       uint32_t now = millis();
-      if (now - lastEdgeMillis < DEBOUNCE_MS) {
+      if (now - lastEdgeMillis < EepromStore::getDebounceMs()) {
         return false;
       }
       lastEdgeMillis = now;

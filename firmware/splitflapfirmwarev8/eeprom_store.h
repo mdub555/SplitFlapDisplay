@@ -24,14 +24,26 @@ namespace EepromStore {
   void saveModuleId(uint8_t id);
   uint8_t getModuleId();
 
+  void saveStepDelay(uint8_t delay);
+  uint8_t getStepDelay();
+
+  void saveHomingStepDelay(uint8_t delay);
+  uint8_t getHomingStepDelay();
+
+  void saveDebounceMs(uint16_t millis);
+  uint16_t getDebounceMs();
+
   void saveAutoHome(bool enabled);
   bool autoHomeEnabled();
 
-  bool isMotorClockwise();
   void saveMotorDir(bool clockwise);
+  bool isMotorClockwise();
 
-  bool releaseMotorEnabled();
   void saveReleaseMotor(bool releaseMotor);
+  bool releaseMotorEnabled();
+
+  void saveRecalculateHome(bool recalculate);
+  bool recalculateHome();
 }
 
 #endif

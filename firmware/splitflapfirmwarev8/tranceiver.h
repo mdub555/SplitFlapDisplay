@@ -24,6 +24,7 @@
 //         o, Set the offset number of steps from where home is detected to the
 //            blank flap. data must be a number
 //         t, Set the number of steps in a full rotation. data must be a number
+//         b, Set the debounce delay for the home sensor. data must be a number
 //         s, Nudge the stepper motor N steps, adjusting home offset
 //            accordingly. data must be a number
 //         g, Goto a specific motor step. data must be a number
@@ -37,22 +38,32 @@
 //         d, Dump the module state back to the Raspberry Pi in the format
 //            m<ID>d:<homeOffset>:<totalSteps>:<motorDir>:<autoHome>:<releaseMotor>.
 //            No data expected
+//         j, Enable or disable recalculating home. 1 to continuously recalculate,
+//            0 to only calculate on home.
+//         k, Set the delay between each motor step during normal operation, in
+//            milliseconds.
+//         l, Set the delay between each motor step during homing and calibration
+//            operations, in milliseconds.
 // =============================================================================
 enum CommandType {
   UNKNOWN_COMMAND,
-  DISPLAY_CHAR,       // '-'
-  DISPLAY_INDEX,      // '+'
-  HOME,               // 'h'
-  CALIBRATE,          // 'c'
-  SET_OFFSET,         // 'o'
-  SET_TOTAL_STEPS,    // 't'
-  NUDGE,              // 's'
-  MOVE_TO_STEP,       // 'g'
-  SET_MODULE_ID,      // 'i'
-  SET_AUTO_HOME,      // 'a'
-  DUMP_STATE,         // 'd'
-  SET_MOTOR_CW,       // 'w'
-  SET_MOTOR_RELEASE,  // 'r'
+  DISPLAY_CHAR,           // '-'
+  DISPLAY_INDEX,          // '+'
+  HOME,                   // 'h'
+  CALIBRATE,              // 'c'
+  SET_OFFSET,             // 'o'
+  SET_TOTAL_STEPS,        // 't'
+  SET_DEBOUNCE_MS,        // 'b'
+  NUDGE,                  // 's'
+  MOVE_TO_STEP,           // 'g'
+  SET_MODULE_ID,          // 'i'
+  SET_AUTO_HOME,          // 'a'
+  DUMP_STATE,             // 'd'
+  SET_MOTOR_CW,           // 'w'
+  SET_MOTOR_RELEASE,      // 'r'
+  SET_RECALCULATE_HOME,   // 'j'
+  SET_STEP_DELAY,         // 'k'
+  SET_HOMING_STEP_DELAY,  // 'l'
 };
 
 struct Command {
@@ -85,7 +96,9 @@ class Tranceiver {
   // messages with a missed or absent terminator).
   bool poll(Command& poll);
 
-  // Sends: m<ID>d:<homeOffset>:<totalSteps>:<clockwise>:<autoHome>:<releaseMotor>
+  // Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>
+  //              :<homingStepDelay>:<clockwise>:<autoHome>:<releaseMotor>
+  //              :<recalculateHome>
   void dump();
 };
 

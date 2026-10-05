@@ -14,8 +14,8 @@
 // =============================================================================
 class SplitFlap {
  private:
-  uint16_t currentStepPos = 0;   // Current motor position in half-steps (0 = flap 0)
-  int8_t currentFlapIdx = -1;  // Which flap is currently showing (-1 = unknown)
+  uint16_t currentStepPos = 0;  // Current motor position in half-steps (0 = flap 0)
+  int8_t currentFlapIdx = -1;   // Which flap is currently showing (-1 = unknown)
 
   // Used for debug printing
   SoftwareSerial* debug = nullptr;  // not owned

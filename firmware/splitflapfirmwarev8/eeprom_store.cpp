@@ -7,6 +7,7 @@ namespace {
   const uint16_t TOTAL_STEPS = 4096;
   const uint16_t NUM_FLAPS = 64;
   const uint16_t STEPS_PER_FLAP = TOTAL_STEPS/NUM_FLAPS;
+  const uint16_t DEBOUNCE_MS = 100;
   // With the wire-based home sensor, home is detected immediatly when the
   // blank flap is visible. Home is on the white flap, which is 7 flaps
   // from the black flap. Set the home 7.5 flaps past home, making each
@@ -15,14 +16,19 @@ namespace {
   const uint8_t MASK_AUTO_HOME = 1;
   const uint8_t MASK_MOTOR_CW = 1<<1;
   const uint8_t MASK_RELEASE_MOTOR = 1<<2;
+  const uint8_t MASK_RECALCULATE_HOME = 1<<3;
 
   struct Config {
     uint16_t homeOffset = 0;   // Steps past magnet trigger to reach flap 0
     uint16_t totalSteps = 0;   // Total steps for one full reel revolution
+    uint16_t debounceMs = 0;   // Debounce time for the home sensor
     uint8_t  moduleId = 0;     // This module's bus ID (0–254; 255 = unset)
+    uint8_t  stepDelay = 1;    // The time between each motor step during normal rotation
+    uint8_t  homingStepDelay = 1; // The time between each motor step during homing
     bool     autoHome = false; // Whether to home on every boot
     bool     motorClockwise = true; // Whether the motor defaults to rotating clockwise
     bool     releaseMotor = true;   // Whether the motor defaults to rotating clockwise
+    bool     recalculateHome = true; // Whether home is recalculated each rotation
   };
 
   // ---- EEPROM Address Map ----
@@ -32,6 +38,10 @@ namespace {
   const uint16_t ADDR_TOTAL_STEPS = 3;   // 2 bytes — Total steps for one full reel revolution
   const uint16_t ADDR_MODULE_ID   = 5;   // 1 byte  — This module's bus ID (0–254; 255 = unset)
   const uint16_t ADDR_BOOLEANS    = 6;   // 1 byte  — boolean configs, see masks above
+  const uint16_t ADDR_STEP_DELAY  = 7;   // 1 byte — ms delay between each motor step
+  const uint16_t ADDR_HOMING_STEP_DELAY = 8;  // 1 byte — ms delay between each motor step
+                                              // during homing
+  const uint16_t ADDR_DEBOUNCE_MS = 9;  // 2 bytes — ms debounce timing for the home sensor
 
   // Magic value written to ADDR_INIT to indicate EEPROM has been initialized.
   // Changing this value forces all modules to reset to defaults on next boot.
@@ -43,17 +53,22 @@ namespace {
     EEPROM.get(ADDR_HOME_OFFSET, config.homeOffset);
     EEPROM.get(ADDR_TOTAL_STEPS, config.totalSteps);
     config.moduleId = EEPROM.read(ADDR_MODULE_ID);
+    config.stepDelay = EEPROM.read(ADDR_STEP_DELAY);
+    config.homingStepDelay = EEPROM.read(ADDR_HOMING_STEP_DELAY);
+    config.debounceMs = EEPROM.read(ADDR_DEBOUNCE_MS);
     uint8_t booleans = EEPROM.read(ADDR_BOOLEANS);
     config.autoHome = booleans & MASK_AUTO_HOME;
     config.motorClockwise = booleans & MASK_MOTOR_CW;
     config.releaseMotor = booleans & MASK_RELEASE_MOTOR;
+    config.recalculateHome = booleans & MASK_RECALCULATE_HOME;
   }
 
   void saveBooleans() {
     uint8_t booleans =
       config.autoHome
       | config.motorClockwise<<1
-      | config.releaseMotor<<2;
+      | config.releaseMotor<<2
+      | config.recalculateHome<<3;
     EEPROM.write(ADDR_BOOLEANS, booleans);
   }
 }
@@ -70,10 +85,14 @@ void writeDefaults(uint8_t hardcodedId) {
   EEPROM.write(ADDR_INIT, INIT_VALUE);
   saveHomeOffset(HOME_OFFSET);
   saveTotalSteps(TOTAL_STEPS);
+  saveDebounceMs(DEBOUNCE_MS);
   saveModuleId(hardcodedId);
+  saveStepDelay(1);
+  saveHomingStepDelay(1);
   saveAutoHome(false);
   saveMotorDir(/* clockwise= */ true);
   saveReleaseMotor(true);
+  saveRecalculateHome(true);
 }
 
 bool isInitialized() {
@@ -107,25 +126,59 @@ uint8_t getModuleId() {
   return config.moduleId;
 }
 
+void saveStepDelay(uint8_t delay) {
+  config.stepDelay = delay;
+  EEPROM.write(ADDR_STEP_DELAY, delay);
+}
+
+uint8_t getStepDelay() {
+  return config.stepDelay;
+}
+
+void saveHomingStepDelay(uint8_t delay) {
+  config.homingStepDelay = delay;
+  EEPROM.write(ADDR_HOMING_STEP_DELAY, delay);
+}
+
+uint8_t getHomingStepDelay() {
+  return config.homingStepDelay;
+}
+
+void saveDebounceMs(uint16_t millis) {
+  config.debounceMs = millis;
+  EEPROM.write(ADDR_DEBOUNCE_MS, millis);
+}
+
+uint16_t getDebounceMs() {
+  return config.debounceMs;
+}
+
 void saveAutoHome(bool enabled) {
   config.autoHome = enabled;
   saveBooleans();
 }
+
+bool autoHomeEnabled() { return config.autoHome; }
 
 void saveMotorDir(bool clockwise) {
   config.motorClockwise = clockwise;
   saveBooleans();
 }
 
+bool isMotorClockwise() { return config.motorClockwise; }
+
 void saveReleaseMotor(bool releaseMotor) {
   config.releaseMotor = releaseMotor;
   saveBooleans();
 }
 
-bool autoHomeEnabled() { return config.autoHome; }
-
-bool isMotorClockwise() { return config.motorClockwise; }
-
 bool releaseMotorEnabled() { return config.releaseMotor; }
+
+void saveRecalculateHome(bool recalculate) {
+  config.recalculateHome = recalculate;
+  saveBooleans();
+}
+
+bool recalculateHome() { return config.recalculateHome; }
 }
 
