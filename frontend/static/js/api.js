@@ -87,6 +87,15 @@ const api = {
   setModuleSetting:   (modId, setting, value) => apiFetchJson(`/modules/${modId}/setting`, {
     method:'POST', headers: jsonHeaders, body: JSON.stringify({setting, value})
   }, 'Could not update module setting'),
+  setTotalSteps:      (modId, steps) => apiFetchJson(`/modules/${modId}/total_steps`, {
+    method:'POST', headers: jsonHeaders, body: JSON.stringify({steps})
+  }, 'Could not set total steps'),
+  showOnModule:       (modId, payload) => apiFetchJson(`/modules/${modId}/display`, {
+    method:'POST', headers: jsonHeaders, body: JSON.stringify(payload)
+  }, 'Could not update module display'),
+  gotoStep:           (modId, step) => apiFetchJson(`/modules/${modId}/goto_step`, {
+    method:'POST', headers: jsonHeaders, body: JSON.stringify({step})
+  }, 'Could not move module'),
   homeAll:            () => apiFetchJson('/home_all', {}, 'Could not home all modules'),
 
   backupSettings:     () => apiFetchJson('/backup_settings', {}, 'Could not generate backup'),

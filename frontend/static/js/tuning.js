@@ -92,6 +92,7 @@ function selectModule(id){
       document.getElementById('inspectCalib').textContent = '---';
   }
   refreshModuleToggles();
+  refreshManualControls();
 }
 
 function selectModuleAction(el){
@@ -119,6 +120,15 @@ function toggleModuleSetting(el){
   const key = el.dataset.setting;
   const enabled = el.checked;
   const modId = selectedModule; // the user may pick another module before the reply arrives
+  // Flipping the direction makes every move run backwards until it's flipped
+  // back, so make it deliberate. Nothing has been sent yet, so backing out
+  // only has to restore the checkbox.
+  if (key === 'motorClockwise' &&
+      !confirm(`Make module ${formatModuleId(modId)} turn ${enabled ? 'clockwise' : 'counter-clockwise'}? ` +
+               `Only do this if the reel is turning the wrong way. Re-home the module afterwards.`)) {
+    el.checked = !enabled;
+    return;
+  }
   el.disabled = true;           // no overlapping toggles while a command is in flight
   api.setModuleSetting(modId, key, enabled).then(result=>{
     if (result) {
@@ -128,6 +138,79 @@ function toggleModuleSetting(el){
     // On failure the api layer already showed a toast; either way redrawing
     // from stored state re-enables the toggle and reverts a failed change.
     refreshModuleToggles();
+  });
+}
+
+// Manual controls under the toggles: set total steps, show a character or
+// flap index, jump to a raw step. Disabled for an unprovisioned module, like
+// the toggles (the backend answers those with a 404 anyway).
+const MAX_TOTAL_STEPS = 32767; // the firmware parses numbers into a 16-bit signed int
+
+function selectedModuleSettings(){
+  return currentSettings && currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
+}
+
+function refreshManualControls(){
+  const mod = selectedModuleSettings();
+  const box = document.getElementById('manualControls');
+  box.classList.toggle('disabled', !mod);
+  box.querySelectorAll('input, button').forEach(el => { el.disabled = !mod; });
+  document.getElementById('totalStepsInput').value =
+    mod && mod.totalSteps !== undefined ? mod.totalSteps : '';
+}
+
+// Whole number from a number input, or null (after a warning toast) if it's
+// blank, fractional or outside [min, max].
+function readIntInput(id, label, min, max){
+  const raw = document.getElementById(id).value.trim();
+  const n = Number(raw);
+  if (raw === '' || !Number.isInteger(n) || n < min || n > max) {
+    showToast(`${label} must be a whole number from ${min} to ${max}`, 'warn');
+    return null;
+  }
+  return n;
+}
+
+function setTotalSteps(){
+  const steps = readIntInput('totalStepsInput', 'Total steps', 1, MAX_TOTAL_STEPS);
+  if (steps === null) return;
+  const modId = selectedModule;
+  api.setTotalSteps(modId, steps).then(d=>{
+    if (!d) return;
+    const mod = currentSettings.modules && currentSettings.modules[modId.toString()];
+    if (mod) mod.totalSteps = steps;
+    if (modId === selectedModule) document.getElementById('inspectCalib').textContent = steps;
+    showToast(`Module ${formatModuleId(modId)}: total steps set to ${steps}`);
+  });
+}
+
+function sendShow(payload){
+  const modId = selectedModule;
+  api.showOnModule(modId, payload).then(d=>{
+    if (d) showToast(`Module ${formatModuleId(modId)} showing flap ${d.index}`);
+  });
+}
+
+function showChar(){
+  // Array.from so a colour-tile emoji counts as one character, not two.
+  const chars = Array.from(document.getElementById('showCharInput').value);
+  if (chars.length !== 1) { showToast('Enter exactly one character', 'warn'); return; }
+  sendShow({char: chars[0]});
+}
+
+function showIndex(){
+  const index = readIntInput('showIndexInput', 'Flap index', 0, CHAR_MAP.length - 1);
+  if (index !== null) sendShow({index});
+}
+
+function gotoStep(){
+  const mod = selectedModuleSettings();
+  const total = mod && Number.isInteger(mod.totalSteps) ? mod.totalSteps : MAX_TOTAL_STEPS + 1;
+  const step = readIntInput('gotoStepInput', 'Step', 0, total - 1);
+  if (step === null) return;
+  const modId = selectedModule;
+  api.gotoStep(modId, step).then(d=>{
+    if (d) showToast(`Module ${formatModuleId(modId)} moved to step ${step}`);
   });
 }
 
@@ -175,6 +258,7 @@ function calibrateSelected(){
     }
     currentSettings.modules[selectedModule.toString()].totalSteps = d.steps;
     document.getElementById('inspectCalib').textContent = d.steps;
+    refreshManualControls();
     showToast(`Module ${formatModuleId(selectedModule)}: ${d.steps} steps`);
   });
 }
@@ -287,6 +371,7 @@ function uploadBackup(input){
 registerActions({
   selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected,
   syncOneFromHardware, syncAllFromHardware, toggleAutoHome, provisionModule,
+  setTotalSteps, showChar, showIndex, gotoStep,
   toggleModuleSetting,
   saveGlobal, downloadBackup, triggerBackupFileInput, uploadBackup,
 });

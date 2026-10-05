@@ -5,6 +5,7 @@ from settings.store import settings, save_settings
 from display.serial_link import send_raw, read_dump, calibrate_module
 from display.module_protocol import TOGGLE_COMMANDS, toggle_command
 from display.state import state
+from display.charset import FLAP_CHARS, COLOR_MAP, QUOTE_CHAR, QUOTE_SUBSTITUTE
 
 bp = Blueprint('module_routes', __name__)
 
@@ -89,6 +90,94 @@ def set_module_setting(mod_id):
     mod[key] = value
     save_settings(settings)
     return jsonify(status='success', setting=key, value=value)
+
+
+# --- Manual controls in the Hardware Inspector -----------------------------
+MAX_TOTAL_STEPS = 32767   # the firmware parses numbers into a 16-bit signed int
+NUM_FLAPS = len(FLAP_CHARS)
+
+
+def _is_int(value):
+    # bool is a subclass of int; true/false must not pass as 1/0.
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _error(message, status):
+    return jsonify(status='error', message=message), status
+
+
+def _to_flap_char(value):
+    """Normalise one typed character the way display.player.send_to_display
+    does for a whole page (uppercase, colour emoji -> codes, " -> q).
+    Returns None unless the result is a single character that has a flap."""
+    if not isinstance(value, str):
+        return None
+    text = value.upper()
+    for emoji, code in COLOR_MAP.items():
+        text = text.replace(emoji, code)
+    text = text.replace(QUOTE_CHAR, QUOTE_SUBSTITUTE)
+    return text if len(text) == 1 and text in FLAP_CHARS else None
+
+
+@bp.route('/modules/<int:mod_id>/total_steps', methods=['POST'])
+def set_total_steps(mod_id):
+    steps = (request.json or {}).get('steps')
+    if not _is_int(steps) or not 1 <= steps <= MAX_TOTAL_STEPS:
+        return _error(f'steps must be an integer from 1 to {MAX_TOTAL_STEPS}', 400)
+
+    mod = settings['modules'].get(str(mod_id))
+    if mod is None:
+        return _error('Unprovisioned module', 404)
+
+    send_raw(f"m{mod_id:02d}t{steps}")
+    mod['totalSteps'] = steps
+    save_settings(settings)
+    return jsonify(status='success', steps=steps)
+
+
+@bp.route('/modules/<int:mod_id>/display', methods=['POST'])
+def display_on_module(mod_id):
+    """Show one flap, given either {"char": "A"} or {"index": 7}."""
+    data = request.json or {}
+    if ('char' in data) == ('index' in data):
+        return _error('Provide exactly one of char or index', 400)
+
+    if 'index' in data:
+        index = data['index']
+        if not _is_int(index) or not 0 <= index < NUM_FLAPS:
+            return _error(f'index must be an integer from 0 to {NUM_FLAPS - 1}', 400)
+        char = FLAP_CHARS[index]
+        command = f"m{mod_id:02d}+{index}"
+    else:
+        char = _to_flap_char(data['char'])
+        if char is None:
+            return _error('char must be a single character that has a flap', 400)
+        command = f"m{mod_id:02d}-{char}"
+
+    if str(mod_id) not in settings['modules']:
+        return _error('Unprovisioned module', 404)
+
+    send_raw(command)
+    state.mark_module_char(mod_id, char)
+    return jsonify(status='success', char=char, index=FLAP_CHARS.index(char))
+
+
+@bp.route('/modules/<int:mod_id>/goto_step', methods=['POST'])
+def goto_step(mod_id):
+    """Move to a raw step position (firmware `g`). Only ever moves forward."""
+    step = (request.json or {}).get('step')
+    if not _is_int(step) or step < 0:
+        return _error('step must be a non-negative integer', 400)
+
+    mod = settings['modules'].get(str(mod_id))
+    if mod is None:
+        return _error('Unprovisioned module', 404)
+    total = mod.get('totalSteps')
+    if _is_int(total) and step >= total:
+        return _error(f'step must be less than total steps ({total})', 400)
+
+    send_raw(f"m{mod_id:02d}g{step}")
+    return jsonify(status='success', step=step)
 
 
 @bp.route('/assign_id', methods=['POST'])

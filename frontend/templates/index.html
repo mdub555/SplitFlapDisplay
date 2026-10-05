@@ -211,6 +211,29 @@
             <label class="switch"><input type="checkbox" id="modToggle-motorRelease" data-onchange="toggleModuleSetting" data-setting="motorRelease"><span class="slider"></span></label>
           </div>
         </div>
+        <div class="manual-controls" id="manualControls">
+          <div class="manual-row">
+            <label class="manual-label" for="totalStepsInput">Total steps per revolution</label>
+            <input type="number" id="totalStepsInput" min="1" max="32767" step="1">
+            <button class="btn btn-secondary btn-sm" data-onclick="setTotalSteps">SET</button>
+          </div>
+          <div class="manual-row">
+            <label class="manual-label" for="showCharInput">Show character</label>
+            <input type="text" id="showCharInput" placeholder="A, 7, 🟥…" autocomplete="off">
+            <button class="btn btn-secondary btn-sm" data-onclick="showChar">SHOW</button>
+          </div>
+          <div class="manual-row">
+            <label class="manual-label" for="showIndexInput">Show flap index (0–63)</label>
+            <input type="number" id="showIndexInput" min="0" max="63" step="1">
+            <button class="btn btn-secondary btn-sm" data-onclick="showIndex">SHOW</button>
+          </div>
+          <div class="manual-row">
+            <label class="manual-label" for="gotoStepInput">Go to step</label>
+            <input type="number" id="gotoStepInput" min="0" step="1">
+            <button class="btn btn-secondary btn-sm" data-onclick="gotoStep">GO</button>
+          </div>
+          <span class="toggle-hint">Setting total steps only writes the module's EEPROM; home the module afterwards. Go to step only moves forward from the current position (wrapping at total steps).</span>
+        </div>
         <div style="display:flex;gap:10px;margin-top:4px">
           <button class="btn" style="flex:1;background:#444;color:#fff" data-onclick="homeSelected">HOME MOTOR</button>
           <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
