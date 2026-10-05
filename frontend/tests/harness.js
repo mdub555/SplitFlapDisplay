@@ -123,6 +123,18 @@ window.fetch = async (url, options = {}) => {
   if (url === '/toggle_autohome') {
     return ok({ status: 'Auto-home updated' });
   }
+  if (url === '/firmware_config') {
+    if (options.method === 'POST') return ok({ status: 'success', values: JSON.parse(options.body) });
+    return ok({
+      values: { stepDelay: 1, homingStepDelay: 2, debounceMs: 100, recalculateHome: true },
+      limits: {
+        stepDelay:       { type: 'int',  min: 1, max: 255 },
+        homingStepDelay: { type: 'int',  min: 1, max: 255 },
+        debounceMs:      { type: 'int',  min: 0, max: 255 },
+        recalculateHome: { type: 'bool', min: null, max: null },
+      },
+    });
+  }
   if (url === '/home_all') {
     return ok({ status: 'Homing All' });
   }

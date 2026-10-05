@@ -3,6 +3,7 @@ let currentSettings = null;
 
 function loadTuningData(){
   document.getElementById('modMatrix').innerHTML='<div class="loading-note">Loading…</div>';
+  loadFirmwareConfig(); // independent of the settings load below, so one failing doesn't block the other
   Promise.all([api.getSettings(), api.globalFields()]).then(([settingsData, fields])=>{
     if (!settingsData || !fields) return; // error toast already shown by the api layer
     currentSettings = settingsData;
@@ -368,10 +369,51 @@ function uploadBackup(input){
   reader.readAsText(input.files[0]);
 }
 
+// Firmware settings shared by every module (step delays, debounce, recalculate
+// home). The backend owns the keys and their ranges (GET /firmware_config);
+// the inputs are plain HTML with ids fw-<key>, so a new setting only needs a
+// backend entry and one more input.
+let firmwareLimits = null;
+
+function loadFirmwareConfig(){
+  api.firmwareConfig().then(cfg=>{
+    if (!cfg) return; // error toast already shown by the api layer
+    firmwareLimits = cfg.limits;
+    Object.entries(cfg.limits).forEach(([key, lim])=>{
+      const el = document.getElementById(`fw-${key}`);
+      if (!el) return;
+      if (lim.type === 'bool') {
+        el.checked = !!cfg.values[key];
+      } else {
+        el.min = lim.min;
+        el.max = lim.max;
+        el.value = cfg.values[key];
+      }
+    });
+  });
+}
+
+function applyFirmwareConfig(){
+  if (!firmwareLimits) { showToast('Firmware settings have not loaded yet', 'warn'); return; }
+  const payload = {};
+  for (const [key, lim] of Object.entries(firmwareLimits)) {
+    const el = document.getElementById(`fw-${key}`);
+    if (!el) continue;
+    if (lim.type === 'bool') { payload[key] = el.checked; continue; }
+    const n = readIntInput(`fw-${key}`, el.dataset.label || key, lim.min, lim.max);
+    if (n === null) return; // nothing is sent unless every value is valid
+    payload[key] = n;
+  }
+  api.saveFirmwareConfig(payload).then(d=>{
+    if (d) showToast('Settings sent to all modules');
+  });
+}
+
 registerActions({
   selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected,
   syncOneFromHardware, syncAllFromHardware, toggleAutoHome, provisionModule,
   setTotalSteps, showChar, showIndex, gotoStep,
+  applyFirmwareConfig,
   toggleModuleSetting,
   saveGlobal, downloadBackup, triggerBackupFileInput, uploadBackup,
 });

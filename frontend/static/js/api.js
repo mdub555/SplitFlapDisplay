@@ -98,6 +98,11 @@ const api = {
   }, 'Could not move module'),
   homeAll:            () => apiFetchJson('/home_all', {}, 'Could not home all modules'),
 
+  firmwareConfig:     () => apiFetchJson('/firmware_config', {}, 'Could not load firmware settings'),
+  saveFirmwareConfig: (values) => apiFetchJson('/firmware_config', {
+    method:'POST', headers: jsonHeaders, body: JSON.stringify(values)
+  }, 'Could not apply firmware settings'),
+
   backupSettings:     () => apiFetchJson('/backup_settings', {}, 'Could not generate backup'),
   restoreSettings:    (data) => apiFetchJson('/restore_settings', {
     method:'POST', headers: jsonHeaders, body: JSON.stringify(data)

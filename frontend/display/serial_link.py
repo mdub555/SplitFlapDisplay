@@ -39,7 +39,8 @@ def send_raw(cmd: str):
 def read_dump(mod_id: int, timeout: float = 5.0):
     """m<ID>d — request and parse an EEPROM dump (home offset + total steps).
     Returns a dict or None on timeout/parse failure."""
-    # Sends: m<ID>d:<homeOffset>:<totalSteps>:<clockwise>:<autoHome>:<releaseMotor>
+    # Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>:<homingStepDelay>
+    #              :<clockwise>:<autoHome>:<releaseMotor>:<recalculateHome>
     if not ser:
         return None
     with serial_lock:
@@ -67,7 +68,7 @@ def read_dump(mod_id: int, timeout: float = 5.0):
 
 def _parse_dump_fields(text):
     parts = [p.strip() for p in text.split(':')]
-    if len(parts) < 5:
+    if len(parts) < 9:
         return None
     try:
         # Same key names the rest of the app (settings.json, tuning.js,
@@ -75,16 +76,21 @@ def _parse_dump_fields(text):
         return {
             'homeOffset': int(parts[0]),
             'totalSteps': int(parts[1]),
-            'motorClockwise': parts[2] == '1',
-            'autoHome': parts[3] == '1',
-            'motorRelease': parts[4] == '1',
+            'debounceMs': int(parts[2]),
+            'stepDelay': int(parts[3]),
+            'homingStepDelay': int(parts[4]),
+            'motorClockwise': parts[5] == '1',
+            'autoHome': parts[6] == '1',
+            'motorRelease': parts[7] == '1',
+            'recalculateHome': parts[8] == '1',
         }
     except ValueError:
         return None
 
 
 def parse_buffer(buffer, mod_id=None):
-    """Find a complete `m<ID>d:<homeOffset>:<totalSteps>:<clockwise>:<autoHome>:<releaseMotor>`
+    """Find a complete `m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>:
+    <homingStepDelay>:<clockwise>:<autoHome>:<releaseMotor>:<recalculateHome>`
     line anywhere in `buffer` and parse it. Pass `mod_id` to only accept that
     module's reply (any ID matches when omitted). Only newline-terminated lines
     count, so a half-received reply is ignored until the rest arrives; the

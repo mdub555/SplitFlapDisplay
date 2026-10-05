@@ -180,6 +180,40 @@ async function main() {
   await sleep(30);
   check('tuning tab loaded module grid', document.querySelectorAll('#modMatrix .mod-cell').length === 64);
 
+  console.log('\n--- Firmware settings shared by every module ---');
+  const fw = (key) => document.getElementById(`fw-${key}`);
+  const toastCount = () => document.getElementById('toastContainer').children.length;
+  check('inputs are filled from /firmware_config',
+    fw('stepDelay').value === '1' && fw('homingStepDelay').value === '2' &&
+    fw('debounceMs').value === '100' && fw('recalculateHome').checked === true);
+  check('input ranges come from the backend limits',
+    fw('debounceMs').min === '0' && fw('debounceMs').max === '255' && fw('stepDelay').min === '1');
+
+  calls.length = 0;
+  fw('stepDelay').value = '5';
+  fw('debounceMs').value = '150';
+  fw('recalculateHome').checked = false;
+  click(document.querySelector('[data-onclick="applyFirmwareConfig"]'));
+  await sleep(20);
+  const fwPost = calls.find(c => c.url === '/firmware_config' && c.method === 'POST');
+  check('apply posts to /firmware_config', !!fwPost);
+  check('apply sends every setting with real numbers and a real boolean',
+    fwPost && JSON.stringify(JSON.parse(fwPost.body)) ===
+      JSON.stringify({ stepDelay: 5, homingStepDelay: 2, debounceMs: 150, recalculateHome: false }));
+
+  for (const [key, bad] of [['stepDelay', '0'], ['debounceMs', '256'], ['homingStepDelay', '']]) {
+    const good = fw(key).value;
+    calls.length = 0;
+    const toastsBefore = toastCount();
+    fw(key).value = bad;
+    click(document.querySelector('[data-onclick="applyFirmwareConfig"]'));
+    await sleep(20);
+    check(`an invalid ${key} (${JSON.stringify(bad)}) sends nothing`,
+      !calls.some(c => c.url === '/firmware_config' && c.method === 'POST'));
+    check(`an invalid ${key} shows a warning`, toastCount() === toastsBefore + 1);
+    fw(key).value = good;
+  }
+
   console.log('\n--- Optimistic-UI revert on failure (auto-home toggle) ---');
   const autoHomeToggle = document.getElementById('autoHomeToggle');
   autoHomeToggle.checked = true;

@@ -241,6 +241,37 @@
       </div>
     </div>
 
+    <!-- Firmware settings: identical on every module, sent to all of them by broadcast -->
+    <div class="config-section">
+      <h3>Module Timing &amp; Home Detection</h3>
+      <p style="color:#888;font-size:.85rem;margin-top:0">Shared by every module: saved here and sent to all modules at once (each keeps them in its EEPROM).</p>
+      <div class="settings-grid">
+        <div>
+          <label class="field-label" for="fw-stepDelay">Step delay (ms)</label>
+          <input type="number" class="line-input" style="margin:0" id="fw-stepDelay" data-label="Step delay" step="1">
+          <span class="toggle-hint">Pause between motor steps during normal moves. Lower is faster; too low and the motor skips steps.</span>
+        </div>
+        <div>
+          <label class="field-label" for="fw-homingStepDelay">Homing step delay (ms)</label>
+          <input type="number" class="line-input" style="margin:0" id="fw-homingStepDelay" data-label="Homing step delay" step="1">
+          <span class="toggle-hint">Pause between steps while homing and calibrating.</span>
+        </div>
+        <div>
+          <label class="field-label" for="fw-debounceMs">Home sensor debounce (ms)</label>
+          <input type="number" class="line-input" style="margin:0" id="fw-debounceMs" data-label="Debounce" step="1">
+          <span class="toggle-hint">Ignore repeat home-sensor triggers within this time. Raise it if home is detected more than once per rotation.</span>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <span class="toggle-name">Recalculate home each rotation</span>
+            <span class="toggle-hint">On: every pass over the home sensor re-syncs the module's position. Off: position is only set while homing.</span>
+          </div>
+          <label class="switch"><input type="checkbox" id="fw-recalculateHome"><span class="slider"></span></label>
+        </div>
+      </div>
+      <button class="btn btn-secondary" style="margin-top:14px" data-onclick="applyFirmwareConfig">Apply to All Modules</button>
+    </div>
+
     <!-- Global Settings -->
     <div class="config-section">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">

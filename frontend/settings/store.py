@@ -3,6 +3,7 @@ import logging
 import os
 
 from config import CONFIG_PATH, NUM_MODULES
+from display.module_protocol import GLOBAL_SETTINGS
 from settings.schema import GLOBAL_FIELDS
 
 
@@ -27,6 +28,7 @@ def build_defaults():
         'modules': {},
         'auto_home': True,
         'saved_playlists': {},
+        'firmware': {k: spec['default'] for k, spec in GLOBAL_SETTINGS.items()},
     }
     defaults.update(_global_defaults())
     defaults.update(_app_defaults())
