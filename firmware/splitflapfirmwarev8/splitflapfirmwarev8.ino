@@ -37,6 +37,10 @@ DebugSerial debugSerial(255, DEBUG_PIN);  // no RX needed; TX on pin 5 (PB4)
 SplitFlap splitFlap(&debugSerial);
 Command command;
 
+// A dump requested while the module is busy (moving, homing, calibrating) is
+// sent once it finishes, so a dump after a calibrate reports the result.
+bool dumpPending = false;
+
 // Start up the various components inside the module.
 void setup() {
   pinMode(STATUS_LED, OUTPUT);
@@ -49,33 +53,35 @@ void setup() {
 }
 
 void loop() {
+  splitFlap.update();
+
+  if (dumpPending && !splitFlap.busy()) {
+    dumpPending = false;
+    tranceiver.dump(splitFlap.lastDrift());
+  }
+
   if (tranceiver.poll(command)) {
+    // Log the message as received rather than a description per command,
+    // which keeps the debug strings (and flash use) small.
+    debugSerial.println(tranceiver.message());
     switch (command.type) {
       case DISPLAY_CHAR:
-        debugSerial.print("Display char: ");
-        debugSerial.println(command.data.dataChar);
         splitFlap.moveToChar(command.data.dataChar);
         break;
 
       case DISPLAY_INDEX:
-        debugSerial.print("Display index: ");
-        debugSerial.println(command.data.dataInt);
         splitFlap.moveToIndex(command.data.dataInt);
         break;
 
       case HOME:
-        debugSerial.println("Home");
         splitFlap.home();
         break;
 
       case CALIBRATE:
-        debugSerial.println("Calibrate");
         splitFlap.calibrate();
         break;
 
       case SET_OFFSET:
-        debugSerial.print("Set offset: ");
-        debugSerial.println(command.data.dataInt);
         // 0 is a special case that means set the current position as the offset
         if (command.data.dataInt == 0) {
           EepromStore::saveHomeOffset(splitFlap.currentStepPosition());
@@ -85,62 +91,42 @@ void loop() {
         break;
 
       case SET_TOTAL_STEPS:
-        debugSerial.print("Set total steps: ");
-        debugSerial.println(command.data.dataInt);
         EepromStore::saveTotalSteps(command.data.dataInt);
         break;
 
       case SET_DEBOUNCE_MS:
-        debugSerial.print("Set debounce ms: ");
-        debugSerial.println(command.data.dataInt);
         EepromStore::saveDebounceMs(command.data.dataInt);
         break;
 
       case NUDGE:
-        debugSerial.print("Nudge: ");
-        debugSerial.println(command.data.dataInt);
         splitFlap.nudge(command.data.dataInt);
         break;
 
       case MOVE_TO_STEP:
-        debugSerial.print("Move to step: ");
-        debugSerial.println(command.data.dataInt);
         splitFlap.goToRawStep(command.data.dataInt);
         break;
 
       case SET_HOMING_STEP_DELAY:
-        debugSerial.print("Set Homing Step Delay (ms): ");
-        debugSerial.println(command.data.dataInt);
         EepromStore::saveHomingStepDelay(command.data.dataInt);
         break;
 
       case SET_STEP_DELAY:
-        debugSerial.print("Set Step Delay (ms): ");
-        debugSerial.println(command.data.dataInt);
         EepromStore::saveStepDelay(command.data.dataInt);
         break;
 
       case SET_MODULE_ID:
-        debugSerial.print("Set ID: ");
-        debugSerial.println(command.data.dataInt);
         EepromStore::saveModuleId(command.data.dataInt);
         break;
 
       case SET_AUTO_HOME:
-        debugSerial.print("Set Auto Home: ");
-        debugSerial.println(command.data.dataInt);
         EepromStore::saveAutoHome(command.data.dataInt);
         break;
 
       case SET_MOTOR_CW:
-        debugSerial.print("Set Motor Clockwise: ");
-        debugSerial.println(command.data.dataInt);
         EepromStore::saveMotorDir(/* clockwise= */ command.data.dataInt);
         break;
 
       case SET_MOTOR_RELEASE:
-        debugSerial.print("Set Motor Release: ");
-        debugSerial.println(command.data.dataInt);
         EepromStore::saveReleaseMotor(command.data.dataInt);
         if (command.data.dataInt) {
           Motor::release();
@@ -150,18 +136,34 @@ void loop() {
         break;
 
       case SET_RECALCULATE_HOME:
-        debugSerial.print("Set Recalculate Home: ");
-        debugSerial.println(command.data.dataInt);
         EepromStore::saveRecalculateHome(command.data.dataInt);
         break;
 
       case DUMP_STATE:
-        debugSerial.println("Dump");
-        tranceiver.dump();
+        dumpPending = true;
+        break;
+
+      case STOP:
+        splitFlap.stop();
+        break;
+
+      case SET_RAMP_START_DELAY:
+        EepromStore::saveRampStartDelay(command.data.dataInt);
+        break;
+
+      case SET_RAMP_STEPS:
+        EepromStore::saveRampSteps(command.data.dataInt);
+        break;
+
+      case SET_SETTLE_MS:
+        EepromStore::saveSettleMs(command.data.dataInt);
+        break;
+
+      case SET_STAGGER_MS:
+        EepromStore::saveStaggerMs(command.data.dataInt);
         break;
 
       default:
-        debugSerial.println("Unknown command");
         break;
     }
   }

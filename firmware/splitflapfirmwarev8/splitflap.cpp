@@ -27,26 +27,143 @@ namespace {
 SplitFlap::SplitFlap(DebugSerial* debugSerial) : debug(debugSerial) {}
 
 void SplitFlap::begin() {
-  // Staggered startup: delay proportional to module ID so all motors in a
-  // large display don't surge current at the same instant.
-  if (EepromStore::getModuleId() != 255) {
-    delay(EepromStore::getModuleId() * 150);
+  autoHomePending = EepromStore::autoHomeEnabled();
+}
+
+void SplitFlap::update() {
+  if (autoHomePending) {
+    // Staggered startup: delay proportional to module ID so all motors in a
+    // large display don't surge current at the same instant. A move that
+    // arrives first homes straight away, which makes this a no-op.
+    uint8_t id = EepromStore::getModuleId();
+    if (id != 255 && millis() < (uint32_t)id * EepromStore::getStaggerMs()) return;
+    autoHomePending = false;
+    if (phase == PHASE_IDLE && currentFlapIdx == -1) {
+      home();
+    }
   }
 
-  if (EepromStore::autoHomeEnabled()) {
-    home();
+  if (phase == PHASE_IDLE) return;
+  uint32_t now = millis();
+  if (phase == PHASE_SETTLE) {
+    if (now - lastStepMs >= EepromStore::getSettleMs()) releaseNow();
+    return;
+  }
+  if ((phase == PHASE_MOVE || phase == PHASE_OFFSET) && stepsRemaining == 0) {
+    finishTravel();
+    return;
+  }
+
+  uint8_t stepDelay;
+  if (phase == PHASE_MOVE) {
+    stepDelay = moveStepDelay();
+  } else if (phase == PHASE_OFFSET) {
+    stepDelay = EepromStore::getStepDelay();
+  } else {
+    stepDelay = EepromStore::getHomingStepDelay();
+  }
+  if (now - lastStepMs < stepDelay) return;
+  lastStepMs = now;
+
+  bool edge = stepAdvance();
+  stepsTaken++;
+
+  switch (phase) {
+    case PHASE_MOVE:
+      if (edge && EepromStore::recalculateHome()) {
+        // currentStepPos was just snapped to ground truth, recompute the
+        // remaining steps again to compensate for any drift.
+        stepsRemaining = stepsToTarget(targetStepPos);
+      } else {
+        stepsRemaining--;
+      }
+      break;
+
+    case PHASE_OFFSET:
+      stepsRemaining--;
+      break;
+
+    case PHASE_SEEK_HOME: {
+      if (edge) {
+        if (calibrating) {
+          // The step that lands on the next edge counts toward the revolution.
+          phase = PHASE_MEASURE;
+          stepsTaken = 0;
+        } else {
+          startOffset();
+        }
+        break;
+      }
+      // A revolution plus a margin, saturating at 65535 rather than wrapping
+      // when total steps is near the top of its range.
+      uint16_t total = EepromStore::getTotalSteps();
+      uint16_t limit = total > 0xFFFF - HOME_SEARCH_MARGIN ? 0xFFFF : total + HOME_SEARCH_MARGIN;
+      if (stepsTaken >= limit) {
+        failHoming(SPLITFLAP_HOME_NOT_FOUND);
+      }
+      break;
+    }
+
+    case PHASE_MEASURE:
+      if (edge) {
+        debug->print("[Splitflap] steps measured: ");
+        debug->println(stepsTaken);
+        if (stepsTaken < CALIBRATION_MIN_STEPS || stepsTaken > CALIBRATION_MAX_STEPS) {
+          failHoming(SPLITFLAP_CALIBRATION_OUT_OF_RANGE);
+        } else {
+          EepromStore::saveTotalSteps(stepsTaken);
+          startOffset();
+        }
+      } else if (stepsTaken > CALIBRATION_MAX_STEPS) {
+        failHoming(SPLITFLAP_CALIBRATION_OUT_OF_RANGE);
+      }
+      break;
+
+    case PHASE_IDLE:
+    case PHASE_SETTLE:
+      break;
   }
 }
 
-bool SplitFlap::stepAdvance(uint16_t steps) {
-  bool edgeHit = false;
-  for (uint16_t k = 0; k < steps; k++) {
-    if (stepAdvance()) {
-      edgeHit = true;
-    }
-    delay(EepromStore::getStepDelay());
+uint8_t SplitFlap::moveStepDelay() const {
+  uint8_t cruise = EepromStore::getStepDelay();
+  uint8_t start = EepromStore::getRampStartDelay();
+  uint8_t rampSteps = EepromStore::getRampSteps();
+  // Distance from the nearer end of the move.
+  uint16_t fromEnd = stepsTaken < stepsRemaining ? stepsTaken : stepsRemaining;
+  if (fromEnd >= rampSteps || start <= cruise) return cruise;
+  // Linear from `start` at the end of the move to `cruise` rampSteps in.
+  return cruise + (uint16_t)(start - cruise) * (rampSteps - fromEnd) / rampSteps;
+}
+
+bool SplitFlap::busy() const { return phase != PHASE_IDLE; }
+
+bool SplitFlap::isHoming() const {
+  return phase == PHASE_SEEK_HOME || phase == PHASE_MEASURE || phase == PHASE_OFFSET;
+}
+
+void SplitFlap::stop() {
+  if (phase == PHASE_IDLE) return;
+  // A move already marks the flap as -2 (and a settle is after the move
+  // finished); homing or calibrating didn't establish the position.
+  if (isHoming()) currentFlapIdx = -1;
+  pendingFlapIdx = -1;
+  releaseNow();
+}
+
+void SplitFlap::halt() {
+  if (EepromStore::releaseMotorEnabled() && EepromStore::getSettleMs() > 0) {
+    phase = PHASE_SETTLE;  // timed from the last step
+  } else {
+    releaseNow();
   }
-  return edgeHit;
+}
+
+void SplitFlap::releaseNow() {
+  phase = PHASE_IDLE;
+  if (EepromStore::releaseMotorEnabled()) {
+    Motor::release();
+  }
 }
 
 bool SplitFlap::stepAdvance() {
@@ -57,10 +174,21 @@ bool SplitFlap::stepAdvance() {
   if (currentStepPos >= EepromStore::getTotalSteps()) currentStepPos = 0;
   if (HomeSensor::detectRisingEdge()) {
     debug->println("[Splitflap] hit home sensor");
+    uint16_t total = EepromStore::getTotalSteps();
+    // Where the home edge should be, given the home offset. An offset of 0
+    // puts the edge exactly on flap 0.
+    uint16_t expected = total - EepromStore::getHomeOffset();
+    if (expected >= total) expected = 0;
+    if (currentFlapIdx != -1) {
+      // How far the tracked position is past where the edge should be, in
+      // the range -total/2..total/2. Skipped steps make this positive. Only
+      // meaningful when the position was already known (not while homing).
+      uint16_t ahead = currentStepPos >= expected ? currentStepPos - expected
+                                                  : currentStepPos + total - expected;
+      drift = ahead > total / 2 ? (int16_t)(ahead - total) : (int16_t)ahead;
+    }
     if (EepromStore::recalculateHome()) {
-      currentStepPos = EepromStore::getTotalSteps() - EepromStore::getHomeOffset();
-      // An offset of 0 puts the edge exactly on flap 0.
-      if (currentStepPos >= EepromStore::getTotalSteps()) currentStepPos = 0;
+      currentStepPos = expected;
     }
     return true;
   }
@@ -71,88 +199,74 @@ int8_t SplitFlap::currentFlapIndex() const { return currentFlapIdx; }
 
 SplitFlapError SplitFlap::lastError() const { return error; }
 
+int16_t SplitFlap::lastDrift() const { return drift; }
+
 uint16_t SplitFlap::currentStepPosition() const { return currentStepPos; }
 
 bool SplitFlap::isHome() {
   return HomeSensor::homeActive();
 }
 
-bool SplitFlap::advanceToHomeEdge() {
-  uint16_t limit;
-  if (-1 - HOME_SEARCH_MARGIN < EepromStore::getTotalSteps()) {
-    limit = EepromStore::getTotalSteps() + HOME_SEARCH_MARGIN;
+void SplitFlap::startMove(uint16_t stepPos, int8_t flapIdx) {
+  // Retargeting a move in progress keeps its speed rather than ramping again.
+  if (phase != PHASE_MOVE) stepsTaken = 0;
+  phase = PHASE_MOVE;
+  targetStepPos = stepPos;
+  targetFlapIdx = flapIdx;
+  stepsRemaining = stepsToTarget(stepPos);
+  currentFlapIdx = -2;  // between flaps until the move finishes
+}
+
+void SplitFlap::startHoming(bool calibrate) {
+  phase = PHASE_SEEK_HOME;
+  calibrating = calibrate;
+  stepsTaken = 0;
+  currentFlapIdx = -1;
+}
+
+void SplitFlap::startOffset() {
+  // Advance the calibrated offset to reach flap 0
+  phase = PHASE_OFFSET;
+  stepsRemaining = EepromStore::getHomeOffset();
+  stepsTaken = 0;
+}
+
+void SplitFlap::finishTravel() {
+  if (phase == PHASE_OFFSET) {
+    currentStepPos = 0;
+    currentFlapIdx = 0;
+    error = SPLITFLAP_OK;
+    int8_t next = pendingFlapIdx;
+    pendingFlapIdx = -1;
+    phase = PHASE_IDLE;
+    if (next > 0) {
+      // A move arrived while homing; carry on to it without releasing.
+      moveToIndex(next);
+      return;
+    }
   } else {
-    limit = -1;
+    currentFlapIdx = targetFlapIdx;
   }
-  for (uint16_t taken = 0; taken < limit; taken++) {
-    bool edge = stepAdvance();
-    delay(EepromStore::getHomingStepDelay());
-    if (edge) return true;
-  }
-  return false;
+  halt();
 }
 
 void SplitFlap::failHoming(SplitFlapError reason) {
   error = reason;
   currentFlapIdx = -1;
-  if (EepromStore::releaseMotorEnabled()) {
-    Motor::release();
-  }
+  pendingFlapIdx = -1;
+  halt();
 }
 
-void SplitFlap::finishHoming() {
-  // Advance the calibrated offset to reach flap 0
-  stepAdvance(EepromStore::getHomeOffset());
-  currentStepPos = 0;
-  currentFlapIdx = 0;
-  error = SPLITFLAP_OK;
-  if (EepromStore::releaseMotorEnabled()) {
-    Motor::release();
-  }
-}
-
-bool SplitFlap::home() {
+void SplitFlap::home() {
   debug->println("[Splitflap] homing");
-
-  // Advance until the next leading edge
-  if (!advanceToHomeEdge()) {
-    failHoming(SPLITFLAP_HOME_NOT_FOUND);
-    return false;
-  }
-  finishHoming();
-  return true;
+  pendingFlapIdx = -1;
+  startHoming(false);
 }
 
-uint16_t SplitFlap::calibrate() {
+void SplitFlap::calibrate() {
   debug->println("[Splitflap] calibrating");
-
-  // Advance until the first leading edge
-  if (!advanceToHomeEdge()) {
-    failHoming(SPLITFLAP_HOME_NOT_FOUND);
-    return 0;
-  }
-
-  // Advance for one full rotation until the next leading edge. The step that
-  // lands on the edge counts toward the revolution.
-  uint16_t measuredSteps = 0;
-  bool edge = false;
-  while (!edge && measuredSteps <= CALIBRATION_MAX_STEPS) {
-    edge = stepAdvance();
-    measuredSteps++;
-    delay(EepromStore::getHomingStepDelay());
-  }
-
-  debug->print("[Splitflap] steps measured: ");
-  debug->println(measuredSteps);
-  if (!edge || measuredSteps < CALIBRATION_MIN_STEPS || measuredSteps > CALIBRATION_MAX_STEPS) {
-    failHoming(SPLITFLAP_CALIBRATION_OUT_OF_RANGE);
-    return 0;
-  }
-  EepromStore::saveTotalSteps(measuredSteps);
-
-  // Go to home flap
-  finishHoming();
-  return measuredSteps;
+  pendingFlapIdx = -1;
+  startHoming(true);
 }
 
 void SplitFlap::moveToIndex(uint8_t targetIndex) {
@@ -160,34 +274,19 @@ void SplitFlap::moveToIndex(uint8_t targetIndex) {
   debug->println(targetIndex);
   if (targetIndex >= NUM_FLAPS) return;
 
-  // Already showing the right flap — nothing to do
-  if (currentFlapIdx == targetIndex) return;
-
-  // If position is unknown, home first to get a reliable starting point. If
-  // homing fails, don't move: the position would be a guess.
-  if (currentFlapIdx == -1 && !home()) {
+  // Homing in progress, or position unknown: move once homing finishes. If
+  // homing fails, the move is dropped: the position would be a guess.
+  if (isHoming() || currentFlapIdx == -1) {
+    pendingFlapIdx = targetIndex;
+    if (!isHoming()) startHoming(false);
     return;
   }
 
-  uint16_t targetStepPos =
-      (uint16_t)(((uint32_t)targetIndex * (uint32_t)EepromStore::getTotalSteps()) / NUM_FLAPS);
-  uint16_t stepsRemaining = stepsToTarget(targetStepPos);
+  // Already showing the right flap — nothing to do
+  if (currentFlapIdx == targetIndex) return;
 
-  while (stepsRemaining > 0) {
-    bool edge = stepAdvance();
-    delay(EepromStore::getStepDelay());
-    stepsRemaining--;
-    if (edge && EepromStore::recalculateHome()) {
-      // currentStepPos was just snapped to ground truth, recompute the
-      // remaining steps again to compensate for any drift.
-      stepsRemaining = stepsToTarget(targetStepPos);
-    }
-  }
-
-  if (EepromStore::releaseMotorEnabled()) {
-    Motor::release();
-  }
-  currentFlapIdx = targetIndex;
+  startMove((uint16_t)(((uint32_t)targetIndex * (uint32_t)EepromStore::getTotalSteps()) / NUM_FLAPS),
+            targetIndex);
 }
 
 void SplitFlap::moveToChar(char targetChar) {
@@ -205,23 +304,16 @@ void SplitFlap::moveToChar(char targetChar) {
 }
 
 void SplitFlap::nudge(uint16_t steps) {
-  stepAdvance(steps);
-  if (EepromStore::releaseMotorEnabled()) {
-    Motor::release();
-  }
-  currentFlapIdx = -2; // Position known in steps but not as a named character
+  // The target wraps past the end of the revolution without overflowing.
+  uint16_t untilWrap = EepromStore::getTotalSteps() - currentStepPos;
+  goToRawStep(steps < untilWrap ? currentStepPos + steps : steps - untilWrap);
 }
 
 void SplitFlap::goToRawStep(uint16_t targetStep) {
   debug->print("[Splitflap] going to step: ");
   debug->println(targetStep);
-  uint16_t stepsToMove = stepsToTarget(targetStep);
-
-  stepAdvance(stepsToMove);
-  if (EepromStore::releaseMotorEnabled()) {
-    Motor::release();
-  }
-  currentFlapIdx = -2; // Position known in steps but not as a named character
+  if (isHoming()) return;
+  startMove(targetStep, -2);  // Position known in steps but not as a named character
 }
 
 uint16_t SplitFlap::stepsToTarget(uint16_t targetStepPos) const {

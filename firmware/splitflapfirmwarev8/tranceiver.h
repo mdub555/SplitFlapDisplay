@@ -43,15 +43,27 @@
 //            counter-clockwise
 //         r, Enable or disable releasing the motor coils when idle. data must
 //            be 1 to release, 0 to keep them energized
-//         d, Dump the module state back to the Raspberry Pi in the format
-//            m<ID>d:<homeOffset>:<totalSteps>:<motorDir>:<autoHome>:<releaseMotor>.
-//            No data expected
+//         d, Dump the module state back to the Raspberry Pi (format at
+//            Tranceiver::dump() below). If the module is moving, homing or calibrating, the reply is
+//            sent once that finishes. No data expected
 //         j, Enable or disable recalculating home. 1 to continuously recalculate,
 //            0 to only calculate on home.
 //         k, Set the delay between each motor step during normal operation, in
 //            milliseconds.
 //         l, Set the delay between each motor step during homing and calibration
 //            operations, in milliseconds.
+//         x, Stop whatever the motor is doing. A stopped move keeps its step
+//            position; a stopped home or calibration leaves the position
+//            unknown, so the next move homes first. No data expected
+//         u, Set the step delay at the start and end of a move, in
+//            milliseconds (1-255). Moves ramp between this and the step delay.
+//         n, Set how many steps the ramp takes at each end of a move (0-255,
+//            0 = no ramp).
+//         e, Set how long to hold the coils after a move before releasing
+//            them, in milliseconds (0-255). Only used when release is on.
+//         y, Set the startup stagger: the auto-home waits this many
+//            milliseconds per module ID after power-on (0-255). Takes effect
+//            on the next boot.
 // =============================================================================
 enum CommandType {
   UNKNOWN_COMMAND,
@@ -72,6 +84,11 @@ enum CommandType {
   SET_RECALCULATE_HOME,   // 'j'
   SET_STEP_DELAY,         // 'k'
   SET_HOMING_STEP_DELAY,  // 'l'
+  STOP,                   // 'x'
+  SET_RAMP_START_DELAY,   // 'u'
+  SET_RAMP_STEPS,         // 'n'
+  SET_SETTLE_MS,          // 'e'
+  SET_STAGGER_MS,         // 'y'
 };
 
 struct Command {
@@ -106,8 +123,16 @@ class Tranceiver {
 
   // Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>
   //              :<homingStepDelay>:<clockwise>:<autoHome>:<releaseMotor>
-  //              :<recalculateHome>
-  void dump();
+  //              :<recalculateHome>:<rampStartDelay>:<rampSteps>:<settleMs>
+  //              :<staggerMs>:<drift>
+  // where drift is SplitFlap::lastDrift(), passed in by the caller. Drift
+  // stays last; new fields go before it. Up to ~50 bytes with every field
+  // at its widest, typically ~45.
+  void dump(int16_t drift);
+
+  // The last message poll() parsed, as received (without the '\n'). Only
+  // valid until the next call to poll().
+  const char* message() const;
 };
 
 #endif

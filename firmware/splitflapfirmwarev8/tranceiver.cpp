@@ -32,6 +32,11 @@ namespace {
       case 'k': return SET_STEP_DELAY;
       case 'l': return SET_HOMING_STEP_DELAY;
       case 'b': return SET_DEBOUNCE_MS;
+      case 'x': return STOP;
+      case 'u': return SET_RAMP_START_DELAY;
+      case 'n': return SET_RAMP_STEPS;
+      case 'e': return SET_SETTLE_MS;
+      case 'y': return SET_STAGGER_MS;
       default:  return UNKNOWN_COMMAND;
     }
   }
@@ -66,8 +71,13 @@ namespace {
     BOOLEAN,      // SET_RECALCULATE_HOME
     DELAY,        // SET_STEP_DELAY
     DELAY,        // SET_HOMING_STEP_DELAY
+    ANY,          // STOP
+    DELAY,        // SET_RAMP_START_DELAY
+    BYTE,         // SET_RAMP_STEPS
+    BYTE,         // SET_SETTLE_MS
+    BYTE,         // SET_STAGGER_MS
   };
-  static_assert(sizeof(LIMITS) == SET_HOMING_STEP_DELAY + 1,
+  static_assert(sizeof(LIMITS) == SET_STAGGER_MS + 1,
                 "LIMITS needs one entry per CommandType");
 
   // Finishes a numeric command, rejecting it if it had no digits (a truncated
@@ -154,11 +164,16 @@ namespace {
             case SET_RECALCULATE_HOME:
             case SET_HOMING_STEP_DELAY:
             case SET_STEP_DELAY:
+            case SET_RAMP_START_DELAY:
+            case SET_RAMP_STEPS:
+            case SET_SETTLE_MS:
+            case SET_STAGGER_MS:
               parseState = READING_DATA_INT;
               break;
             case HOME:
             case CALIBRATE:
             case DUMP_STATE:
+            case STOP:
               return true;
             case UNKNOWN_COMMAND:
               return false;
@@ -205,30 +220,38 @@ void Tranceiver::begin(long baud) {
   Serial.begin(baud, SERIAL_8N1 | SERIAL_RS485);
 }
 
-void Tranceiver::dump() {
+namespace {
+  // Prints ":<value>". One call per field keeps dump() small.
+  void printField(uint16_t value) {
+    Serial.print(':');
+    Serial.print(value);
+  }
+}
+
+void Tranceiver::dump(int16_t drift) {
   Serial.print("m");
   uint8_t id = EepromStore::getModuleId();
   if (id < 10) Serial.print("0");
   Serial.print(id);
-  Serial.print("d:");
-  Serial.print(EepromStore::getHomeOffset());
-  Serial.print(":");
-  Serial.print(EepromStore::getTotalSteps());
-  Serial.print(":");
-  Serial.print(EepromStore::getDebounceMs());
-  Serial.print(":");
-  Serial.print(EepromStore::getStepDelay());
-  Serial.print(":");
-  Serial.print(EepromStore::getHomingStepDelay());
-  Serial.print(":");
-  Serial.print(EepromStore::isMotorClockwise() ? "1" : "0");
-  Serial.print(":");
-  Serial.print(EepromStore::autoHomeEnabled() ? "1" : "0");
-  Serial.print(":");
-  Serial.print(EepromStore::releaseMotorEnabled() ? "1" : "0");
-  Serial.print(":");
-  Serial.println(EepromStore::recalculateHome() ? "1" : "0");
+  Serial.print("d");
+  printField(EepromStore::getHomeOffset());
+  printField(EepromStore::getTotalSteps());
+  printField(EepromStore::getDebounceMs());
+  printField(EepromStore::getStepDelay());
+  printField(EepromStore::getHomingStepDelay());
+  printField(EepromStore::isMotorClockwise());
+  printField(EepromStore::autoHomeEnabled());
+  printField(EepromStore::releaseMotorEnabled());
+  printField(EepromStore::recalculateHome());
+  printField(EepromStore::getRampStartDelay());
+  printField(EepromStore::getRampSteps());
+  printField(EepromStore::getSettleMs());
+  printField(EepromStore::getStaggerMs());
+  Serial.print(':');
+  Serial.println(drift);
 }
+
+const char* Tranceiver::message() const { return buffer; }
 
 bool Tranceiver::poll(Command& command) {
   uint32_t safety = millis();

@@ -8,6 +8,12 @@ namespace {
   const uint16_t NUM_FLAPS = 64;
   const uint16_t STEPS_PER_FLAP = TOTAL_STEPS/NUM_FLAPS;
   const uint16_t DEBOUNCE_MS = 100;
+  // Ramp, settle and stagger defaults reproduce the behavior from before
+  // they were configurable: no ramp, no settle, 150 ms per module ID.
+  const uint8_t RAMP_START_DELAY = 3;
+  const uint8_t RAMP_STEPS = 0;
+  const uint8_t SETTLE_MS = 0;
+  const uint8_t STAGGER_MS = 150;
   // With the wire-based home sensor, home is detected immediatly when the
   // blank flap is visible. Home is on the white flap, which is 7 flaps
   // from the black flap. Set the home 7.5 flaps past home, making each
@@ -29,6 +35,10 @@ namespace {
     bool     motorClockwise = true; // Whether the motor defaults to rotating clockwise
     bool     releaseMotor = true;   // Whether the motor defaults to rotating clockwise
     bool     recalculateHome = true; // Whether home is recalculated each rotation
+    uint8_t  rampStartDelay = 3; // Step delay (ms) at the start and end of a move
+    uint8_t  rampSteps = 0;      // Steps to ramp between rampStartDelay and stepDelay
+    uint8_t  settleMs = 0;       // Time to hold the coils after a move before releasing
+    uint8_t  staggerMs = 150;    // Startup delay per module ID
   };
 
   // ---- EEPROM Address Map ----
@@ -42,10 +52,15 @@ namespace {
   const uint16_t ADDR_HOMING_STEP_DELAY = 8;  // 1 byte — ms delay between each motor step
                                               // during homing
   const uint16_t ADDR_DEBOUNCE_MS = 9;  // 2 bytes — ms debounce timing for the home sensor
+  const uint16_t ADDR_RAMP_START_DELAY = 11;  // 1 byte — ms step delay at the ends of a move
+  const uint16_t ADDR_RAMP_STEPS  = 12;  // 1 byte — steps to ramp over at each end of a move
+  const uint16_t ADDR_SETTLE_MS   = 13;  // 1 byte — ms to hold the coils before releasing
+  const uint16_t ADDR_STAGGER_MS  = 14;  // 1 byte — ms startup delay per module ID
+  const uint16_t ADDR_FLIP_COUNT  = 15;  // 4 bytes — reserved for the flip counter
 
   // Magic value written to ADDR_INIT to indicate EEPROM has been initialized.
   // Changing this value forces all modules to reset to defaults on next boot.
-  const uint8_t INIT_VALUE = 0x05;
+  const uint8_t INIT_VALUE = 0x06;
 
   Config config;
 
@@ -56,6 +71,10 @@ namespace {
     config.moduleId = EEPROM.read(ADDR_MODULE_ID);
     config.stepDelay = EEPROM.read(ADDR_STEP_DELAY);
     config.homingStepDelay = EEPROM.read(ADDR_HOMING_STEP_DELAY);
+    config.rampStartDelay = EEPROM.read(ADDR_RAMP_START_DELAY);
+    config.rampSteps = EEPROM.read(ADDR_RAMP_STEPS);
+    config.settleMs = EEPROM.read(ADDR_SETTLE_MS);
+    config.staggerMs = EEPROM.read(ADDR_STAGGER_MS);
     uint8_t booleans = EEPROM.read(ADDR_BOOLEANS);
     config.autoHome = booleans & MASK_AUTO_HOME;
     config.motorClockwise = booleans & MASK_MOTOR_CW;
@@ -93,6 +112,11 @@ void writeDefaults(uint8_t hardcodedId) {
   saveMotorDir(/* clockwise= */ true);
   saveReleaseMotor(true);
   saveRecalculateHome(true);
+  saveRampStartDelay(RAMP_START_DELAY);
+  saveRampSteps(RAMP_STEPS);
+  saveSettleMs(SETTLE_MS);
+  saveStaggerMs(STAGGER_MS);
+  EEPROM.put(ADDR_FLIP_COUNT, (uint32_t)0);
 }
 
 bool isInitialized() {
@@ -180,5 +204,33 @@ void saveRecalculateHome(bool recalculate) {
 }
 
 bool recalculateHome() { return config.recalculateHome; }
+
+void saveRampStartDelay(uint8_t delay) {
+  config.rampStartDelay = delay;
+  EEPROM.write(ADDR_RAMP_START_DELAY, delay);
+}
+
+uint8_t getRampStartDelay() { return config.rampStartDelay; }
+
+void saveRampSteps(uint8_t steps) {
+  config.rampSteps = steps;
+  EEPROM.write(ADDR_RAMP_STEPS, steps);
+}
+
+uint8_t getRampSteps() { return config.rampSteps; }
+
+void saveSettleMs(uint8_t ms) {
+  config.settleMs = ms;
+  EEPROM.write(ADDR_SETTLE_MS, ms);
+}
+
+uint8_t getSettleMs() { return config.settleMs; }
+
+void saveStaggerMs(uint8_t ms) {
+  config.staggerMs = ms;
+  EEPROM.write(ADDR_STAGGER_MS, ms);
+}
+
+uint8_t getStaggerMs() { return config.staggerMs; }
 }
 

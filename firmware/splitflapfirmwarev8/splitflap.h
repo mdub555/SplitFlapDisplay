@@ -11,6 +11,11 @@
 // home sensor, then advance the calibrated offset" live. It drives Motor for
 // raw movement, but owns the actual decisions (homing sequence, calibration
 // sequence, index resolution).
+//
+// Motion is non-blocking: moveToIndex(), home(), calibrate() and friends only
+// start an operation, and update() (called every loop()) takes at most one
+// step each time it's due. That keeps the bus serviced while the reel turns,
+// and lets a new target or a stop() take effect mid-move.
 // =============================================================================
 
 // Why the last homing or calibration failed. Cleared by the next successful
@@ -24,46 +29,97 @@ enum SplitFlapError : uint8_t {
 
 class SplitFlap {
  private:
+  // What the motor is currently doing.
+  enum Phase : uint8_t {
+    PHASE_IDLE,       // not moving
+    PHASE_MOVE,       // stepping toward targetStepPos at the normal speed
+    PHASE_SEEK_HOME,  // stepping at the homing speed until the home edge
+    PHASE_MEASURE,    // calibrating: counting steps to the next home edge
+    PHASE_OFFSET,     // advancing the home offset from the edge to flap 0
+    PHASE_SETTLE,     // holding the coils after a move before releasing them
+  };
+
   uint16_t currentStepPos = 0;  // Current motor position in half-steps (0 = flap 0)
   int8_t currentFlapIdx = -1;   // Which flap is currently showing (-1 = unknown)
   SplitFlapError error = SPLITFLAP_OK;
+  int16_t drift = 0;            // see lastDrift()
+
+  Phase phase = PHASE_IDLE;
+  bool calibrating = false;     // PHASE_SEEK_HOME leads to PHASE_MEASURE
+  bool autoHomePending = false; // home once the startup stagger has passed
+  int8_t targetFlapIdx = -2;    // flap index a PHASE_MOVE ends on (-2 = raw step)
+  int8_t pendingFlapIdx = -1;   // flap to move to once homing finishes (-1 = none)
+  uint16_t targetStepPos = 0;   // where a PHASE_MOVE stops
+  uint16_t stepsRemaining = 0;  // steps left in PHASE_MOVE / PHASE_OFFSET
+  uint16_t stepsTaken = 0;      // steps since the phase began
+  uint32_t lastStepMs = 0;      // millis() of the last step
 
   // Used for debug printing
   DebugSerial* debug = nullptr;  // not owned
 
-  // Advances `steps` half-steps, correcting currentStepPos using the known
-  // home offset whenever the home sensor's rising edge is crossed. This is
-  // the one place motor movement and split-flap position tracking meet.
+  // Takes one half-step, correcting currentStepPos using the known home
+  // offset whenever the home sensor's rising edge is crossed. This is the one
+  // place motor movement and split-flap position tracking meet. Returns
+  // whether the step crossed the home edge.
   bool stepAdvance();
-
-  // Move the motor `steps` steps at the normal step delay.
-  bool stepAdvance(uint16_t steps);
 
   uint16_t stepsToTarget(uint16_t targetStepPos) const;
 
-  // Steps at the homing speed until the home sensor's rising edge, giving up
-  // after a full revolution plus a margin. Returns whether the edge was found.
-  bool advanceToHomeEdge();
+  // Starts stepping toward `stepPos`; the move ends on flap `flapIdx`
+  // (-2 for a raw step position).
+  void startMove(uint16_t stepPos, int8_t flapIdx);
+
+  // Starts a home (or, with `calibrate`, a calibration) from wherever the
+  // reel is. The position is unknown until it finishes.
+  void startHoming(bool calibrate);
+
+  // Starts advancing the home offset from the home edge to flap 0.
+  void startOffset();
+
+  // Called when a PHASE_MOVE or PHASE_OFFSET has no steps left.
+  void finishTravel();
 
   // Records a homing/calibration failure and marks the position unknown, so
   // the next move tries to home again instead of trusting a wrong position.
   void failHoming(SplitFlapError reason);
 
-  // Advances the home offset from the home edge to flap 0 and marks the
-  // module homed. Shared by home() and calibrate().
-  void finishHoming();
+  // Ends an operation: holds the coils for the settle time, then releases
+  // them, if release is enabled.
+  void halt();
+
+  // Stops immediately and releases the coils if release is enabled.
+  void releaseNow();
+
+  // The delay before the next step of a PHASE_MOVE, ramping between the ramp
+  // start delay and the step delay at each end of the move.
+  uint8_t moveStepDelay() const;
+
+  bool isHoming() const;
 
  public:
   SplitFlap(DebugSerial* debugSerial);
 
-  // Applies the staggered startup delay and homes the module.
+  // Schedules the auto-home (if enabled) after the staggered startup delay,
+  // so all motors in a large display don't surge current at the same instant.
   void begin();
+
+  // Call every loop(). Takes the next step of the current operation when its
+  // step delay has passed.
+  void update();
+
+  // True while an operation is in progress (the reel may be moving).
+  bool busy() const;
+
+  // Stops the current operation where it is. A stopped move leaves the step
+  // position known (flap index -2); a stopped home or calibration leaves the
+  // position unknown (-1).
+  void stop();
 
   // Returns if the module is actively home (according to the home sensor).
   bool isHome();
 
   // Returns the current flap index, or -1 if it's unknown, or -2 if the step
-  // is known but not the flap.
+  // is known but not the flap (including while a move is in progress).
   int8_t currentFlapIndex() const;
 
   // Returns the current step position.
@@ -71,23 +127,34 @@ class SplitFlap {
 
   // Nudges the motor forward `steps` steps. The step position stays known,
   // but the flap index becomes -2 since the reel is no longer on a flap.
+  // Ignored while homing or calibrating.
   void nudge(uint16_t steps);
 
-  // Drives the reel to the physical zero position (flap 0 = blank space).
-  // Returns false, and leaves the position unknown, if the home sensor isn't
-  // found within a revolution.
-  bool home();
+  // Starts driving the reel to the physical zero position (flap 0 = blank
+  // space). If the home sensor isn't found within a revolution, the position
+  // is left unknown and lastError() says why.
+  void home();
 
-  // Spins one full revolution to measure step count, saves it, and re-homes.
-  // Returns the measured step count, or 0 if the home sensor wasn't found or
-  // the measurement was outside the plausible range (nothing is saved then).
-  // Does not report back to the Raspberry Pi; read the result with a dump.
-  uint16_t calibrate();
+  // Starts a calibration: finds home, measures one full revolution, saves it
+  // and finishes at flap 0. A measurement outside the plausible range is not
+  // saved. Does not report back to the Raspberry Pi; read the result with a
+  // dump, which is answered once the calibration finishes.
+  void calibrate();
 
   // The reason the last homing or calibration failed, or SPLITFLAP_OK.
   SplitFlapError lastError() const;
 
+  // How many steps the tracked position was off by the last time the home
+  // edge was crossed with the position known. Positive means the tracked
+  // position was ahead of the reel, i.e. the motor missed steps (usually a
+  // step delay that's too short). Measured whether or not recalculateHome
+  // is on; with it on, the position is corrected at each edge, so this is
+  // the drift over one revolution. 0 until the first such edge.
+  int16_t lastDrift() const;
+
   // Moves to a flap by index (0–63), using an even division of the revolution.
+  // Retargets a move in progress. If the position is unknown, homes first;
+  // while homing, the index is remembered and moved to once homing finishes.
   void moveToIndex(uint8_t targetIndex);
 
   // Looks up a character's index in FLAP_CHARS and delegates to moveToIndex().
@@ -95,8 +162,8 @@ class SplitFlap {
   void moveToChar(char targetChar);
 
   // Moves to an absolute raw step position, bypassing character/index logic.
+  // Ignored while homing or calibrating.
   void goToRawStep(uint16_t targetStep);
 };
 
 #endif
-
