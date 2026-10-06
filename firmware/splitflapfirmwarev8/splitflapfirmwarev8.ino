@@ -41,10 +41,10 @@ Command command;
 // sent once it finishes, so a dump after a calibrate reports the result.
 // A broadcast dump is answered in this module's slot: ID x DUMP_SLOT_MS after
 // the request, or after the module goes idle if it was busy, so every
-// module's reply has the bus to itself. A typical dump is ~60 bytes (about
-// 62 ms at 9600 baud) and one with large values ~73 bytes (76 ms); a slot
+// module's reply has the bus to itself. A typical dump is ~75 bytes (about
+// 78 ms at 9600 baud) and one with large values ~89 bytes (93 ms); a slot
 // fits that with room for the line turnaround and timing skew.
-const uint8_t DUMP_SLOT_MS = 90;
+const uint8_t DUMP_SLOT_MS = 105;
 bool dumpPending = false;
 uint16_t dumpDelayMs = 0;  // wait before replying, once idle
 uint32_t dumpAtMs = 0;     // millis() to reply at

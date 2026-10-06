@@ -10,89 +10,81 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from display.serial_link import parse_buffer, parse_all_dumps  # noqa: E402
 
+# Every field, in the order the firmware sends them.
+FIELDS = ('\tO480\tT4096\tD100\tS1250\tH1800\tC1\tA0\tF1\tE0'
+          '\tR6000\tL40\tW120\tP80\t#123456\t~-12')
+PARSED = {'homeOffset': 480, 'totalSteps': 4096, 'debounceMs': 100,
+          'stepDelayUs': 1250, 'homingStepDelayUs': 1800, 'motorClockwise': True,
+          'autoHome': False, 'motorRelease': True, 'recalculateHome': False,
+          'rampStartDelayUs': 6000, 'rampSteps': 40, 'settleMs': 120, 'staggerMs': 80,
+          'revolutions': 123456, 'drift': -12}
+
+
+def reply(mod_id='05', fields=FIELDS, end='\r\n'):
+    return f"m{mod_id}?{fields}{end}"
+
 
 class ParseBufferTest(unittest.TestCase):
     def test_parses_all_fields_with_crlf_terminator(self):
         # The firmware ends the line with Serial.println() -> "\r\n". The
         # trailing "\r" must not leak into the last field.
-        self.assertEqual(
-            parse_buffer("m05?:480:4096:100:1250:1800:1:0:1:0\r\n", 5),
-            {'homeOffset': 480, 'totalSteps': 4096, 'debounceMs': 100,
-             'stepDelayUs': 1250, 'homingStepDelayUs': 1800, 'motorClockwise': True,
-             'autoHome': False, 'motorRelease': True, 'recalculateHome': False},
-        )
+        self.assertEqual(parse_buffer(reply(), 5), PARSED)
 
-    def test_zero_fields_are_false(self):
-        dump = parse_buffer("m05?:480:4096:100:1:1:0:1:0:1\r\n", 5)
+    def test_fields_can_come_in_any_order(self):
+        reordered = ''.join('\t' + f for f in reversed(FIELDS.split('\t')[1:]))
+        self.assertEqual(parse_buffer(reply(fields=reordered), 5), PARSED)
+
+    def test_booleans(self):
+        dump = parse_buffer(reply(fields=FIELDS.replace('\tC1', '\tC0').replace('\tA0', '\tA1')), 5)
         self.assertFalse(dump['motorClockwise'])
         self.assertTrue(dump['autoHome'])
-        self.assertFalse(dump['motorRelease'])
-        self.assertTrue(dump['recalculateHome'])
 
     def test_bare_newline_terminator(self):
-        self.assertEqual(parse_buffer("m05?:1:2:3:4:5:1:1:1:1\n", 5)['totalSteps'], 2)
+        self.assertEqual(parse_buffer(reply(end='\n'), 5)['totalSteps'], 4096)
 
     def test_unprovisioned_module_id(self):
-        self.assertEqual(parse_buffer("m255?:480:4096:100:1:1:1:0:1:1\r\n", 255)['homeOffset'], 480)
+        self.assertEqual(parse_buffer(reply('255'), 255)['homeOffset'], 480)
 
     def test_ignores_echoed_command_before_reply(self):
-        buf = "m05?\r\nm05?:10:20:100:1:1:1:1:1:1\r\n"
-        self.assertEqual(parse_buffer(buf, 5)['homeOffset'], 10)
+        self.assertEqual(parse_buffer("m05?\r\n" + reply(), 5), PARSED)
 
     def test_ignores_line_noise_before_reply(self):
-        self.assertEqual(parse_buffer("\x00\x7fjunk m07?:10:20:100:1:1:1:1:1:1\r\n", 7)['totalSteps'], 20)
+        self.assertEqual(parse_buffer("\x00\x7fjunk " + reply('07'), 7)['totalSteps'], 4096)
 
     def test_incomplete_line_is_not_parsed_yet(self):
-        self.assertIsNone(parse_buffer("m05?:480:4096:100:1:1:1:0", 5))
-        self.assertIsNone(parse_buffer("m05?:480:4096:100:1:1:1:0:1:1", 5))
+        self.assertIsNone(parse_buffer(reply(end=''), 5))
+        self.assertIsNone(parse_buffer(reply(fields=FIELDS[:20], end=''), 5))
 
     def test_other_modules_reply_is_ignored_when_id_given(self):
-        buf = "m06?:1:2:100:1:1:1:1:1:1\r\n"
+        buf = reply('06')
         self.assertIsNone(parse_buffer(buf, 5))
-        self.assertEqual(parse_buffer(buf)['totalSteps'], 2)  # any id when omitted
+        self.assertEqual(parse_buffer(buf)['totalSteps'], 4096)  # any id when omitted
 
     def test_id_must_match_exactly(self):
-        # "m05?:" must not match inside "m105?:"
-        self.assertIsNone(parse_buffer("m105?:1:2:100:1:1:1:1:1:1\r\n", 5))
-        self.assertEqual(parse_buffer("m105?:1:2:100:1:1:1:1:1:1\r\n", 105)['homeOffset'], 1)
+        # "m05?" must not match inside "m105?"
+        self.assertIsNone(parse_buffer(reply('105'), 5))
+        self.assertEqual(parse_buffer(reply('105'), 105)['homeOffset'], 480)
 
     def test_malformed_line_is_skipped_but_later_valid_line_is_used(self):
-        buf = "m05?:x:y:100:1:1:1:1:1:1\r\nm05?:10:20:100:1:1:1:0:0:0\r\n"
+        buf = reply(fields=FIELDS.replace('O480', 'Ox')) + reply(fields=FIELDS.replace('O480', 'O10'))
         self.assertEqual(parse_buffer(buf, 5)['homeOffset'], 10)
 
-    def test_too_few_fields_returns_none(self):
-        self.assertIsNone(parse_buffer("m05?:480:4096:100:1:1:1:0\r\n", 5))
+    def test_missing_field_rejects_the_line(self):
+        self.assertIsNone(parse_buffer(reply(fields=FIELDS.replace('\tW120', '')), 5))
 
-    def test_pre_timing_firmware_dump_is_not_accepted(self):
-        # Firmware from before the timing/debounce fields sent only five
-        # values after the id; guessing at that layout would mis-assign them.
-        self.assertIsNone(parse_buffer("m05?:480:4096:1:0:1\r\n", 5))
+    def test_unknown_label_rejects_the_line(self):
+        self.assertIsNone(parse_buffer(reply(fields=FIELDS.replace('W120', 'Q120')), 5))
 
-    def test_extended_fields_are_parsed(self):
-        dump = parse_buffer("m05?:480:4096:50:1250:1000:1:0:1:1:6000:40:120:80:-12\r\n", 5)
-        self.assertEqual(
-            {k: dump[k] for k in ('rampStartDelayUs', 'rampSteps', 'settleMs', 'staggerMs', 'drift')},
-            {'rampStartDelayUs': 6000, 'rampSteps': 40, 'settleMs': 120, 'staggerMs': 80, 'drift': -12},
-        )
-        self.assertEqual(dump['stepDelayUs'], 1250)
+    def test_repeated_field_rejects_the_line(self):
+        self.assertIsNone(parse_buffer(reply(fields=FIELDS.replace('\tW120', '\tO1')), 5))
 
-    def test_revolutions_are_parsed_before_drift(self):
-        dump = parse_buffer("m05?:480:4096:50:2:1:1:0:1:1:6:40:120:80:12345:-3\r\n", 5)
-        self.assertEqual((dump['revolutions'], dump['drift'], dump['staggerMs']), (12345, -3, 80))
+    def test_empty_or_bad_values_reject_the_line(self):
+        for bad in ('O', 'O-', 'O4.5', 'O 4'):
+            with self.subTest(field=bad):
+                self.assertIsNone(parse_buffer(reply(fields=FIELDS.replace('O480', bad)), 5))
 
-    def test_dump_without_revolutions_still_has_drift(self):
-        # Firmware from before the revolution counter.
-        dump = parse_buffer("m05?:480:4096:50:2:1:1:0:1:1:6:40:120:80:-3\r\n", 5)
-        self.assertEqual(dump['drift'], -3)
-        self.assertNotIn('revolutions', dump)
-
-    def test_nine_field_dump_has_no_extended_keys(self):
-        dump = parse_buffer("m05?:480:4096:50:1:1:1:0:1:1\r\n", 5)
-        for key in ('rampStartDelayUs', 'rampSteps', 'settleMs', 'staggerMs', 'drift'):
-            self.assertNotIn(key, dump)
-
-    def test_malformed_extended_field_rejects_the_line(self):
-        self.assertIsNone(parse_buffer("m05?:480:4096:50:1:1:1:0:1:1:3:x:0:150:0\r\n", 5))
+    def test_old_colon_format_is_not_accepted(self):
+        self.assertIsNone(parse_buffer("m05?:480:4096:100:1000:1000:1:1:1:1:3000:0:0:150:12:-3\r\n", 5))
 
     def test_no_dump_returns_none(self):
         self.assertIsNone(parse_buffer("", 5))
@@ -100,17 +92,17 @@ class ParseBufferTest(unittest.TestCase):
 
 class ParseAllDumpsTest(unittest.TestCase):
     def test_collects_every_module_in_a_broadcast_reply(self):
-        buffer = ("m00?:480:4096:50:1:1:1:0:1:1:3:0:0:150:7:0\r\n"
-                  "m05?:470:4075:50:1:1:1:0:1:1:3:0:0:150:9:-2\r\n"
-                  "m63?:460:4096:50:1:1:1:0:1:1:3:0:0:150:11:1\r\n")
+        buffer = (reply('00', FIELDS.replace('~-12', '~0'))
+                  + reply('05', FIELDS.replace('T4096', 'T4075').replace('~-12', '~-2'))
+                  + reply('63'))
         dumps = parse_all_dumps(buffer)
         self.assertEqual(sorted(dumps), [0, 5, 63])
         self.assertEqual((dumps[5]['totalSteps'], dumps[5]['drift']), (4075, -2))
 
     def test_skips_partial_and_malformed_lines(self):
-        buffer = ("m01?:480:4096:50:1:1:1:0:1:1\r\n"
-                  "m02?:garbage\r\n"
-                  "m03?:480:4096:50:1:1:1:0")
+        buffer = (reply('01')
+                  + reply('02', '\tgarbage')
+                  + reply('03', end=''))
         self.assertEqual(sorted(parse_all_dumps(buffer)), [1])
 
     def test_empty_buffer(self):

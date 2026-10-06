@@ -7,6 +7,7 @@ the full message grammar.
 """
 
 import re
+from collections import namedtuple
 
 
 class Cmd:
@@ -59,10 +60,66 @@ def message(mod_id, cmd: str, data='') -> str:
     return f"m{target}{cmd}{data}"
 
 
+# The dump reply (see Transceiver::dump() in the firmware): m<ID>? and then
+# each field as a tab, a label and the value, e.g.
+#   m05?\tO480\tT4096\tD100\tS1000\tH1000\tC1\tA1\tF1\tE1\tR3000\tL0\tW0\tP150\t#12\t~-3
+# A setting is labelled with the letter that sets it; the two read-only
+# fields have their own labels (REVOLUTIONS_CODE / DRIFT_CODE in the firmware).
+DUMP_REVOLUTIONS = '#'
+DUMP_DRIFT = '~'
+
+# key: the settings key the value is stored under; kind: 'int' or 'bool';
+# name and unit: how the debug panel describes it.
+DumpField = namedtuple('DumpField', 'key kind name unit')
+
+# Label -> field, in the order the firmware sends them.
+DUMP_FIELDS = {
+    Cmd.SET_OFFSET:            DumpField('homeOffset',        'int',  'home offset',       'steps'),
+    Cmd.SET_TOTAL_STEPS:       DumpField('totalSteps',        'int',  'total steps',       'steps'),
+    Cmd.SET_DEBOUNCE_MS:       DumpField('debounceMs',        'int',  'debounce',          'ms'),
+    Cmd.SET_STEP_DELAY:        DumpField('stepDelayUs',       'int',  'step delay',        'µs'),
+    Cmd.SET_HOMING_STEP_DELAY: DumpField('homingStepDelayUs', 'int',  'homing step delay', 'µs'),
+    Cmd.SET_MOTOR_CW:          DumpField('motorClockwise',    'bool', 'clockwise',         ''),
+    Cmd.SET_AUTO_HOME:         DumpField('autoHome',          'bool', 'auto-home',         ''),
+    Cmd.SET_MOTOR_RELEASE:     DumpField('motorRelease',      'bool', 'release coils',     ''),
+    Cmd.SET_RECALCULATE_HOME:  DumpField('recalculateHome',   'bool', 'recalculate home',  ''),
+    Cmd.SET_RAMP_START_DELAY:  DumpField('rampStartDelayUs',  'int',  'ramp start delay',  'µs'),
+    Cmd.SET_RAMP_STEPS:        DumpField('rampSteps',         'int',  'ramp length',       'steps'),
+    Cmd.SET_SETTLE_MS:         DumpField('settleMs',          'int',  'settle',            'ms'),
+    Cmd.SET_STAGGER_MS:        DumpField('staggerMs',         'int',  'stagger',           'ms'),
+    DUMP_REVOLUTIONS:          DumpField('revolutions',       'int',  'revolutions',       ''),
+    DUMP_DRIFT:                DumpField('drift',             'int',  'drift',             'steps'),
+}
+
+
 def dump_reply_pattern(id_pattern: str = r'\d+') -> str:
-    """Regex for a dump reply line, m<ID>?:<fields>, with groups for the ID
-    and the fields. `id_pattern` narrows the ID (a regex, default any)."""
-    return rf'm({id_pattern}){re.escape(Cmd.DUMP_STATE)}:([^\r\n]*)\r?\n'
+    """Regex for a complete dump reply line, with groups for the ID and the
+    fields (each starting with its tab). `id_pattern` narrows the ID (a
+    regex, default any)."""
+    return rf'm({id_pattern}){re.escape(Cmd.DUMP_STATE)}((?:\t[^\t\r\n]*)+)\r?\n'
+
+
+def parse_dump_fields(fields: str):
+    """The settings dict for a dump reply's fields (the text after m<ID>?),
+    or None if any field is malformed, unknown or repeated, or one is
+    missing: the frontend and firmware are deployed together, so a reply
+    that doesn't match exactly is a garbled one."""
+    dump = {}
+    for field in fields.split('\t')[1:]:
+        spec = DUMP_FIELDS.get(field[:1])
+        if spec is None or spec.key in dump or not re.fullmatch(r'-?\d+', field[1:]):
+            return None
+        value = int(field[1:])
+        dump[spec.key] = bool(value) if spec.kind == 'bool' else value
+    return dump if len(dump) == len(DUMP_FIELDS) else None
+
+
+def dump_format():
+    """The dump layout for the debug panel, which parses replies itself."""
+    return {
+        'marker': Cmd.DUMP_STATE,
+        'fields': [dict(label=label, **spec._asdict()) for label, spec in DUMP_FIELDS.items()],
+    }
 
 
 # Settings key (as stored under settings['modules'][id]) -> firmware command:
@@ -111,7 +168,7 @@ GLOBAL_SETTINGS = {
 # A broadcast dump (m*?) is answered by each provisioned module in turn, ID
 # x DUMP_SLOT_S after the request (or after it finishes a move it was busy
 # with). Matches DUMP_SLOT_MS in the firmware.
-DUMP_SLOT_S = 0.090
+DUMP_SLOT_S = 0.105
 
 
 def global_command(key: str, value) -> str:

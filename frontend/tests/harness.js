@@ -4,6 +4,13 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 
+// The real dump layout (module_protocol.dump_format()), so the debug panel is
+// tested against what the backend actually serves.
+const DUMP_FORMAT = JSON.parse(require('child_process').execFileSync('python3', ['-c',
+  'import json, sys; sys.path.insert(0, "."); ' +
+  'from display.module_protocol import dump_format; print(json.dumps(dump_format()))'],
+  { cwd: ROOT, encoding: 'utf8' }));
+
 // Strip Jinja url_for(...) calls AND the original <script src="..."> tags —
 // we'll inject equivalent inline <script> elements ourselves so jsdom
 // executes them as real Script elements (sharing top-level let/const across
@@ -148,6 +155,9 @@ window.fetch = async (url, options = {}) => {
   }
   if (url === '/toggle_autohome') {
     return ok({ status: 'Auto-home updated' });
+  }
+  if (url === '/serial/dump_format') {
+    return ok(DUMP_FORMAT);
   }
   if (url === '/firmware_config') {
     if (options.method === 'POST') return ok({ status: 'success', values: JSON.parse(options.body) });

@@ -393,6 +393,32 @@ async function main() {
   await sleep(20);
   check('provisioned-module toast names the assigned id in hex, not decimal', lastToastText() === 'Module assigned ID 0A');
 
+  console.log('\n--- Debug panel shows dump replies as labelled values ---');
+  const serialLog = MockEventSource.instances.find(s => s.url === '/serial_log/stream');
+  const logEl = document.querySelector('#debug-panel .debug-log');
+  const logLines = () => [...logEl.querySelectorAll('.debug-log-line')];
+  const logBefore = logLines().length;
+  const fields = '\tO480\tT4096\tD100\tS1250\tH1800\tC1\tA0\tF1\tE1\tR3000\tL0\tW0\tP150\t#123456\t~-3';
+  // A broadcast dump's received text: two replies, one garbled line, then noise.
+  serialLog.emit({ msg: `RECV: m05?${fields}\r\nm10?${fields.replace('~-3', '~2')}\r\nm07?\tO48x\r\njunk\r\n` });
+  await sleep(10);
+  const added = logLines().slice(logBefore);
+  check('each received line gets its own log line', added.length === 4);
+  const [first, second, garbled, noise] = added;
+  const field = (line, key) => line.querySelector(`.dump-field[data-key="${key}"]`).textContent;
+  check('a dump reply is shown as labelled values',
+    first.classList.contains('dump') && first.classList.contains('recv') &&
+    field(first, 'homeOffset') === 'home offset 480 steps' && field(first, 'stepDelayUs') === 'step delay 1,250 µs' &&
+    field(first, 'motorClockwise') === 'clockwise yes' && field(first, 'autoHome') === 'auto-home no' &&
+    field(first, 'revolutions') === 'revolutions 123,456' && field(first, 'drift') === 'drift -3 steps');
+  check('every field is shown', first.querySelectorAll('.dump-field').length === 15);
+  check('the reply line names the module on the wire and in hex',
+    first.textContent.includes('RECV m05? (module 05): ') && second.textContent.includes('RECV m10? (module 0A): '));
+  check('the raw reply is kept as the tooltip', first.title === `m05?${fields}`);
+  check('a garbled reply is shown as received', !garbled.classList.contains('dump') &&
+    garbled.textContent.endsWith('RECV: m07?\tO48x'));
+  check('other received text is shown as received', noise.textContent.endsWith('RECV: junk'));
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

@@ -38,6 +38,11 @@ namespace {
   const char FRAME_CODE = 'f';
   const char DUMP_CODE = '?';
 
+  // Labels for the dump's two read-only fields. The settings in a dump are
+  // labelled with the letter that sets them.
+  const char REVOLUTIONS_CODE = '#';
+  const char DRIFT_CODE = '~';
+
   // Every command that can be sent by letter, grouped as in transceiver.h.
   // FRAME isn't here: it's only reached through the frame header.
   const CommandSpec COMMANDS[] = {
@@ -210,9 +215,18 @@ void Transceiver::begin(long baud) {
 }
 
 namespace {
-  // Prints ":<value>". One call per field keeps dump() small.
-  void printField(uint16_t value) {
-    Serial.print(':');
+  // Starts a dump field: a tab, then the field's label.
+  void printFieldLabel(char code) {
+    Serial.print('\t');
+    Serial.print(code);
+  }
+
+  // Prints a setting as a dump field, labelled with the letter that sets it.
+  // One call per field keeps dump() small.
+  void printField(CommandType type, uint16_t value) {
+    for (const CommandSpec& spec : COMMANDS) {
+      if (spec.type == type) printFieldLabel(spec.code);
+    }
     Serial.print(value);
   }
 }
@@ -223,22 +237,22 @@ void Transceiver::dump(uint32_t revolutions, int16_t drift) {
   if (id < 10) Serial.print("0");
   Serial.print(id);
   Serial.print(DUMP_CODE);
-  printField(EepromStore::getHomeOffset());
-  printField(EepromStore::getTotalSteps());
-  printField(EepromStore::getDebounceMs());
-  printField(EepromStore::getStepDelayUs());
-  printField(EepromStore::getHomingStepDelayUs());
-  printField(EepromStore::isMotorClockwise());
-  printField(EepromStore::autoHomeEnabled());
-  printField(EepromStore::releaseMotorEnabled());
-  printField(EepromStore::recalculateHome());
-  printField(EepromStore::getRampStartDelayUs());
-  printField(EepromStore::getRampSteps());
-  printField(EepromStore::getSettleMs());
-  printField(EepromStore::getStaggerMs());
-  Serial.print(':');
+  printField(SET_OFFSET, EepromStore::getHomeOffset());
+  printField(SET_TOTAL_STEPS, EepromStore::getTotalSteps());
+  printField(SET_DEBOUNCE_MS, EepromStore::getDebounceMs());
+  printField(SET_STEP_DELAY, EepromStore::getStepDelayUs());
+  printField(SET_HOMING_STEP_DELAY, EepromStore::getHomingStepDelayUs());
+  printField(SET_MOTOR_CW, EepromStore::isMotorClockwise());
+  printField(SET_AUTO_HOME, EepromStore::autoHomeEnabled());
+  printField(SET_MOTOR_RELEASE, EepromStore::releaseMotorEnabled());
+  printField(SET_RECALCULATE_HOME, EepromStore::recalculateHome());
+  printField(SET_RAMP_START_DELAY, EepromStore::getRampStartDelayUs());
+  printField(SET_RAMP_STEPS, EepromStore::getRampSteps());
+  printField(SET_SETTLE_MS, EepromStore::getSettleMs());
+  printField(SET_STAGGER_MS, EepromStore::getStaggerMs());
+  printFieldLabel(REVOLUTIONS_CODE);
   Serial.print(revolutions);
-  Serial.print(':');
+  printFieldLabel(DRIFT_CODE);
   Serial.println(drift);
 }
 

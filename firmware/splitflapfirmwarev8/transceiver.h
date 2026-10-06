@@ -51,7 +51,7 @@
 //            Transceiver::dump() below). If the module is moving, homing or
 //            calibrating, the reply is sent once that finishes. A broadcast
 //            ('m*?') is answered by every provisioned module in turn: each
-//            waits ID x 90 ms (after finishing anything in progress) so the
+//            waits ID x 105 ms (after finishing anything in progress) so the
 //            replies don't collide. Unprovisioned modules don't answer a
 //            broadcast. No data expected
 //         !, Reset every setting to its default, keeping the module ID, then
@@ -191,12 +191,13 @@ class Transceiver {
   // messages with a missed or absent terminator).
   bool poll(Command& command);
 
-  // Sends: m<ID>?:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelayUs>
-  //              :<homingStepDelayUs>:<clockwise>:<autoHome>:<releaseMotor>
-  //              :<recalculateHome>:<rampStartDelayUs>:<rampSteps>:<settleMs>
-  //              :<staggerMs>:<revolutions>:<drift>
-  // where revolutions and drift come from SplitFlap, passed in by the
-  // caller. Drift stays last; new fields go before it. Typically ~60 bytes.
+  // Sends m<ID>? and then each field as a tab, a label and the value:
+  //   m05?\tO480\tT4096\tD100\tS1000\tH1000\tC1\tA1\tF1\tE1\tR3000\tL0\tW0\tP150\t#12\t~-3
+  // A setting is labelled with the letter that sets it (O = home offset,
+  // T = total steps, and so on; see the command list above). The two
+  // read-only fields are # = revolutions and ~ = drift, both from SplitFlap,
+  // passed in by the caller. Fields can be read in any order. Typically ~75
+  // bytes.
   void dump(uint32_t revolutions, int16_t drift);
 
   // The last message poll() parsed, as received (without the '\n'). Only
