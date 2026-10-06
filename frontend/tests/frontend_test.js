@@ -183,7 +183,7 @@ async function main() {
   check('inspector shows the revolution count', document.getElementById('inspectRevolutions').textContent === '12,345');
   const timing = document.getElementById('inspectTiming');
   check('inspector shows the timing the module reported',
-    timing.textContent.startsWith('From last sync: step 1 ms · homing 2 ms · debounce 100 ms · ramp start 3 ms · ramp 0 steps · settle 0 ms · stagger 120 ms'));
+    timing.textContent.startsWith('From last sync: step 1000 µs · homing 1800 µs · debounce 100 ms · ramp start 3000 µs · ramp 0 steps · settle 0 ms · stagger 120 ms'));
   const flagged = [...timing.querySelectorAll('.mismatch')].map(s => s.dataset.key);
   check('only values that differ from the shared settings are highlighted',
     flagged.length === 1 && flagged[0] === 'staggerMs');
@@ -195,6 +195,10 @@ async function main() {
   await sleep(20);
   check('module synced from older firmware asks for a sync',
     document.getElementById('inspectTiming').textContent === 'Sync this module to read its timing settings.');
+  click(document.querySelector('#modMatrix .mod-cell[data-id="3"]'));
+  await sleep(20);
+  check('module synced while step delays were in ms asks for a sync',
+    document.getElementById('inspectTiming').textContent === 'Sync this module to read its timing settings.');
   click(document.querySelector('#modMatrix .mod-cell[data-id="0"]'));
   await sleep(20);
 
@@ -202,13 +206,14 @@ async function main() {
   const fw = (key) => document.getElementById(`fw-${key}`);
   const toastCount = () => document.getElementById('toastContainer').children.length;
   check('inputs are filled from /firmware_config',
-    fw('stepDelay').value === '1' && fw('homingStepDelay').value === '2' &&
+    fw('stepDelayUs').value === '1000' && fw('homingStepDelayUs').value === '1800' &&
     fw('debounceMs').value === '100' && fw('recalculateHome').checked === true);
   check('input ranges come from the backend limits',
-    fw('debounceMs').min === '0' && fw('debounceMs').max === '65535' && fw('stepDelay').min === '1');
+    fw('debounceMs').min === '0' && fw('debounceMs').max === '65535' && fw('stepDelayUs').min === '1' &&
+    fw('stepDelayUs').max === '65535');
 
   calls.length = 0;
-  fw('stepDelay').value = '5';
+  fw('stepDelayUs').value = '1250';
   fw('debounceMs').value = '150';
   fw('recalculateHome').checked = false;
   click(document.querySelector('[data-onclick="applyFirmwareConfig"]'));
@@ -217,11 +222,12 @@ async function main() {
   check('apply posts to /firmware_config', !!fwPost);
   check('apply sends every setting with real numbers and a real boolean',
     fwPost && JSON.stringify(JSON.parse(fwPost.body)) ===
-      JSON.stringify({ stepDelay: 5, homingStepDelay: 2, debounceMs: 150, recalculateHome: false,
-                       rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 150 }));
+      JSON.stringify({ stepDelayUs: 1250, homingStepDelayUs: 1800, debounceMs: 150, recalculateHome: false,
+                       rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 150 }));
 
-  for (const [key, bad] of [['stepDelay', '0'], ['debounceMs', '65536'], ['homingStepDelay', ''],
-                            ['rampStartDelay', '0'], ['rampSteps', '256'], ['settleMs', '-1'],
+  for (const [key, bad] of [['stepDelayUs', '0'], ['stepDelayUs', '65536'], ['debounceMs', '65536'],
+                            ['homingStepDelayUs', ''], ['homingStepDelayUs', '1.5'],
+                            ['rampStartDelayUs', '0'], ['rampSteps', '256'], ['settleMs', '-1'],
                             ['staggerMs', '256']]) {
     const good = fw(key).value;
     calls.length = 0;

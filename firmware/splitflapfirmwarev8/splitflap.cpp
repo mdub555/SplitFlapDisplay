@@ -79,7 +79,7 @@ void SplitFlap::update() {
     return;
   }
   if (phase == PHASE_SETTLE) {
-    if (millis() - lastStepMs >= EepromStore::getSettleMs()) releaseNow();
+    if (micros() - lastStepUs >= EepromStore::getSettleMs() * 1000UL) releaseNow();
     return;
   }
   if ((phase == PHASE_MOVE || phase == PHASE_OFFSET) && stepsRemaining == 0) {
@@ -87,9 +87,9 @@ void SplitFlap::update() {
     return;
   }
 
-  uint32_t now = millis();
-  if (now - lastStepMs < stepDelay()) return;
-  lastStepMs = now;
+  uint32_t now = micros();
+  if (now - lastStepUs < stepDelayUs()) return;
+  lastStepUs = now;
 
   bool edge = stepAdvance();
   stepsTaken++;
@@ -119,23 +119,24 @@ void SplitFlap::saveRevolutionsIfDue() {
   }
 }
 
-uint8_t SplitFlap::stepDelay() const {
+uint16_t SplitFlap::stepDelayUs() const {
   switch (phase) {
-    case PHASE_MOVE:   return moveStepDelay();
-    case PHASE_OFFSET: return EepromStore::getStepDelay();
-    default:           return EepromStore::getHomingStepDelay();
+    case PHASE_MOVE:   return moveStepDelayUs();
+    case PHASE_OFFSET: return EepromStore::getStepDelayUs();
+    default:           return EepromStore::getHomingStepDelayUs();
   }
 }
 
-uint8_t SplitFlap::moveStepDelay() const {
-  uint8_t cruise = EepromStore::getStepDelay();
-  uint8_t start = EepromStore::getRampStartDelay();
+uint16_t SplitFlap::moveStepDelayUs() const {
+  uint16_t cruise = EepromStore::getStepDelayUs();
+  uint16_t start = EepromStore::getRampStartDelayUs();
   uint8_t rampSteps = EepromStore::getRampSteps();
   // Distance from the nearer end of the move.
   uint16_t fromEnd = stepsTaken < stepsRemaining ? stepsTaken : stepsRemaining;
   if (fromEnd >= rampSteps || start <= cruise) return cruise;
   // Linear from `start` at the end of the move to `cruise` rampSteps in.
-  return cruise + (uint16_t)(start - cruise) * (rampSteps - fromEnd) / rampSteps;
+  // 32-bit, since the difference times the ramp length can pass 65535.
+  return cruise + (uint32_t)(start - cruise) * (rampSteps - fromEnd) / rampSteps;
 }
 
 void SplitFlap::afterStep(bool edge) {

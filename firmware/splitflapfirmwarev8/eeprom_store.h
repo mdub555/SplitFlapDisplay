@@ -35,11 +35,13 @@ namespace EepromStore {
   void saveModuleId(uint8_t id);
   uint8_t getModuleId();
 
-  void saveStepDelay(uint8_t delay);
-  uint8_t getStepDelay();
+  // Time (µs) between motor steps during normal moves.
+  void saveStepDelayUs(uint16_t delayUs);
+  uint16_t getStepDelayUs();
 
-  void saveHomingStepDelay(uint8_t delay);
-  uint8_t getHomingStepDelay();
+  // Time (µs) between motor steps while homing and calibrating.
+  void saveHomingStepDelayUs(uint16_t delayUs);
+  uint16_t getHomingStepDelayUs();
 
   void saveDebounceMs(uint16_t millis);
   uint16_t getDebounceMs();
@@ -56,10 +58,10 @@ namespace EepromStore {
   void saveRecalculateHome(bool recalculate);
   bool recalculateHome();
 
-  // Step delay (ms) used at the start and end of a move. The delay ramps
+  // Step delay (µs) used at the start and end of a move. The delay ramps
   // between this and the step delay over rampSteps steps at each end.
-  void saveRampStartDelay(uint8_t delay);
-  uint8_t getRampStartDelay();
+  void saveRampStartDelayUs(uint16_t delayUs);
+  uint16_t getRampStartDelayUs();
 
   // Number of steps to ramp over at each end of a move. 0 disables the ramp.
   void saveRampSteps(uint8_t steps);

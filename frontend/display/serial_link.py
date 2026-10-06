@@ -40,9 +40,9 @@ def send_raw(cmd: str):
 def read_dump(mod_id: int, timeout: float = 5.0):
     """m<ID>d — request and parse an EEPROM dump (home offset + total steps).
     Returns a dict or None on timeout/parse failure."""
-    # Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>:<homingStepDelay>
+    # Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelayUs>:<homingStepDelayUs>
     #              :<clockwise>:<autoHome>:<releaseMotor>:<recalculateHome>
-    #              [:<rampStartDelay>:<rampSteps>:<settleMs>:<staggerMs>[:<revolutions>]:<drift>]
+    #              [:<rampStartDelayUs>:<rampSteps>:<settleMs>:<staggerMs>[:<revolutions>]:<drift>]
     if not ser:
         return None
     with serial_lock:
@@ -97,7 +97,9 @@ def read_all_dumps(max_id: int, margin: float = 0.5):
 # positive = missed steps), which is always last. Each firmware version adds
 # fields before drift, so a dump has the first N of these plus drift.
 # Firmware from before any of them sends only the first nine fields.
-_EXTENDED_FIELDS = ('rampStartDelay', 'rampSteps', 'settleMs', 'staggerMs', 'revolutions')
+# The step delays (stepDelayUs, homingStepDelayUs, rampStartDelayUs) are in
+# microseconds; firmware from before EEPROM layout 0x07 reported them in ms.
+_EXTENDED_FIELDS = ('rampStartDelayUs', 'rampSteps', 'settleMs', 'staggerMs', 'revolutions')
 _MIN_EXTENDED = 4  # the ramp, settle and stagger settings came together
 
 
@@ -121,8 +123,8 @@ def _parse_dump_fields(text):
             'homeOffset': int(parts[0]),
             'totalSteps': int(parts[1]),
             'debounceMs': int(parts[2]),
-            'stepDelay': int(parts[3]),
-            'homingStepDelay': int(parts[4]),
+            'stepDelayUs': int(parts[3]),
+            'homingStepDelayUs': int(parts[4]),
             'motorClockwise': parts[5] == '1',
             'autoHome': parts[6] == '1',
             'motorRelease': parts[7] == '1',
@@ -134,8 +136,8 @@ def _parse_dump_fields(text):
 
 
 def parse_buffer(buffer, mod_id=None):
-    """Find a complete `m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>:
-    <homingStepDelay>:<clockwise>:<autoHome>:<releaseMotor>:<recalculateHome>`
+    """Find a complete `m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelayUs>:
+    <homingStepDelayUs>:<clockwise>:<autoHome>:<releaseMotor>:<recalculateHome>`
     line anywhere in `buffer` and parse it. Pass `mod_id` to only accept that
     module's reply (any ID matches when omitted). Only newline-terminated lines
     count, so a half-received reply is ignored until the rest arrives; the

@@ -261,14 +261,14 @@
       <p style="color:#888;font-size:.85rem;margin-top:0">Shared by every module: saved here and sent to all modules at once (each keeps them in its EEPROM).</p>
       <div class="settings-grid">
         <div>
-          <label class="field-label" for="fw-stepDelay">Step delay (ms)</label>
-          <input type="number" class="line-input" style="margin:0" id="fw-stepDelay" data-label="Step delay" step="1">
-          <span class="toggle-hint">Pause between motor steps during normal moves. Lower is faster; too low and the motor skips steps.</span>
+          <label class="field-label" for="fw-stepDelayUs">Step delay (µs)</label>
+          <input type="number" class="line-input" style="margin:0" id="fw-stepDelayUs" data-label="Step delay" step="1">
+          <span class="toggle-hint">Pause between motor steps during normal moves, in microseconds (1000 µs = 1 ms). Lower is faster; too low and the motor skips steps.</span>
         </div>
         <div>
-          <label class="field-label" for="fw-homingStepDelay">Homing step delay (ms)</label>
-          <input type="number" class="line-input" style="margin:0" id="fw-homingStepDelay" data-label="Homing step delay" step="1">
-          <span class="toggle-hint">Pause between steps while homing and calibrating.</span>
+          <label class="field-label" for="fw-homingStepDelayUs">Homing step delay (µs)</label>
+          <input type="number" class="line-input" style="margin:0" id="fw-homingStepDelayUs" data-label="Homing step delay" step="1">
+          <span class="toggle-hint">Pause between steps while homing and calibrating, in microseconds.</span>
         </div>
         <div>
           <label class="field-label" for="fw-debounceMs">Home sensor debounce (ms)</label>
@@ -283,9 +283,9 @@
           <label class="switch"><input type="checkbox" id="fw-recalculateHome"><span class="slider"></span></label>
         </div>
         <div>
-          <label class="field-label" for="fw-rampStartDelay">Ramp start delay (ms)</label>
-          <input type="number" class="line-input" style="margin:0" id="fw-rampStartDelay" data-label="Ramp start delay" step="1">
-          <span class="toggle-hint">Step delay at the start and end of a move. Moves speed up from this to the step delay, and slow back down at the end.</span>
+          <label class="field-label" for="fw-rampStartDelayUs">Ramp start delay (µs)</label>
+          <input type="number" class="line-input" style="margin:0" id="fw-rampStartDelayUs" data-label="Ramp start delay" step="1">
+          <span class="toggle-hint">Step delay at the start and end of a move, in microseconds. Moves speed up from this to the step delay, and slow back down at the end.</span>
         </div>
         <div>
           <label class="field-label" for="fw-rampSteps">Ramp length (steps)</label>

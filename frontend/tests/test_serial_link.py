@@ -16,9 +16,9 @@ class ParseBufferTest(unittest.TestCase):
         # The firmware ends the line with Serial.println() -> "\r\n". The
         # trailing "\r" must not leak into the last field.
         self.assertEqual(
-            parse_buffer("m05d:480:4096:100:2:3:1:0:1:0\r\n", 5),
+            parse_buffer("m05d:480:4096:100:1250:1800:1:0:1:0\r\n", 5),
             {'homeOffset': 480, 'totalSteps': 4096, 'debounceMs': 100,
-             'stepDelay': 2, 'homingStepDelay': 3, 'motorClockwise': True,
+             'stepDelayUs': 1250, 'homingStepDelayUs': 1800, 'motorClockwise': True,
              'autoHome': False, 'motorRelease': True, 'recalculateHome': False},
         )
 
@@ -69,12 +69,12 @@ class ParseBufferTest(unittest.TestCase):
         self.assertIsNone(parse_buffer("m05d:480:4096:1:0:1\r\n", 5))
 
     def test_extended_fields_are_parsed(self):
-        dump = parse_buffer("m05d:480:4096:50:2:1:1:0:1:1:6:40:120:80:-12\r\n", 5)
+        dump = parse_buffer("m05d:480:4096:50:1250:1000:1:0:1:1:6000:40:120:80:-12\r\n", 5)
         self.assertEqual(
-            {k: dump[k] for k in ('rampStartDelay', 'rampSteps', 'settleMs', 'staggerMs', 'drift')},
-            {'rampStartDelay': 6, 'rampSteps': 40, 'settleMs': 120, 'staggerMs': 80, 'drift': -12},
+            {k: dump[k] for k in ('rampStartDelayUs', 'rampSteps', 'settleMs', 'staggerMs', 'drift')},
+            {'rampStartDelayUs': 6000, 'rampSteps': 40, 'settleMs': 120, 'staggerMs': 80, 'drift': -12},
         )
-        self.assertEqual(dump['stepDelay'], 2)
+        self.assertEqual(dump['stepDelayUs'], 1250)
 
     def test_revolutions_are_parsed_before_drift(self):
         dump = parse_buffer("m05d:480:4096:50:2:1:1:0:1:1:6:40:120:80:12345:-3\r\n", 5)
@@ -88,7 +88,7 @@ class ParseBufferTest(unittest.TestCase):
 
     def test_nine_field_dump_has_no_extended_keys(self):
         dump = parse_buffer("m05d:480:4096:50:1:1:1:0:1:1\r\n", 5)
-        for key in ('rampStartDelay', 'rampSteps', 'settleMs', 'staggerMs', 'drift'):
+        for key in ('rampStartDelayUs', 'rampSteps', 'settleMs', 'staggerMs', 'drift'):
             self.assertNotIn(key, dump)
 
     def test_malformed_extended_field_rejects_the_line(self):

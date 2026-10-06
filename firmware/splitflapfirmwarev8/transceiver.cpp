@@ -22,8 +22,8 @@ namespace {
     ARG_INT_ANY,          // a number 0-65535
     ARG_INT_BOOLEAN,      // 0-1
     ARG_INT_BYTE,         // 0-255
-    ARG_INT_DELAY,        // 1-255: 0 would remove the step delay entirely
-    ARG_INT_TOTAL_STEPS,  // 1-65535: 0 breaks the movement math
+    ARG_INT_NONZERO,      // 1-65535: 0 would remove a step delay entirely, or
+                          // break the movement math as total steps
     ARG_INT_BELOW_TOTAL,  // 0 to total steps - 1
   };
 
@@ -41,7 +41,7 @@ namespace {
     {'h', HOME,                  ARG_NONE},
     {'c', CALIBRATE,             ARG_NONE},
     {'o', SET_OFFSET,            ARG_INT_BELOW_TOTAL},
-    {'t', SET_TOTAL_STEPS,       ARG_INT_TOTAL_STEPS},
+    {'t', SET_TOTAL_STEPS,       ARG_INT_NONZERO},
     {'b', SET_DEBOUNCE_MS,       ARG_INT_ANY},
     {'s', NUDGE,                 ARG_INT_BELOW_TOTAL},
     {'g', MOVE_TO_STEP,          ARG_INT_BELOW_TOTAL},
@@ -51,10 +51,10 @@ namespace {
     {'w', SET_MOTOR_CW,          ARG_INT_BOOLEAN},
     {'r', SET_MOTOR_RELEASE,     ARG_INT_BOOLEAN},
     {'j', SET_RECALCULATE_HOME,  ARG_INT_BOOLEAN},
-    {'k', SET_STEP_DELAY,        ARG_INT_DELAY},
-    {'l', SET_HOMING_STEP_DELAY, ARG_INT_DELAY},
+    {'k', SET_STEP_DELAY,        ARG_INT_NONZERO},
+    {'l', SET_HOMING_STEP_DELAY, ARG_INT_NONZERO},
     {'x', STOP,                  ARG_NONE},
-    {'u', SET_RAMP_START_DELAY,  ARG_INT_DELAY},
+    {'u', SET_RAMP_START_DELAY,  ARG_INT_NONZERO},
     {'n', SET_RAMP_STEPS,        ARG_INT_BYTE},
     {'e', SET_SETTLE_MS,         ARG_INT_BYTE},
     {'y', SET_STAGGER_MS,        ARG_INT_BYTE},
@@ -73,15 +73,14 @@ namespace {
   }
 
   // Finishes a numeric command, rejecting it if it had no digits (a truncated
-  // "m05k" must not set a 0 ms delay) or its value is out of range.
+  // "m05k" must not set a 0 µs delay) or its value is out of range.
   bool finishDataInt(Command& command, ArgKind arg, uint16_t value, bool hasDigits) {
     if (!hasDigits) return false;
     uint16_t max = 0xFFFF;
     switch (arg) {
       case ARG_INT_BOOLEAN:     max = 1; break;
-      case ARG_INT_DELAY:       if (value == 0) return false;  // fall through
       case ARG_INT_BYTE:        max = 255; break;
-      case ARG_INT_TOTAL_STEPS: if (value == 0) return false; break;
+      case ARG_INT_NONZERO:     if (value == 0) return false; break;
       case ARG_INT_BELOW_TOTAL: max = EepromStore::getTotalSteps() - 1; break;
       case ARG_INT_ANY:
       case ARG_NONE:
@@ -219,13 +218,13 @@ void Transceiver::dump(uint32_t revolutions, int16_t drift) {
   printField(EepromStore::getHomeOffset());
   printField(EepromStore::getTotalSteps());
   printField(EepromStore::getDebounceMs());
-  printField(EepromStore::getStepDelay());
-  printField(EepromStore::getHomingStepDelay());
+  printField(EepromStore::getStepDelayUs());
+  printField(EepromStore::getHomingStepDelayUs());
   printField(EepromStore::isMotorClockwise());
   printField(EepromStore::autoHomeEnabled());
   printField(EepromStore::releaseMotorEnabled());
   printField(EepromStore::recalculateHome());
-  printField(EepromStore::getRampStartDelay());
+  printField(EepromStore::getRampStartDelayUs());
   printField(EepromStore::getRampSteps());
   printField(EepromStore::getSettleMs());
   printField(EepromStore::getStaggerMs());

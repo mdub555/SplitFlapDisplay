@@ -13,15 +13,15 @@ namespace {
   // flap right in the middle of their expected position.
   const uint16_t DEFAULT_HOME_OFFSET = STEPS_PER_FLAP * 7 + STEPS_PER_FLAP / 2;
   const uint16_t DEFAULT_DEBOUNCE_MS = 100;
-  const uint8_t DEFAULT_STEP_DELAY = 1;
-  const uint8_t DEFAULT_HOMING_STEP_DELAY = 1;
+  const uint16_t DEFAULT_STEP_DELAY_US = 1000;
+  const uint16_t DEFAULT_HOMING_STEP_DELAY_US = 1000;
   const bool DEFAULT_AUTO_HOME = false;
   const bool DEFAULT_MOTOR_CW = true;
   const bool DEFAULT_RELEASE_MOTOR = true;
   const bool DEFAULT_RECALCULATE_HOME = true;
   // Ramp, settle and stagger defaults reproduce the behavior from before
   // they were configurable: no ramp, no settle, 150 ms per module ID.
-  const uint8_t DEFAULT_RAMP_START_DELAY = 3;
+  const uint16_t DEFAULT_RAMP_START_DELAY_US = 3000;
   const uint8_t DEFAULT_RAMP_STEPS = 0;
   const uint8_t DEFAULT_SETTLE_MS = 0;
   const uint8_t DEFAULT_STAGGER_MS = 150;
@@ -39,14 +39,14 @@ namespace {
     uint16_t totalSteps;       // Total steps for one full reel revolution
     uint16_t debounceMs;       // Debounce time for the home sensor
     uint8_t  moduleId;         // This module's bus ID (0–254; 255 = unset)
-    uint8_t  stepDelay;        // The time between each motor step during normal rotation
-    uint8_t  homingStepDelay;  // The time between each motor step during homing
+    uint16_t stepDelayUs;      // The time between each motor step during normal rotation
+    uint16_t homingStepDelayUs;  // The time between each motor step during homing
     bool     autoHome;         // Whether to home on every boot
     bool     motorClockwise;   // Whether the motor rotates clockwise
     bool     releaseMotor;     // Whether to release the coils when idle
     bool     recalculateHome;  // Whether home is recalculated each rotation
-    uint8_t  rampStartDelay;   // Step delay (ms) at the start and end of a move
-    uint8_t  rampSteps;        // Steps to ramp between rampStartDelay and stepDelay
+    uint16_t rampStartDelayUs; // Step delay at the start and end of a move
+    uint8_t  rampSteps;        // Steps to ramp between rampStartDelayUs and stepDelayUs
     uint8_t  settleMs;         // Time to hold the coils after a move before releasing
     uint8_t  staggerMs;        // Startup delay per module ID
   };
@@ -58,19 +58,20 @@ namespace {
   const uint16_t ADDR_TOTAL_STEPS = 3;   // 2 bytes — Total steps for one full reel revolution
   const uint16_t ADDR_MODULE_ID   = 5;   // 1 byte  — This module's bus ID (0–254; 255 = unset)
   const uint16_t ADDR_BOOLEANS    = 6;   // 1 byte  — boolean configs, see masks above
-  const uint16_t ADDR_STEP_DELAY  = 7;   // 1 byte — ms delay between each motor step
-  const uint16_t ADDR_HOMING_STEP_DELAY = 8;  // 1 byte — ms delay between each motor step
-                                              // during homing
-  const uint16_t ADDR_DEBOUNCE_MS = 9;  // 2 bytes — ms debounce timing for the home sensor
-  const uint16_t ADDR_RAMP_START_DELAY = 11;  // 1 byte — ms step delay at the ends of a move
-  const uint16_t ADDR_RAMP_STEPS  = 12;  // 1 byte — steps to ramp over at each end of a move
-  const uint16_t ADDR_SETTLE_MS   = 13;  // 1 byte — ms to hold the coils before releasing
-  const uint16_t ADDR_STAGGER_MS  = 14;  // 1 byte — ms startup delay per module ID
-  const uint16_t ADDR_REVOLUTIONS = 15;  // 4 bytes — lifetime revolution count
+  const uint16_t ADDR_STEP_DELAY_US = 7;  // 2 bytes — µs delay between each motor step
+  const uint16_t ADDR_HOMING_STEP_DELAY_US = 9;  // 2 bytes — µs delay between each motor
+                                                 // step during homing
+  const uint16_t ADDR_DEBOUNCE_MS = 11;  // 2 bytes — ms debounce timing for the home sensor
+  const uint16_t ADDR_RAMP_START_DELAY_US = 13;  // 2 bytes — µs step delay at the ends of a move
+  const uint16_t ADDR_RAMP_STEPS  = 15;  // 1 byte — steps to ramp over at each end of a move
+  const uint16_t ADDR_SETTLE_MS   = 16;  // 1 byte — ms to hold the coils before releasing
+  const uint16_t ADDR_STAGGER_MS  = 17;  // 1 byte — ms startup delay per module ID
+  const uint16_t ADDR_REVOLUTIONS = 18;  // 4 bytes — lifetime revolution count
 
   // Magic value written to ADDR_INIT to indicate EEPROM has been initialized.
   // Changing this value forces all modules to reset to defaults on next boot.
-  const uint8_t INIT_VALUE = 0x06;
+  // 0x07: the step delays changed from 1-byte ms to 2-byte µs.
+  const uint8_t INIT_VALUE = 0x07;
 
   Config config;
 
@@ -79,9 +80,9 @@ namespace {
     EEPROM.get(ADDR_TOTAL_STEPS, config.totalSteps);
     EEPROM.get(ADDR_DEBOUNCE_MS, config.debounceMs);
     config.moduleId = EEPROM.read(ADDR_MODULE_ID);
-    config.stepDelay = EEPROM.read(ADDR_STEP_DELAY);
-    config.homingStepDelay = EEPROM.read(ADDR_HOMING_STEP_DELAY);
-    config.rampStartDelay = EEPROM.read(ADDR_RAMP_START_DELAY);
+    EEPROM.get(ADDR_STEP_DELAY_US, config.stepDelayUs);
+    EEPROM.get(ADDR_HOMING_STEP_DELAY_US, config.homingStepDelayUs);
+    EEPROM.get(ADDR_RAMP_START_DELAY_US, config.rampStartDelayUs);
     config.rampSteps = EEPROM.read(ADDR_RAMP_STEPS);
     config.settleMs = EEPROM.read(ADDR_SETTLE_MS);
     config.staggerMs = EEPROM.read(ADDR_STAGGER_MS);
@@ -118,13 +119,13 @@ void writeDefaults(uint8_t hardcodedId) {
   saveTotalSteps(DEFAULT_TOTAL_STEPS);
   saveDebounceMs(DEFAULT_DEBOUNCE_MS);
   saveModuleId(hardcodedId);
-  saveStepDelay(DEFAULT_STEP_DELAY);
-  saveHomingStepDelay(DEFAULT_HOMING_STEP_DELAY);
+  saveStepDelayUs(DEFAULT_STEP_DELAY_US);
+  saveHomingStepDelayUs(DEFAULT_HOMING_STEP_DELAY_US);
   saveAutoHome(DEFAULT_AUTO_HOME);
   saveMotorDir(DEFAULT_MOTOR_CW);
   saveReleaseMotor(DEFAULT_RELEASE_MOTOR);
   saveRecalculateHome(DEFAULT_RECALCULATE_HOME);
-  saveRampStartDelay(DEFAULT_RAMP_START_DELAY);
+  saveRampStartDelayUs(DEFAULT_RAMP_START_DELAY_US);
   saveRampSteps(DEFAULT_RAMP_STEPS);
   saveSettleMs(DEFAULT_SETTLE_MS);
   saveStaggerMs(DEFAULT_STAGGER_MS);
@@ -161,22 +162,22 @@ uint8_t getModuleId() {
   return config.moduleId;
 }
 
-void saveStepDelay(uint8_t delay) {
-  config.stepDelay = delay;
-  EEPROM.write(ADDR_STEP_DELAY, delay);
+void saveStepDelayUs(uint16_t delayUs) {
+  config.stepDelayUs = delayUs;
+  EEPROM.put(ADDR_STEP_DELAY_US, delayUs);
 }
 
-uint8_t getStepDelay() {
-  return config.stepDelay;
+uint16_t getStepDelayUs() {
+  return config.stepDelayUs;
 }
 
-void saveHomingStepDelay(uint8_t delay) {
-  config.homingStepDelay = delay;
-  EEPROM.write(ADDR_HOMING_STEP_DELAY, delay);
+void saveHomingStepDelayUs(uint16_t delayUs) {
+  config.homingStepDelayUs = delayUs;
+  EEPROM.put(ADDR_HOMING_STEP_DELAY_US, delayUs);
 }
 
-uint8_t getHomingStepDelay() {
-  return config.homingStepDelay;
+uint16_t getHomingStepDelayUs() {
+  return config.homingStepDelayUs;
 }
 
 void saveDebounceMs(uint16_t millis) {
@@ -216,12 +217,12 @@ void saveRecalculateHome(bool recalculate) {
 
 bool recalculateHome() { return config.recalculateHome; }
 
-void saveRampStartDelay(uint8_t delay) {
-  config.rampStartDelay = delay;
-  EEPROM.write(ADDR_RAMP_START_DELAY, delay);
+void saveRampStartDelayUs(uint16_t delayUs) {
+  config.rampStartDelayUs = delayUs;
+  EEPROM.put(ADDR_RAMP_START_DELAY_US, delayUs);
 }
 
-uint8_t getRampStartDelay() { return config.rampStartDelay; }
+uint16_t getRampStartDelayUs() { return config.rampStartDelayUs; }
 
 void saveRampSteps(uint8_t steps) {
   config.rampSteps = steps;

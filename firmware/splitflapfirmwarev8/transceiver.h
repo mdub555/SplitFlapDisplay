@@ -53,20 +53,20 @@
 //            Transceiver::dump() below). If the module is moving, homing or
 //            calibrating, the reply is sent once that finishes. A broadcast
 //            ('m*d') is answered by every provisioned module in turn: each
-//            waits ID x 75 ms (after finishing anything in progress) so the
+//            waits ID x 90 ms (after finishing anything in progress) so the
 //            replies don't collide. Unprovisioned modules don't answer a
 //            broadcast. No data expected
 //         j, Enable or disable recalculating home. 1 to continuously recalculate,
 //            0 to only calculate on home.
 //         k, Set the delay between each motor step during normal operation, in
-//            milliseconds.
+//            microseconds (1-65535).
 //         l, Set the delay between each motor step during homing and calibration
-//            operations, in milliseconds.
+//            operations, in microseconds (1-65535).
 //         x, Stop whatever the motor is doing. A stopped move keeps its step
 //            position; a stopped home or calibration leaves the position
 //            unknown, so the next move homes first. No data expected
 //         u, Set the step delay at the start and end of a move, in
-//            milliseconds (1-255). Moves ramp between this and the step delay.
+//            microseconds (1-65535). Moves ramp between this and the step delay.
 //         n, Set how many steps the ramp takes at each end of a move (0-255,
 //            0 = no ramp).
 //         e, Set how long to hold the coils after a move before releasing
@@ -177,12 +177,12 @@ class Transceiver {
   // messages with a missed or absent terminator).
   bool poll(Command& command);
 
-  // Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>
-  //              :<homingStepDelay>:<clockwise>:<autoHome>:<releaseMotor>
-  //              :<recalculateHome>:<rampStartDelay>:<rampSteps>:<settleMs>
+  // Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelayUs>
+  //              :<homingStepDelayUs>:<clockwise>:<autoHome>:<releaseMotor>
+  //              :<recalculateHome>:<rampStartDelayUs>:<rampSteps>:<settleMs>
   //              :<staggerMs>:<revolutions>:<drift>
   // where revolutions and drift come from SplitFlap, passed in by the
-  // caller. Drift stays last; new fields go before it. Typically ~50 bytes.
+  // caller. Drift stays last; new fields go before it. Typically ~60 bytes.
   void dump(uint32_t revolutions, int16_t drift);
 
   // The last message poll() parsed, as received (without the '\n'). Only

@@ -98,10 +98,13 @@ window.fetch = async (url, options = {}) => {
     // (only module 0 is provisioned here).
     return ok({ timezone: 'US/Eastern', zip_code: '02118', auto_home: true,
       modules: { '0': { homeOffset: 2832, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false, drift: 3, revolutions: 12345,
-                       stepDelay: 1, homingStepDelay: 2, debounceMs: 100, rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 120 },
-                '2': { homeOffset: 480, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false } },
-      firmware: { stepDelay: 1, homingStepDelay: 2, debounceMs: 100, recalculateHome: true,
-                  rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 150 } });
+                       stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 120 },
+                '2': { homeOffset: 480, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false },
+                // Synced from firmware whose step delays were still in milliseconds.
+                '3': { homeOffset: 480, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false,
+                       stepDelay: 1, homingStepDelay: 2, debounceMs: 100, rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 150 } },
+      firmware: { stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, recalculateHome: true,
+                  rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 150 } });
   }
   if (url === '/playlists') {
     if (options.method === 'POST') return ok({ status: 'saved', name: 'Test' });
@@ -146,14 +149,14 @@ window.fetch = async (url, options = {}) => {
   if (url === '/firmware_config') {
     if (options.method === 'POST') return ok({ status: 'success', values: JSON.parse(options.body) });
     return ok({
-      values: { stepDelay: 1, homingStepDelay: 2, debounceMs: 100, recalculateHome: true,
-                rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 150 },
+      values: { stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, recalculateHome: true,
+                rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 150 },
       limits: {
-        stepDelay:       { type: 'int',  min: 1, max: 255 },
-        homingStepDelay: { type: 'int',  min: 1, max: 255 },
+        stepDelayUs:       { type: 'int',  min: 1, max: 65535 },
+        homingStepDelayUs: { type: 'int',  min: 1, max: 65535 },
         debounceMs:      { type: 'int',  min: 0, max: 65535 },
         recalculateHome: { type: 'bool', min: null, max: null },
-        rampStartDelay:  { type: 'int',  min: 1, max: 255 },
+        rampStartDelayUs:  { type: 'int',  min: 1, max: 65535 },
         rampSteps:       { type: 'int',  min: 0, max: 255 },
         settleMs:        { type: 'int',  min: 0, max: 255 },
         staggerMs:       { type: 'int',  min: 0, max: 255 },

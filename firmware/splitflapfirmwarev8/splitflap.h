@@ -171,7 +171,7 @@ class SplitFlap {
   int8_t targetFlapIdx = FLAP_BETWEEN;  // flap index a PHASE_MOVE ends on
   uint16_t stepsRemaining = 0;  // steps left in PHASE_MOVE / PHASE_OFFSET
   uint16_t stepsTaken = 0;      // steps since the phase began
-  uint32_t lastStepMs = 0;      // millis() of the last step
+  uint32_t lastStepUs = 0;      // micros() of the last step
 
   // ---- Work waiting to start ----
   int8_t pendingFlapIdx = NO_PENDING_FLAP;  // flap to move to once homing finishes
@@ -199,12 +199,12 @@ class SplitFlap {
   // idle, so the write doesn't stall a move.
   void saveRevolutionsIfDue();
 
-  // The delay before the next step of the current phase.
-  uint8_t stepDelay() const;
+  // The delay (µs) before the next step of the current phase.
+  uint16_t stepDelayUs() const;
 
-  // The delay before the next step of a PHASE_MOVE, ramping between the ramp
-  // start delay and the step delay at each end of the move.
-  uint8_t moveStepDelay() const;
+  // The delay (µs) before the next step of a PHASE_MOVE, ramping between the
+  // ramp start delay and the step delay at each end of the move.
+  uint16_t moveStepDelayUs() const;
 
   // Advances the current phase after a step. `edge` is whether the step
   // crossed the home edge.

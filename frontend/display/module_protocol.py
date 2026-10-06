@@ -24,33 +24,34 @@ def toggle_command(mod_id: int, key: str, value: bool) -> str:
 # Settings that are identical on every module. They live once in
 # settings['firmware'] and are applied with a broadcast (m*<cmd><value>)
 # rather than per module. Key -> firmware command and accepted range:
-#   m*k<ms>   delay between motor steps during normal moves
-#   m*l<ms>   delay between motor steps while homing / calibrating
+#   m*k<us>   delay between motor steps during normal moves
+#   m*l<us>   delay between motor steps while homing / calibrating
 #   m*b<ms>   home-sensor debounce
 #   m*j<0|1>  recalculate position every time the home sensor is passed
-#   m*u<ms>   step delay at the start and end of a move (moves ramp between
+#   m*u<us>   step delay at the start and end of a move (moves ramp between
 #             this and the step delay)
 #   m*n<n>    steps the ramp takes at each end of a move (0 = no ramp)
 #   m*e<ms>   hold the coils this long after a move before releasing them
 #   m*y<ms>   startup stagger: auto-home waits this long per module ID
-# The delays, ramp steps, settle time and stagger are stored by the firmware
-# as a uint8, so 255 is their ceiling.
+# The step delays are in microseconds and stored by the firmware as a uint16,
+# so 65535 is their ceiling; the ramp steps, settle time and stagger are stored
+# as a uint8, so 255 is theirs.
 GLOBAL_SETTINGS = {
-    'stepDelay':       {'cmd': 'k', 'type': 'int',  'min': 1, 'max': 255, 'default': 1},
-    'homingStepDelay': {'cmd': 'l', 'type': 'int',  'min': 1, 'max': 255, 'default': 1},
-    'debounceMs':      {'cmd': 'b', 'type': 'int',  'min': 0, 'max': 65535, 'default': 50},
-    'recalculateHome': {'cmd': 'j', 'type': 'bool', 'default': True},
-    'rampStartDelay':  {'cmd': 'u', 'type': 'int',  'min': 1, 'max': 255, 'default': 3},
-    'rampSteps':       {'cmd': 'n', 'type': 'int',  'min': 0, 'max': 255, 'default': 0},
-    'settleMs':        {'cmd': 'e', 'type': 'int',  'min': 0, 'max': 255, 'default': 0},
-    'staggerMs':       {'cmd': 'y', 'type': 'int',  'min': 0, 'max': 255, 'default': 150},
+    'stepDelayUs':       {'cmd': 'k', 'type': 'int',  'min': 1, 'max': 65535, 'default': 1000},
+    'homingStepDelayUs': {'cmd': 'l', 'type': 'int',  'min': 1, 'max': 65535, 'default': 1000},
+    'debounceMs':        {'cmd': 'b', 'type': 'int',  'min': 0, 'max': 65535, 'default': 50},
+    'recalculateHome':   {'cmd': 'j', 'type': 'bool', 'default': True},
+    'rampStartDelayUs':  {'cmd': 'u', 'type': 'int',  'min': 1, 'max': 65535, 'default': 3000},
+    'rampSteps':         {'cmd': 'n', 'type': 'int',  'min': 0, 'max': 255, 'default': 0},
+    'settleMs':          {'cmd': 'e', 'type': 'int',  'min': 0, 'max': 255, 'default': 0},
+    'staggerMs':         {'cmd': 'y', 'type': 'int',  'min': 0, 'max': 255, 'default': 150},
 }
 
 
 # A broadcast dump (m*d) is answered by each provisioned module in turn, ID
 # x DUMP_SLOT_S after the request (or after it finishes a move it was busy
 # with). Matches DUMP_SLOT_MS in the firmware.
-DUMP_SLOT_S = 0.075
+DUMP_SLOT_S = 0.090
 
 
 def global_command(key: str, value) -> str:
