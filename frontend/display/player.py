@@ -28,7 +28,7 @@ def frame_message(text, order, interval_ms):
     """The frame broadcast for `text`: m*F<interval>:<pairs>, where pairs
     are each module's character and its rank in `order`, for modules 0, 1,
     2, ... in turn. A module starts moving rank x interval_ms after the
-    frame ends. See tranceiver.h in the firmware."""
+    frame ends. See transceiver.h in the firmware."""
     ranks = [0] * len(text)
     for rank, i in enumerate(order):
         if i < len(text):

@@ -1,7 +1,7 @@
 """Wire-protocol details for a module's boolean settings.
 
 Shared by the inspector toggle route and backup restore so the command letters
-live in exactly one place. See firmware/splitflapfirmwarev8/tranceiver.h for
+live in exactly one place. See firmware/splitflapfirmwarev8/transceiver.h for
 the full message grammar.
 """
 

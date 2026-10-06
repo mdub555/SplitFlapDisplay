@@ -1,5 +1,5 @@
-#ifndef TRANCEIVER_H
-#define TRANCEIVER_H
+#ifndef TRANSCEIVER_H
+#define TRANSCEIVER_H
 
 #include <Arduino.h>
 
@@ -15,7 +15,7 @@
 //
 // Numeric data is an unsigned 16-bit value (0–65535). The parser rejects a
 // number that doesn't fit, a numeric command with no digits, or a value
-// outside the command's range (see LIMITS in tranceiver.cpp), instead of
+// outside the command's range (see COMMANDS in transceiver.cpp), instead of
 // wrapping, defaulting to 0, or truncating it.
 //   - ID
 //         *, wildcard, all modules targeted
@@ -44,7 +44,7 @@
 //         r, Enable or disable releasing the motor coils when idle. data must
 //            be 1 to release, 0 to keep them energized
 //         d, Dump the module state back to the Raspberry Pi (format at
-//            Tranceiver::dump() below). If the module is moving, homing or
+//            Transceiver::dump() below). If the module is moving, homing or
 //            calibrating, the reply is sent once that finishes. A broadcast
 //            ('m*d') is answered by every provisioned module in turn: each
 //            waits ID x 75 ms (after finishing anything in progress) so the
@@ -73,6 +73,9 @@
 //         z, Reboot the module. No data expected
 //         q, Reset every setting to its default, keeping the module ID, then
 //            reboot. No data expected
+//         v, Exercise: step through every flap one at a time, N times round
+//            the reel (1-255; 0 does nothing). Any other motion command or
+//            'x' ends it.
 //
 // Frame broadcast: "m*F<interval>:<pairs>\n" sets every module at once.
 //   <pairs> has two bytes per module, for IDs 0, 1, 2, ... in order: the
@@ -83,11 +86,10 @@
 //   no pair ignores the frame. The pairs are read as they arrive rather than
 //   buffered, so a frame can be longer than BUFFER_SIZE; up to 94 modules
 //   (the printable ranks).
-//
-//         v, Exercise: step through every flap one at a time, N times round
-//            the reel (1-255; 0 does nothing). Any other motion command or
-//            'x' ends it.
 // =============================================================================
+
+// Each command's letter and accepted data are in COMMANDS in transceiver.cpp,
+// which is indexed by this enum: keep the two in the same order.
 enum CommandType {
   UNKNOWN_COMMAND,
   DISPLAY_CHAR,           // '-'
@@ -130,7 +132,7 @@ struct Command {
   uint16_t frameDelayMs = 0;  // FRAME: wait before moving to dataChar
 };
 
-class Tranceiver {
+class Transceiver {
  private:
   char buffer[BUFFER_SIZE];
   uint8_t bufferLen = 0;
@@ -145,6 +147,11 @@ class Tranceiver {
   uint8_t frameRank = 0;       // and its rank
   bool frameHit = false;       // both of this module's bytes received
 
+  // Parses the buffered message into `command`, then empties the buffer
+  // (leaving the message for message()). Returns whether it was a valid
+  // command for this module.
+  bool parseBuffer(Command& command);
+
   // Starts frame mode if the buffer holds a complete frame header.
   void checkFrameHeader();
 
@@ -153,10 +160,8 @@ class Tranceiver {
   bool frameByte(char c, Command& command);
 
  public:
-  // Sets up the DE pin and RS-485 serial link. Call once from setup().
-  Tranceiver() = default;
-
-  // Setup the RX, TX, and DE pins and begin the serial library.
+  // Sets up the RX, TX and DE pins and begins the RS-485 serial link. Call
+  // once from setup().
   void begin(long baud);
 
   // Call every loop() iteration. Reads any available bytes and populates a
@@ -165,7 +170,7 @@ class Tranceiver {
   // this loop, it leaves the given command alone and returns false.
   // Also flushes stalled numeric commands after a short timeout (handles
   // messages with a missed or absent terminator).
-  bool poll(Command& poll);
+  bool poll(Command& command);
 
   // Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>
   //              :<homingStepDelay>:<clockwise>:<autoHome>:<releaseMotor>

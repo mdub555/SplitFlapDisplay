@@ -27,8 +27,15 @@ enum SplitFlapError : uint8_t {
   SPLITFLAP_CALIBRATION_OUT_OF_RANGE = 2,    // measured steps were implausible
 };
 
+// Flap index values other than a flap number (0–63).
+const int8_t FLAP_UNKNOWN = -1;  // the position is unknown; the reel needs homing
+const int8_t FLAP_BETWEEN = -2;  // the step position is known, but not on a flap
+
 class SplitFlap {
  private:
+  // pendingFlapIdx when no move is waiting on homing.
+  static const int8_t NO_PENDING_FLAP = -1;
+
   // What the motor is currently doing.
   enum Phase : uint8_t {
     PHASE_IDLE,       // not moving
@@ -40,7 +47,7 @@ class SplitFlap {
   };
 
   uint16_t currentStepPos = 0;  // Current motor position in half-steps (0 = flap 0)
-  int8_t currentFlapIdx = -1;   // Which flap is currently showing (-1 = unknown)
+  int8_t currentFlapIdx = FLAP_UNKNOWN;  // Which flap is currently showing
   SplitFlapError error = SPLITFLAP_OK;
   int16_t drift = 0;            // see lastDrift()
   uint32_t revolutions = 0;     // see revolutionCount()
@@ -53,8 +60,8 @@ class SplitFlap {
   Phase phase = PHASE_IDLE;
   bool calibrating = false;     // PHASE_SEEK_HOME leads to PHASE_MEASURE
   bool autoHomePending = false; // home once the startup stagger has passed
-  int8_t targetFlapIdx = -2;    // flap index a PHASE_MOVE ends on (-2 = raw step)
-  int8_t pendingFlapIdx = -1;   // flap to move to once homing finishes (-1 = none)
+  int8_t targetFlapIdx = FLAP_BETWEEN;  // flap index a PHASE_MOVE ends on
+  int8_t pendingFlapIdx = NO_PENDING_FLAP;  // flap to move to once homing finishes
   uint16_t targetStepPos = 0;   // where a PHASE_MOVE stops
   uint16_t stepsRemaining = 0;  // steps left in PHASE_MOVE / PHASE_OFFSET
   uint16_t stepsTaken = 0;      // steps since the phase began
@@ -79,7 +86,7 @@ class SplitFlap {
   uint16_t stepsToTarget(uint16_t targetStepPos) const;
 
   // Starts stepping toward `stepPos`; the move ends on flap `flapIdx`
-  // (-2 for a raw step position).
+  // (FLAP_BETWEEN for a raw step position).
   void startMove(uint16_t stepPos, int8_t flapIdx);
 
   // Starts a home (or, with `calibrate`, a calibration) from wherever the
@@ -127,14 +134,11 @@ class SplitFlap {
   bool isHoming() const;
 
   // Stops the current operation where it is. A stopped move leaves the step
-  // position known (flap index -2); a stopped home or calibration leaves the
-  // position unknown (-1).
+  // position known (FLAP_BETWEEN); a stopped home or calibration leaves the
+  // position unknown (FLAP_UNKNOWN).
   void stop();
 
-  // Returns if the module is actively home (according to the home sensor).
-  bool isHome();
-
-  // Returns the current flap index, or -1 if it's unknown, or -2 if the step
+  // Returns the current flap index, or FLAP_UNKNOWN, or FLAP_BETWEEN if the step
   // is known but not the flap (including while a move is in progress).
   int8_t currentFlapIndex() const;
 
@@ -142,7 +146,8 @@ class SplitFlap {
   uint16_t currentStepPosition() const;
 
   // Nudges the motor forward `steps` steps. The step position stays known,
-  // but the flap index becomes -2 since the reel is no longer on a flap.
+  // but the flap index becomes FLAP_BETWEEN since the reel is no longer on a
+  // flap.
   // Ignored while homing or calibrating.
   void nudge(uint16_t steps);
 

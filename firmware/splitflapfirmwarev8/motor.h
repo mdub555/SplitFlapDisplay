@@ -5,8 +5,8 @@
 // Motor — low-level stepper
 // ==============================================================================
 
-namespace Motor{
-  // Initialize and pins necessary to control the motor.
+namespace Motor {
+  // Initialize the pins necessary to control the motor.
   void begin();
 
   // Do a single step in the forward (advancing the flaps) direction.

@@ -4,11 +4,21 @@
 #include <Arduino.h>
 
 // ==============================================================================
-// EepromStore — thin wrapper around EEPROM reads/writes.
+// EepromStore — the module's persistent settings.
+//
+// Settings are cached in RAM: getters read the cache, and savers update both
+// the cache and EEPROM.
 // ==============================================================================
 
 namespace EepromStore {
+  // The module ID of a module that hasn't been given one yet. It isn't
+  // addressable on its own, and doesn't answer broadcast dumps or frames.
+  const uint8_t UNPROVISIONED_ID = 255;
+
+  // Writes the defaults on first boot (with `hardcodedId` as the module ID),
+  // then loads the settings into RAM.
   void begin(uint8_t hardcodedId);
+
   // True once EEPROM has been written with the magic value.
   bool isInitialized();
 

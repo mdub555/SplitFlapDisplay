@@ -21,6 +21,17 @@ namespace {
   // double-triggered, so it is not saved.
   const uint16_t CALIBRATION_MIN_STEPS = 3500;
   const uint16_t CALIBRATION_MAX_STEPS = 4800;
+
+  // flapIndexOf() for a character that isn't on the reel.
+  const uint8_t NOT_ON_REEL = 255;
+
+  // The index of `c` in FLAP_CHARS, or NOT_ON_REEL.
+  uint8_t flapIndexOf(char c) {
+    for (uint8_t i = 0; i < NUM_FLAPS; i++) {
+      if ((char)pgm_read_byte(&FLAP_CHARS[i]) == c) return i;
+    }
+    return NOT_ON_REEL;
+  }
 }
 
 
@@ -42,9 +53,9 @@ void SplitFlap::update() {
     // large display don't surge current at the same instant. A move that
     // arrives first homes straight away, which makes this a no-op.
     uint8_t id = EepromStore::getModuleId();
-    if (id != 255 && millis() < (uint32_t)id * EepromStore::getStaggerMs()) return;
+    if (id != EepromStore::UNPROVISIONED_ID && millis() < (uint32_t)id * EepromStore::getStaggerMs()) return;
     autoHomePending = false;
-    if (phase == PHASE_IDLE && currentFlapIdx == -1) {
+    if (phase == PHASE_IDLE && currentFlapIdx == FLAP_UNKNOWN) {
       home();
     }
   }
@@ -170,10 +181,10 @@ bool SplitFlap::isHoming() const {
 
 void SplitFlap::stop() {
   if (phase == PHASE_IDLE) return;
-  // A move already marks the flap as -2 (and a settle is after the move
-  // finished); homing or calibrating didn't establish the position.
-  if (isHoming()) currentFlapIdx = -1;
-  pendingFlapIdx = -1;
+  // A move already marks the flap as FLAP_BETWEEN (and a settle is after the
+  // move finished); homing or calibrating didn't establish the position.
+  if (isHoming()) currentFlapIdx = FLAP_UNKNOWN;
+  pendingFlapIdx = NO_PENDING_FLAP;
   cancelQueued();
   releaseNow();
 }
@@ -207,7 +218,7 @@ bool SplitFlap::stepAdvance() {
     // puts the edge exactly on flap 0.
     uint16_t expected = total - EepromStore::getHomeOffset();
     if (expected >= total) expected = 0;
-    if (currentFlapIdx != -1) {
+    if (currentFlapIdx != FLAP_UNKNOWN) {
       // How far the tracked position is past where the edge should be, in
       // the range -total/2..total/2. Skipped steps make this positive. Only
       // meaningful when the position was already known (not while homing).
@@ -233,10 +244,6 @@ uint32_t SplitFlap::revolutionCount() const { return revolutions; }
 
 uint16_t SplitFlap::currentStepPosition() const { return currentStepPos; }
 
-bool SplitFlap::isHome() {
-  return HomeSensor::homeActive();
-}
-
 void SplitFlap::startMove(uint16_t stepPos, int8_t flapIdx) {
   // Retargeting a move in progress keeps its speed rather than ramping again.
   if (phase != PHASE_MOVE) stepsTaken = 0;
@@ -244,14 +251,14 @@ void SplitFlap::startMove(uint16_t stepPos, int8_t flapIdx) {
   targetStepPos = stepPos;
   targetFlapIdx = flapIdx;
   stepsRemaining = stepsToTarget(stepPos);
-  currentFlapIdx = -2;  // between flaps until the move finishes
+  currentFlapIdx = FLAP_BETWEEN;  // between flaps until the move finishes
 }
 
 void SplitFlap::startHoming(bool calibrate) {
   phase = PHASE_SEEK_HOME;
   calibrating = calibrate;
   stepsTaken = 0;
-  currentFlapIdx = -1;
+  currentFlapIdx = FLAP_UNKNOWN;
 }
 
 void SplitFlap::startOffset() {
@@ -267,9 +274,9 @@ void SplitFlap::finishTravel() {
     currentFlapIdx = 0;
     error = SPLITFLAP_OK;
     int8_t next = pendingFlapIdx;
-    pendingFlapIdx = -1;
+    pendingFlapIdx = NO_PENDING_FLAP;
     phase = PHASE_IDLE;
-    if (next > 0) {
+    if (next > 0) {  // homing already ends on flap 0
       // A move arrived while homing; carry on to it without releasing.
       moveTo(next);
       return;
@@ -289,21 +296,21 @@ void SplitFlap::finishTravel() {
 
 void SplitFlap::failHoming(SplitFlapError reason) {
   error = reason;
-  currentFlapIdx = -1;
-  pendingFlapIdx = -1;
+  currentFlapIdx = FLAP_UNKNOWN;
+  pendingFlapIdx = NO_PENDING_FLAP;
   halt();
 }
 
 void SplitFlap::home() {
   debug->println("[Splitflap] homing");
-  pendingFlapIdx = -1;
+  pendingFlapIdx = NO_PENDING_FLAP;
   cancelQueued();
   startHoming(false);
 }
 
 void SplitFlap::calibrate() {
   debug->println("[Splitflap] calibrating");
-  pendingFlapIdx = -1;
+  pendingFlapIdx = NO_PENDING_FLAP;
   cancelQueued();
   startHoming(true);
 }
@@ -317,7 +324,8 @@ void SplitFlap::exercise(uint8_t cycles) {
   cancelQueued();
   if (cycles == 0) return;
   // The first move is to the next flap (flap 1 if the position isn't known
-  // as a flap: a home first if it's unknown, or straight there if it's -2).
+  // as a flap: a home first if it's unknown, or straight there if it's
+  // between flaps).
   exerciseMoves = (uint16_t)cycles * NUM_FLAPS - 1;
   moveTo(currentFlapIdx >= 0 ? (currentFlapIdx + 1) % NUM_FLAPS : 1);
 }
@@ -329,7 +337,7 @@ void SplitFlap::moveTo(uint8_t targetIndex) {
 
   // Homing in progress, or position unknown: move once homing finishes. If
   // homing fails, the move is dropped: the position would be a guess.
-  if (isHoming() || currentFlapIdx == -1) {
+  if (isHoming() || currentFlapIdx == FLAP_UNKNOWN) {
     pendingFlapIdx = targetIndex;
     if (!isHoming()) startHoming(false);
     return;
@@ -345,14 +353,8 @@ void SplitFlap::moveTo(uint8_t targetIndex) {
 void SplitFlap::moveToChar(char targetChar) {
   debug->print("[Splitflap] moving to char: ");
   debug->println(targetChar);
-  uint8_t targetIndex = 255;
-  for (uint8_t i = 0; i < NUM_FLAPS; i++) {
-    if ((char)pgm_read_byte(&FLAP_CHARS[i]) == targetChar) {
-      targetIndex = i;
-      break;
-    }
-  }
-  if (targetIndex == 255) return; // Character not on this reel
+  uint8_t targetIndex = flapIndexOf(targetChar);
+  if (targetIndex == NOT_ON_REEL) return;
   moveToIndex(targetIndex);
 }
 
@@ -367,7 +369,7 @@ void SplitFlap::goToRawStep(uint16_t targetStep) {
   debug->println(targetStep);
   if (isHoming()) return;
   cancelQueued();
-  startMove(targetStep, -2);  // Position known in steps but not as a named character
+  startMove(targetStep, FLAP_BETWEEN);  // Position known in steps but not as a named character
 }
 
 uint16_t SplitFlap::stepsToTarget(uint16_t targetStepPos) const {

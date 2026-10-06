@@ -8,7 +8,7 @@
 //
 // Multiple modules are wired together on an RS-485 serial bus and addressed by
 // a unique numeric ID. A Raspberry Pi sends commands over the bus; each module
-// listens for its own ID and responds accordingly. See tranceiver.h for the
+// listens for its own ID and responds accordingly. See transceiver.h for the
 // full message grammar and command reference.
 //
 // This file wires together all of the individual components and handles the
@@ -24,15 +24,15 @@
 #include "motor.h"
 #include "pinout.h"
 #include "splitflap.h"
-#include "tranceiver.h"
+#include "transceiver.h"
 
 // Default unset ID, to be updated via the frontend on installation.
 // This is burned into EEPROM on first boot if no saved ID exists.
-const uint8_t HARDCODED_ID = 255;
+const uint8_t HARDCODED_ID = EepromStore::UNPROVISIONED_ID;
 
 const long RS485_BAUD = 9600;
 
-Tranceiver tranceiver;
+Transceiver transceiver;
 DebugSerial debugSerial;  // TX only, on DEBUG_PIN at 19200 baud
 SplitFlap splitFlap(&debugSerial);
 Command command;
@@ -48,10 +48,39 @@ bool dumpPending = false;
 uint16_t dumpDelayMs = 0;  // wait before replying, once idle
 uint32_t dumpAtMs = 0;     // millis() to reply at
 
+// Starts a dump: right away for one addressed to this module, or in this
+// module's slot for a broadcast. Unprovisioned modules don't answer a
+// broadcast, since they'd all share the last slot.
+void requestDump(bool broadcast) {
+  uint8_t id = EepromStore::getModuleId();
+  if (broadcast && id == EepromStore::UNPROVISIONED_ID) return;
+  dumpDelayMs = broadcast ? id * DUMP_SLOT_MS : 0;
+  dumpAtMs = millis() + dumpDelayMs;
+  dumpPending = true;
+}
+
+// Call every loop(). Sends a requested dump once the module is idle and its
+// delay has passed.
+void updateDump() {
+  if (!dumpPending) return;
+  if (splitFlap.busy()) {
+    dumpAtMs = millis() + dumpDelayMs;  // the wait starts once idle
+  } else if ((int32_t)(millis() - dumpAtMs) >= 0) {
+    dumpPending = false;
+    transceiver.dump(splitFlap.revolutionCount(), splitFlap.lastDrift());
+  }
+}
+
 // millis() when identify ('f') was received, and whether it's still going.
 uint32_t identifyStartMs = 0;
 bool identifying = false;
 const uint16_t IDENTIFY_MS = 10000;
+
+// Blink rates for the status LED, as the bit of millis() that toggles the
+// LED: bit N gives a period of 2^(N+1) ms.
+const uint16_t BLINK_8HZ = 64;   // 128 ms period
+const uint16_t BLINK_4HZ = 128;  // 256 ms period
+const uint16_t BLINK_1HZ = 512;  // 1024 ms period
 
 // The status LED, in order of priority:
 //   fast blink (8 Hz)  identify was requested in the last 10 seconds
@@ -63,13 +92,13 @@ void updateStatusLed() {
   uint16_t now = millis();  // the low bits are all the blink phases need
   bool on;
   if (identifying && millis() - identifyStartMs < IDENTIFY_MS) {
-    on = now & 64;
+    on = now & BLINK_8HZ;
   } else {
     identifying = false;
     if (splitFlap.lastError() != SPLITFLAP_OK) {
-      on = now & 128;
-    } else if (EepromStore::getModuleId() == 255) {
-      on = now & 512;
+      on = now & BLINK_4HZ;
+    } else if (EepromStore::getModuleId() == EepromStore::UNPROVISIONED_ID) {
+      on = now & BLINK_1HZ;
     } else {
       on = splitFlap.isHoming();
     }
@@ -88,7 +117,7 @@ void setup() {
   EepromStore::begin(HARDCODED_ID);
   HomeSensor::begin();
   Motor::begin();
-  tranceiver.begin(RS485_BAUD);
+  transceiver.begin(RS485_BAUD);
   debugSerial.begin();
   splitFlap.begin();
   // Watchdog: if loop() stops running for about 2 seconds (a hang), the
@@ -96,155 +125,146 @@ void setup() {
   _PROTECTED_WRITE(WDT.CTRLA, WDT_PERIOD_2KCLK_gc);
 }
 
+// Carries out one command received on the bus.
+void handleCommand(const Command& command) {
+  switch (command.type) {
+    case DISPLAY_CHAR:
+      splitFlap.moveToChar(command.data.dataChar);
+      break;
+
+    case DISPLAY_INDEX:
+      splitFlap.moveToIndex(command.data.dataInt);
+      break;
+
+    case HOME:
+      splitFlap.home();
+      break;
+
+    case CALIBRATE:
+      splitFlap.calibrate();
+      break;
+
+    case SET_OFFSET:
+      // 0 is a special case that means set the current position as the offset
+      if (command.data.dataInt == 0) {
+        EepromStore::saveHomeOffset(splitFlap.currentStepPosition());
+      } else {
+        EepromStore::saveHomeOffset(command.data.dataInt);
+      }
+      break;
+
+    case SET_TOTAL_STEPS:
+      EepromStore::saveTotalSteps(command.data.dataInt);
+      break;
+
+    case SET_DEBOUNCE_MS:
+      EepromStore::saveDebounceMs(command.data.dataInt);
+      break;
+
+    case NUDGE:
+      splitFlap.nudge(command.data.dataInt);
+      break;
+
+    case MOVE_TO_STEP:
+      splitFlap.goToRawStep(command.data.dataInt);
+      break;
+
+    case SET_HOMING_STEP_DELAY:
+      EepromStore::saveHomingStepDelay(command.data.dataInt);
+      break;
+
+    case SET_STEP_DELAY:
+      EepromStore::saveStepDelay(command.data.dataInt);
+      break;
+
+    case SET_MODULE_ID:
+      EepromStore::saveModuleId(command.data.dataInt);
+      break;
+
+    case SET_AUTO_HOME:
+      EepromStore::saveAutoHome(command.data.dataInt);
+      break;
+
+    case SET_MOTOR_CW:
+      EepromStore::saveMotorDir(/* clockwise= */ command.data.dataInt);
+      break;
+
+    case SET_MOTOR_RELEASE:
+      EepromStore::saveReleaseMotor(command.data.dataInt);
+      if (command.data.dataInt) {
+        Motor::release();
+      } else {
+        Motor::tense();
+      }
+      break;
+
+    case SET_RECALCULATE_HOME:
+      EepromStore::saveRecalculateHome(command.data.dataInt);
+      break;
+
+    case DUMP_STATE:
+      requestDump(command.broadcast);
+      break;
+
+    case STOP:
+      splitFlap.stop();
+      break;
+
+    case IDENTIFY:
+      identifying = true;
+      identifyStartMs = millis();
+      break;
+
+    case REBOOT:
+      reboot();
+      break;
+
+    case FRAME:
+      splitFlap.moveToCharAfter(command.data.dataChar, command.frameDelayMs);
+      break;
+
+    case EXERCISE:
+      splitFlap.exercise(command.data.dataInt);
+      break;
+
+    case RESET_SETTINGS:
+      EepromStore::writeDefaults(EepromStore::getModuleId());
+      // Settings like total steps change under the current position, so
+      // start clean.
+      reboot();
+      break;
+
+    case SET_RAMP_START_DELAY:
+      EepromStore::saveRampStartDelay(command.data.dataInt);
+      break;
+
+    case SET_RAMP_STEPS:
+      EepromStore::saveRampSteps(command.data.dataInt);
+      break;
+
+    case SET_SETTLE_MS:
+      EepromStore::saveSettleMs(command.data.dataInt);
+      break;
+
+    case SET_STAGGER_MS:
+      EepromStore::saveStaggerMs(command.data.dataInt);
+      break;
+
+    default:
+      break;
+  }
+}
+
 void loop() {
   wdt_reset();
   splitFlap.update();
   updateStatusLed();
+  updateDump();
 
-  if (dumpPending) {
-    if (splitFlap.busy()) {
-      dumpAtMs = millis() + dumpDelayMs;  // the wait starts once idle
-    } else if ((int32_t)(millis() - dumpAtMs) >= 0) {
-      dumpPending = false;
-      tranceiver.dump(splitFlap.revolutionCount(), splitFlap.lastDrift());
-    }
-  }
-
-  if (tranceiver.poll(command)) {
+  if (transceiver.poll(command)) {
     // Log the message as received rather than a description per command,
     // which keeps the debug strings (and flash use) small.
-    debugSerial.println(tranceiver.message());
-    switch (command.type) {
-      case DISPLAY_CHAR:
-        splitFlap.moveToChar(command.data.dataChar);
-        break;
-
-      case DISPLAY_INDEX:
-        splitFlap.moveToIndex(command.data.dataInt);
-        break;
-
-      case HOME:
-        splitFlap.home();
-        break;
-
-      case CALIBRATE:
-        splitFlap.calibrate();
-        break;
-
-      case SET_OFFSET:
-        // 0 is a special case that means set the current position as the offset
-        if (command.data.dataInt == 0) {
-          EepromStore::saveHomeOffset(splitFlap.currentStepPosition());
-        } else {
-          EepromStore::saveHomeOffset(command.data.dataInt);
-        }
-        break;
-
-      case SET_TOTAL_STEPS:
-        EepromStore::saveTotalSteps(command.data.dataInt);
-        break;
-
-      case SET_DEBOUNCE_MS:
-        EepromStore::saveDebounceMs(command.data.dataInt);
-        break;
-
-      case NUDGE:
-        splitFlap.nudge(command.data.dataInt);
-        break;
-
-      case MOVE_TO_STEP:
-        splitFlap.goToRawStep(command.data.dataInt);
-        break;
-
-      case SET_HOMING_STEP_DELAY:
-        EepromStore::saveHomingStepDelay(command.data.dataInt);
-        break;
-
-      case SET_STEP_DELAY:
-        EepromStore::saveStepDelay(command.data.dataInt);
-        break;
-
-      case SET_MODULE_ID:
-        EepromStore::saveModuleId(command.data.dataInt);
-        break;
-
-      case SET_AUTO_HOME:
-        EepromStore::saveAutoHome(command.data.dataInt);
-        break;
-
-      case SET_MOTOR_CW:
-        EepromStore::saveMotorDir(/* clockwise= */ command.data.dataInt);
-        break;
-
-      case SET_MOTOR_RELEASE:
-        EepromStore::saveReleaseMotor(command.data.dataInt);
-        if (command.data.dataInt) {
-          Motor::release();
-        } else {
-          Motor::tense();
-        }
-        break;
-
-      case SET_RECALCULATE_HOME:
-        EepromStore::saveRecalculateHome(command.data.dataInt);
-        break;
-
-      case DUMP_STATE: {
-        uint8_t id = EepromStore::getModuleId();
-        if (command.broadcast && id == 255) break;
-        dumpDelayMs = command.broadcast ? id * DUMP_SLOT_MS : 0;
-        dumpAtMs = millis() + dumpDelayMs;
-        dumpPending = true;
-        break;
-      }
-
-      case STOP:
-        splitFlap.stop();
-        break;
-
-      case IDENTIFY:
-        identifying = true;
-        identifyStartMs = millis();
-        break;
-
-      case REBOOT:
-        reboot();
-        break;
-
-      case FRAME:
-        splitFlap.moveToCharAfter(command.data.dataChar, command.frameDelayMs);
-        break;
-
-      case EXERCISE:
-        splitFlap.exercise(command.data.dataInt);
-        break;
-
-      case RESET_SETTINGS:
-        EepromStore::writeDefaults(EepromStore::getModuleId());
-        // Settings like total steps change under the current position, so
-        // start clean.
-        reboot();
-        break;
-
-      case SET_RAMP_START_DELAY:
-        EepromStore::saveRampStartDelay(command.data.dataInt);
-        break;
-
-      case SET_RAMP_STEPS:
-        EepromStore::saveRampSteps(command.data.dataInt);
-        break;
-
-      case SET_SETTLE_MS:
-        EepromStore::saveSettleMs(command.data.dataInt);
-        break;
-
-      case SET_STAGGER_MS:
-        EepromStore::saveStaggerMs(command.data.dataInt);
-        break;
-
-      default:
-        break;
-    }
+    debugSerial.println(transceiver.message());
+    handleCommand(command);
   }
 }
-

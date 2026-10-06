@@ -4,47 +4,57 @@
 #include <EEPROM.h>
 
 namespace {
-  const uint16_t TOTAL_STEPS = 4096;
-  const uint16_t NUM_FLAPS = 64;
-  const uint16_t STEPS_PER_FLAP = TOTAL_STEPS/NUM_FLAPS;
-  const uint16_t DEBOUNCE_MS = 100;
-  // Ramp, settle and stagger defaults reproduce the behavior from before
-  // they were configurable: no ramp, no settle, 150 ms per module ID.
-  const uint8_t RAMP_START_DELAY = 3;
-  const uint8_t RAMP_STEPS = 0;
-  const uint8_t SETTLE_MS = 0;
-  const uint8_t STAGGER_MS = 150;
+  // ---- Defaults, written on first boot and by a settings reset ----
+  const uint16_t DEFAULT_TOTAL_STEPS = 4096;
+  const uint16_t STEPS_PER_FLAP = DEFAULT_TOTAL_STEPS / 64;  // 64 flaps on the reel
   // With the wire-based home sensor, home is detected immediatly when the
   // blank flap is visible. Home is on the white flap, which is 7 flaps
   // from the black flap. Set the home 7.5 flaps past home, making each
   // flap right in the middle of their expected position.
-  const uint16_t HOME_OFFSET = STEPS_PER_FLAP*7 + STEPS_PER_FLAP/2;
-  const uint8_t MASK_AUTO_HOME = 1;
-  const uint8_t MASK_MOTOR_CW = 1<<1;
-  const uint8_t MASK_RELEASE_MOTOR = 1<<2;
-  const uint8_t MASK_RECALCULATE_HOME = 1<<3;
+  const uint16_t DEFAULT_HOME_OFFSET = STEPS_PER_FLAP * 7 + STEPS_PER_FLAP / 2;
+  const uint16_t DEFAULT_DEBOUNCE_MS = 100;
+  const uint8_t DEFAULT_STEP_DELAY = 1;
+  const uint8_t DEFAULT_HOMING_STEP_DELAY = 1;
+  const bool DEFAULT_AUTO_HOME = false;
+  const bool DEFAULT_MOTOR_CW = true;
+  const bool DEFAULT_RELEASE_MOTOR = true;
+  const bool DEFAULT_RECALCULATE_HOME = true;
+  // Ramp, settle and stagger defaults reproduce the behavior from before
+  // they were configurable: no ramp, no settle, 150 ms per module ID.
+  const uint8_t DEFAULT_RAMP_START_DELAY = 3;
+  const uint8_t DEFAULT_RAMP_STEPS = 0;
+  const uint8_t DEFAULT_SETTLE_MS = 0;
+  const uint8_t DEFAULT_STAGGER_MS = 150;
 
+  // The boolean settings share one byte, one bit each.
+  const uint8_t MASK_AUTO_HOME = 1;
+  const uint8_t MASK_MOTOR_CW = 1 << 1;
+  const uint8_t MASK_RELEASE_MOTOR = 1 << 2;
+  const uint8_t MASK_RECALCULATE_HOME = 1 << 3;
+
+  // The RAM copy of every setting except the revolution count. Filled by
+  // load(), so it holds nothing meaningful before begin().
   struct Config {
-    uint16_t homeOffset = 0;   // Steps past magnet trigger to reach flap 0
-    uint16_t totalSteps = 0;   // Total steps for one full reel revolution
-    uint16_t debounceMs = 0;   // Debounce time for the home sensor
-    uint8_t  moduleId = 0;     // This module's bus ID (0–254; 255 = unset)
-    uint8_t  stepDelay = 1;    // The time between each motor step during normal rotation
-    uint8_t  homingStepDelay = 1; // The time between each motor step during homing
-    bool     autoHome = false; // Whether to home on every boot
-    bool     motorClockwise = true; // Whether the motor defaults to rotating clockwise
-    bool     releaseMotor = true;   // Whether the motor defaults to rotating clockwise
-    bool     recalculateHome = true; // Whether home is recalculated each rotation
-    uint8_t  rampStartDelay = 3; // Step delay (ms) at the start and end of a move
-    uint8_t  rampSteps = 0;      // Steps to ramp between rampStartDelay and stepDelay
-    uint8_t  settleMs = 0;       // Time to hold the coils after a move before releasing
-    uint8_t  staggerMs = 150;    // Startup delay per module ID
+    uint16_t homeOffset;       // Steps past the home edge to reach flap 0
+    uint16_t totalSteps;       // Total steps for one full reel revolution
+    uint16_t debounceMs;       // Debounce time for the home sensor
+    uint8_t  moduleId;         // This module's bus ID (0–254; 255 = unset)
+    uint8_t  stepDelay;        // The time between each motor step during normal rotation
+    uint8_t  homingStepDelay;  // The time between each motor step during homing
+    bool     autoHome;         // Whether to home on every boot
+    bool     motorClockwise;   // Whether the motor rotates clockwise
+    bool     releaseMotor;     // Whether to release the coils when idle
+    bool     recalculateHome;  // Whether home is recalculated each rotation
+    uint8_t  rampStartDelay;   // Step delay (ms) at the start and end of a move
+    uint8_t  rampSteps;        // Steps to ramp between rampStartDelay and stepDelay
+    uint8_t  settleMs;         // Time to hold the coils after a move before releasing
+    uint8_t  staggerMs;        // Startup delay per module ID
   };
 
   // ---- EEPROM Address Map ----
   // Each of these is the previous address + sizeof(previous data type)
   const uint16_t ADDR_INIT        = 0;   // 1 byte  — Magic number to detect valid EEPROM data
-  const uint16_t ADDR_HOME_OFFSET = 1;   // 2 bytes — Steps past magnet trigger to reach flap 0
+  const uint16_t ADDR_HOME_OFFSET = 1;   // 2 bytes — Steps past the home edge to reach flap 0
   const uint16_t ADDR_TOTAL_STEPS = 3;   // 2 bytes — Total steps for one full reel revolution
   const uint16_t ADDR_MODULE_ID   = 5;   // 1 byte  — This module's bus ID (0–254; 255 = unset)
   const uint16_t ADDR_BOOLEANS    = 6;   // 1 byte  — boolean configs, see masks above
@@ -83,11 +93,11 @@ namespace {
   }
 
   void saveBooleans() {
-    uint8_t booleans =
-      config.autoHome
-      | config.motorClockwise<<1
-      | config.releaseMotor<<2
-      | config.recalculateHome<<3;
+    uint8_t booleans = 0;
+    if (config.autoHome) booleans |= MASK_AUTO_HOME;
+    if (config.motorClockwise) booleans |= MASK_MOTOR_CW;
+    if (config.releaseMotor) booleans |= MASK_RELEASE_MOTOR;
+    if (config.recalculateHome) booleans |= MASK_RECALCULATE_HOME;
     EEPROM.write(ADDR_BOOLEANS, booleans);
   }
 }
@@ -104,20 +114,20 @@ void begin(uint8_t hardcodedId) {
 
 void writeDefaults(uint8_t hardcodedId) {
   EEPROM.write(ADDR_INIT, INIT_VALUE);
-  saveHomeOffset(HOME_OFFSET);
-  saveTotalSteps(TOTAL_STEPS);
-  saveDebounceMs(DEBOUNCE_MS);
+  saveHomeOffset(DEFAULT_HOME_OFFSET);
+  saveTotalSteps(DEFAULT_TOTAL_STEPS);
+  saveDebounceMs(DEFAULT_DEBOUNCE_MS);
   saveModuleId(hardcodedId);
-  saveStepDelay(1);
-  saveHomingStepDelay(1);
-  saveAutoHome(false);
-  saveMotorDir(/* clockwise= */ true);
-  saveReleaseMotor(true);
-  saveRecalculateHome(true);
-  saveRampStartDelay(RAMP_START_DELAY);
-  saveRampSteps(RAMP_STEPS);
-  saveSettleMs(SETTLE_MS);
-  saveStaggerMs(STAGGER_MS);
+  saveStepDelay(DEFAULT_STEP_DELAY);
+  saveHomingStepDelay(DEFAULT_HOMING_STEP_DELAY);
+  saveAutoHome(DEFAULT_AUTO_HOME);
+  saveMotorDir(DEFAULT_MOTOR_CW);
+  saveReleaseMotor(DEFAULT_RELEASE_MOTOR);
+  saveRecalculateHome(DEFAULT_RECALCULATE_HOME);
+  saveRampStartDelay(DEFAULT_RAMP_START_DELAY);
+  saveRampSteps(DEFAULT_RAMP_STEPS);
+  saveSettleMs(DEFAULT_SETTLE_MS);
+  saveStaggerMs(DEFAULT_STAGGER_MS);
 }
 
 bool isInitialized() {
