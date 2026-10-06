@@ -87,20 +87,20 @@ class FirmwareRoutesTest(unittest.TestCase):
         res = self.post(body)
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.get_json()['values'], body)
-        self.assertCountEqual(self.sent, ['m*k1250', 'm*l1800', 'm*b150', 'm*j0', 'm*u6000', 'm*n40',
-                                          'm*e120', 'm*y80'])
+        self.assertCountEqual(self.sent, ['m*S1250', 'm*H1800', 'm*D150', 'm*E0', 'm*R6000', 'm*L40',
+                                          'm*W120', 'm*P80'])
         self.assertEqual(self.settings['firmware'], body)
         self.assertEqual(self.saves, 1)
 
     def test_post_boolean_true_sends_one(self):
         self.post({'recalculateHome': True})
-        self.assertEqual(self.sent, ['m*j1'])
+        self.assertEqual(self.sent, ['m*E1'])
 
     def test_partial_post_sends_only_those_and_keeps_the_rest(self):
         self.settings['firmware'] = {'stepDelayUs': 4000, 'homingStepDelayUs': 5000,
                                      'debounceMs': 60, 'recalculateHome': False}
         self.post({'debounceMs': 0})
-        self.assertEqual(self.sent, ['m*b0'])
+        self.assertEqual(self.sent, ['m*D0'])
         self.assertEqual(self.settings['firmware'],
                          {**DEFAULTS, 'stepDelayUs': 4000, 'homingStepDelayUs': 5000, 'debounceMs': 0,
                           'recalculateHome': False})

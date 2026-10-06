@@ -6,13 +6,13 @@ the full message grammar.
 """
 
 # Settings key (as stored under settings['modules'][id]) -> firmware command:
-#   m<ID>a<0|1>  auto-home on boot
-#   m<ID>w<0|1>  motor direction (1 = clockwise)
-#   m<ID>r<0|1>  release the motor coils when idle
+#   m<ID>A<0|1>  auto-home on boot
+#   m<ID>C<0|1>  motor direction (1 = clockwise)
+#   m<ID>F<0|1>  free (release) the motor coils when idle
 TOGGLE_COMMANDS = {
-    'autoHome': 'a',
-    'motorClockwise': 'w',
-    'motorRelease': 'r',
+    'autoHome': 'A',
+    'motorClockwise': 'C',
+    'motorRelease': 'F',
 }
 
 
@@ -24,31 +24,31 @@ def toggle_command(mod_id: int, key: str, value: bool) -> str:
 # Settings that are identical on every module. They live once in
 # settings['firmware'] and are applied with a broadcast (m*<cmd><value>)
 # rather than per module. Key -> firmware command and accepted range:
-#   m*k<us>   delay between motor steps during normal moves
-#   m*l<us>   delay between motor steps while homing / calibrating
-#   m*b<ms>   home-sensor debounce
-#   m*j<0|1>  recalculate position every time the home sensor is passed
-#   m*u<us>   step delay at the start and end of a move (moves ramp between
+#   m*S<us>   delay between motor steps during normal moves
+#   m*H<us>   delay between motor steps while homing / calibrating
+#   m*D<ms>   home-sensor debounce
+#   m*E<0|1>  recalculate position every time the home sensor edge is passed
+#   m*R<us>   step delay at the start and end of a move (moves ramp between
 #             this and the step delay)
-#   m*n<n>    steps the ramp takes at each end of a move (0 = no ramp)
-#   m*e<ms>   hold the coils this long after a move before releasing them
-#   m*y<ms>   startup stagger: auto-home waits this long per module ID
+#   m*L<n>    steps the ramp takes at each end of a move (0 = no ramp)
+#   m*W<ms>   wait, holding the coils, this long after a move before releasing
+#   m*P<ms>   power-on stagger: auto-home waits this long per module ID
 # The step delays are in microseconds and stored by the firmware as a uint16,
 # so 65535 is their ceiling; the ramp steps, settle time and stagger are stored
 # as a uint8, so 255 is theirs.
 GLOBAL_SETTINGS = {
-    'stepDelayUs':       {'cmd': 'k', 'type': 'int',  'min': 1, 'max': 65535, 'default': 1000},
-    'homingStepDelayUs': {'cmd': 'l', 'type': 'int',  'min': 1, 'max': 65535, 'default': 1000},
-    'debounceMs':        {'cmd': 'b', 'type': 'int',  'min': 0, 'max': 65535, 'default': 50},
-    'recalculateHome':   {'cmd': 'j', 'type': 'bool', 'default': True},
-    'rampStartDelayUs':  {'cmd': 'u', 'type': 'int',  'min': 1, 'max': 65535, 'default': 3000},
-    'rampSteps':         {'cmd': 'n', 'type': 'int',  'min': 0, 'max': 255, 'default': 0},
-    'settleMs':          {'cmd': 'e', 'type': 'int',  'min': 0, 'max': 255, 'default': 0},
-    'staggerMs':         {'cmd': 'y', 'type': 'int',  'min': 0, 'max': 255, 'default': 150},
+    'stepDelayUs':       {'cmd': 'S', 'type': 'int',  'min': 1, 'max': 65535, 'default': 1000},
+    'homingStepDelayUs': {'cmd': 'H', 'type': 'int',  'min': 1, 'max': 65535, 'default': 1000},
+    'debounceMs':        {'cmd': 'D', 'type': 'int',  'min': 0, 'max': 65535, 'default': 50},
+    'recalculateHome':   {'cmd': 'E', 'type': 'bool', 'default': True},
+    'rampStartDelayUs':  {'cmd': 'R', 'type': 'int',  'min': 1, 'max': 65535, 'default': 3000},
+    'rampSteps':         {'cmd': 'L', 'type': 'int',  'min': 0, 'max': 255, 'default': 0},
+    'settleMs':          {'cmd': 'W', 'type': 'int',  'min': 0, 'max': 255, 'default': 0},
+    'staggerMs':         {'cmd': 'P', 'type': 'int',  'min': 0, 'max': 255, 'default': 150},
 }
 
 
-# A broadcast dump (m*d) is answered by each provisioned module in turn, ID
+# A broadcast dump (m*?) is answered by each provisioned module in turn, ID
 # x DUMP_SLOT_S after the request (or after it finishes a move it was busy
 # with). Matches DUMP_SLOT_MS in the firmware.
 DUMP_SLOT_S = 0.090

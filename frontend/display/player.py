@@ -25,7 +25,7 @@ def _bus_ms(num_bytes):
 
 
 def frame_message(text, order, interval_ms):
-    """The frame broadcast for `text`: m*F<interval>:<pairs>, where pairs
+    """The frame broadcast for `text`: m*f<interval>:<pairs>, where pairs
     are each module's character and its rank in `order`, for modules 0, 1,
     2, ... in turn. A module starts moving rank x interval_ms after the
     frame ends. See transceiver.h in the firmware."""
@@ -34,7 +34,7 @@ def frame_message(text, order, interval_ms):
         if i < len(text):
             ranks[i] = rank
     pairs = ''.join(char + chr(ord('!') + rank) for char, rank in zip(text, ranks))
-    return f"m*F{interval_ms}:{pairs}\n"
+    return f"m*f{interval_ms}:{pairs}\n"
 
 
 def send_to_display(text, order=None, raw=False, step_delay_ms=15):

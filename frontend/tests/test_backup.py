@@ -50,8 +50,8 @@ class RestoreBackupTest(unittest.TestCase):
         self.restore({'version': 3, 'modules': {}})
         # NUM_MODULES comes from the real config.py; just check module 0's pair
         # of commands appear, each exactly once, before any toggle commands.
-        self.assertIn('m00o100', self.sent)
-        self.assertIn('m00t2000', self.sent)
+        self.assertIn('m00O100', self.sent)
+        self.assertIn('m00T2000', self.sent)
 
     def test_pushes_toggles_present_in_the_restored_module(self):
         self.settings['modules'] = {}
@@ -59,7 +59,7 @@ class RestoreBackupTest(unittest.TestCase):
             '3': {'homeOffset': 480, 'totalSteps': 4096,
                   'autoHome': True, 'motorClockwise': False, 'motorRelease': True},
         }})
-        for cmd in ('m03a1', 'm03w0', 'm03r1'):
+        for cmd in ('m03A1', 'm03C0', 'm03F1'):
             with self.subTest(cmd=cmd):
                 self.assertIn(cmd, self.sent)
 

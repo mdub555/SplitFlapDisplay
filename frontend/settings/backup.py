@@ -44,8 +44,8 @@ def restore_backup(data: dict) -> bool:
         s = str(i)
         # If no config, fall back to the firmware defaults
         mod = settings['modules'].get(s) or {}
-        send_raw(f"m{i:02d}o{int(mod.get('homeOffset', DEFAULT_HOME_OFFSET))}")
-        send_raw(f"m{i:02d}t{int(mod.get('totalSteps', DEFAULT_TOTAL_STEPS))}")
+        send_raw(f"m{i:02d}O{int(mod.get('homeOffset', DEFAULT_HOME_OFFSET))}")
+        send_raw(f"m{i:02d}T{int(mod.get('totalSteps', DEFAULT_TOTAL_STEPS))}")
         # Toggles only go out if the backup actually has them (older backups and
         # modules with no saved config don't); never invent a value.
         for key in TOGGLE_COMMANDS:

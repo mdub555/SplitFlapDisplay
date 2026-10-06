@@ -51,7 +51,7 @@ def toggle_autohome():
         settings['modules'][mod_id]['autoHome'] = enabled
 
     save_settings(settings)
-    send_raw(f"m*a{1 if enabled else 0}")
+    send_raw(f"m*A{1 if enabled else 0}")
     return jsonify(status='Auto-home updated')
 
 
@@ -76,7 +76,7 @@ def provision_module():
     dump = None
     with serial_lock:
         ser.reset_input_buffer()
-        ser.write(b"m255d\n")
+        ser.write(b"m255?\n")
         ser.flush()
         start, buffer = time.time(), ""
         while time.time() - start < 2.0:
@@ -91,7 +91,7 @@ def provision_module():
         return jsonify(status="error", message="No unprovisioned module found on bus"), 404
 
     # 2. Assign it the target ID
-    send_raw(f"m255i{new_id}")
+    send_raw(f"m255@{new_id}")
     time.sleep(0.2)
 
     # 3. Use its current settings from hardware

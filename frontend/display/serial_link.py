@@ -38,18 +38,18 @@ def send_raw(cmd: str):
 
 
 def read_dump(mod_id: int, timeout: float = 5.0):
-    """m<ID>d — request and parse an EEPROM dump (home offset + total steps).
+    """m<ID>? — request and parse an EEPROM dump (home offset + total steps).
     Returns a dict or None on timeout/parse failure."""
-    # Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelayUs>:<homingStepDelayUs>
+    # Sends: m<ID>?:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelayUs>:<homingStepDelayUs>
     #              :<clockwise>:<autoHome>:<releaseMotor>:<recalculateHome>
     #              [:<rampStartDelayUs>:<rampSteps>:<settleMs>:<staggerMs>[:<revolutions>]:<drift>]
     if not ser:
         return None
     with serial_lock:
         ser.reset_input_buffer()
-        ser.write(f"m{mod_id:02d}d\n".encode())
+        ser.write(f"m{mod_id:02d}?\n".encode())
         ser.flush()
-        state._broadcast_serial(f"SENT: m{mod_id:02d}d")
+        state._broadcast_serial(f"SENT: m{mod_id:02d}?")
         start = time.time()
         buffer = ""
         while time.time() - start < timeout:
@@ -69,7 +69,7 @@ def read_dump(mod_id: int, timeout: float = 5.0):
 
 
 def read_all_dumps(max_id: int, margin: float = 0.5):
-    """m*d — ask every module for its dump at once. Each provisioned module
+    """m*? — ask every module for its dump at once. Each provisioned module
     answers in its own slot (ID x DUMP_SLOT_S after the request), so this
     listens until module `max_id`'s slot has passed, plus `margin`. Returns
     {mod_id: dump} for every reply received; modules that were busy (they
@@ -78,9 +78,9 @@ def read_all_dumps(max_id: int, margin: float = 0.5):
         return {}
     with serial_lock:
         ser.reset_input_buffer()
-        ser.write(b"m*d\n")
+        ser.write(b"m*?\n")
         ser.flush()
-        state._broadcast_serial("SENT: m*d")
+        state._broadcast_serial("SENT: m*?")
         deadline = time.time() + (max_id + 1) * DUMP_SLOT_S + margin
         buffer = ""
         while time.time() < deadline:
@@ -136,7 +136,7 @@ def _parse_dump_fields(text):
 
 
 def parse_buffer(buffer, mod_id=None):
-    """Find a complete `m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelayUs>:
+    """Find a complete `m<ID>?:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelayUs>:
     <homingStepDelayUs>:<clockwise>:<autoHome>:<releaseMotor>:<recalculateHome>`
     line anywhere in `buffer` and parse it. Pass `mod_id` to only accept that
     module's reply (any ID matches when omitted). Only newline-terminated lines
@@ -144,7 +144,7 @@ def parse_buffer(buffer, mod_id=None):
     firmware ends lines with \\r\\n (Serial.println), which is stripped here.
     Returns None when no complete, well-formed dump line is present."""
     id_pattern = r'\d+' if mod_id is None else f'{mod_id:02d}'
-    for match in re.finditer(rf'm{id_pattern}d:([^\r\n]*)\r?\n', buffer):
+    for match in re.finditer(rf'm{id_pattern}\?:([^\r\n]*)\r?\n', buffer):
         dump = _parse_dump_fields(match.group(1))
         if dump is not None:
             return dump
@@ -154,7 +154,7 @@ def parse_buffer(buffer, mod_id=None):
 def parse_all_dumps(buffer):
     """Every complete, well-formed dump line in `buffer`, as {mod_id: dump}."""
     dumps = {}
-    for match in re.finditer(r'm(\d+)d:([^\r\n]*)\r?\n', buffer):
+    for match in re.finditer(r'm(\d+)\?:([^\r\n]*)\r?\n', buffer):
         dump = _parse_dump_fields(match.group(2))
         if dump is not None:
             dumps[int(match.group(1))] = dump

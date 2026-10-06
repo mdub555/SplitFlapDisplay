@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // The buffer used to read in from the RS-485. The longest expected command
-// would be on the order of 'm64t4096\n', 9 characters, so 32 should be
+// would be on the order of 'm64T4096\n', 9 characters, so 32 should be
 // adequate without taking too much of the 512B SRAM available on an ATTiny816.
 #define BUFFER_SIZE 32
 
@@ -20,70 +20,81 @@
 //   - ID
 //         *, wildcard, all modules targeted
 //         N, the ID of the specific module targeted (at least one digit)
-//   - CMD
+//   - CMD, grouped by kind: lowercase letters (and - +) are actions,
+//     punctuation is about the module itself, and uppercase letters are
+//     settings saved to EEPROM, which always take a number.
+//
+//     Actions
 //         -, Display a character. data must be a single character
-//         +, Display an index. data must be a number
+//         +, Display a flap by index. data must be a number
 //         h, Home the module. No data expected
 //         c, Calibrate the module, calculating the number of steps in a full
 //            rotation. No data expected
-//         o, Set the offset number of steps from where home is detected to the
+//         n, Nudge the stepper motor forward N steps. Doesn't change the home
+//            offset; use 'O0' afterwards to save the new position as the
+//            offset. data must be a number
+//         g, Go to a specific motor step. data must be a number. Ignored until
+//            the module has been homed
+//         x, Stop whatever the motor is doing. A stopped move keeps its step
+//            position; a stopped home or calibration leaves the position
+//            unknown, so the next move homes first. No data expected
+//         e, Exercise: step through every flap one at a time, N times round
+//            the reel (1-255; 0 does nothing). Any other motion command or
+//            'x' ends it.
+//         b, Identify: blink the status LED quickly for 10 seconds, to find
+//            which physical module has this ID. No data expected
+//         r, Reboot the module. No data expected
+//         f, Frame broadcast; see below.
+//
+//     Module
+//         ?, Dump the module state back to the Raspberry Pi (format at
+//            Transceiver::dump() below). If the module is moving, homing or
+//            calibrating, the reply is sent once that finishes. A broadcast
+//            ('m*?') is answered by every provisioned module in turn: each
+//            waits ID x 90 ms (after finishing anything in progress) so the
+//            replies don't collide. Unprovisioned modules don't answer a
+//            broadcast. No data expected
+//         !, Reset every setting to its default, keeping the module ID, then
+//            reboot. No data expected
+//         @, Set the module ID. data must be a number. A broadcast ('m*@')
+//            is only accepted by unprovisioned modules (ID 255), so it can't
+//            give every module on the bus the same ID
+//
+//     Settings
+//         O, Set the offset number of steps from where home is detected to the
 //            blank flap. data must be a number. 0 instead makes the current
 //            position the blank flap (only while the position is known and
 //            the reel is still). A changed offset marks the position unknown,
 //            so the next move homes first
-//         t, Set the number of steps in a full rotation. data must be a number.
+//         T, Set the number of steps in a full rotation. data must be a number.
 //            A changed value stops any move and marks the position unknown,
 //            so the next move homes first
-//         b, Set the debounce delay for the home sensor. data must be a number
-//         s, Nudge the stepper motor forward N steps. Doesn't change the home
-//            offset; use 'o0' afterwards to save the new position as the
-//            offset. data must be a number
-//         g, Goto a specific motor step. data must be a number. Ignored until
-//            the module has been homed
-//         i, Set the module ID. data must be a number. A broadcast ('m*i')
-//            is only accepted by unprovisioned modules (ID 255), so it can't
-//            give every module on the bus the same ID
-//         a, Enable or disable auto-home. data must be 0 for disable, 1 for
+//         D, Set the debounce delay for the home sensor, in milliseconds
+//            (0-65535).
+//         E, Enable or disable recalculating home at each home edge. 1 to
+//            continuously recalculate, 0 to only calculate on home.
+//         A, Enable or disable auto-home. data must be 0 for disable, 1 for
 //            enable
-//         w, Set the motor direction. data must be 1 for clockwise, 0 for
+//         C, Set the motor direction. data must be 1 for clockwise, 0 for
 //            counter-clockwise
-//         r, Enable or disable releasing the motor coils when idle. data must
-//            be 1 to release, 0 to keep them energized
-//         d, Dump the module state back to the Raspberry Pi (format at
-//            Transceiver::dump() below). If the module is moving, homing or
-//            calibrating, the reply is sent once that finishes. A broadcast
-//            ('m*d') is answered by every provisioned module in turn: each
-//            waits ID x 90 ms (after finishing anything in progress) so the
-//            replies don't collide. Unprovisioned modules don't answer a
-//            broadcast. No data expected
-//         j, Enable or disable recalculating home. 1 to continuously recalculate,
-//            0 to only calculate on home.
-//         k, Set the delay between each motor step during normal operation, in
+//         F, Enable or disable freeing (releasing) the motor coils when idle.
+//            data must be 1 to release, 0 to keep them energized
+//         S, Set the delay between each motor step during normal operation, in
 //            microseconds (1-65535).
-//         l, Set the delay between each motor step during homing and calibration
+//         H, Set the delay between each motor step during homing and calibration
 //            operations, in microseconds (1-65535).
-//         x, Stop whatever the motor is doing. A stopped move keeps its step
-//            position; a stopped home or calibration leaves the position
-//            unknown, so the next move homes first. No data expected
-//         u, Set the step delay at the start and end of a move, in
+//         R, Set the step delay at the start and end of a move (the ramp), in
 //            microseconds (1-65535). Moves ramp between this and the step delay.
-//         n, Set how many steps the ramp takes at each end of a move (0-255,
+//         L, Set how many steps the ramp takes at each end of a move (0-255,
 //            0 = no ramp).
-//         e, Set how long to hold the coils after a move before releasing
-//            them, in milliseconds (0-255). Only used when release is on.
-//         y, Set the startup stagger: the auto-home waits this many
+//         W, Set how long to wait, holding the coils, after a move before
+//            releasing them, in milliseconds (0-255). Only used when release
+//            is on.
+//         P, Set the power-on stagger: the auto-home waits this many
 //            milliseconds per module ID after power-on (0-255). Takes effect
 //            on the next boot.
-//         f, Identify: blink the status LED quickly for 10 seconds, to find
-//            which physical module has this ID. No data expected
-//         z, Reboot the module. No data expected
-//         q, Reset every setting to its default, keeping the module ID, then
-//            reboot. No data expected
-//         v, Exercise: step through every flap one at a time, N times round
-//            the reel (1-255; 0 does nothing). Any other motion command or
-//            'x' ends it.
 //
-// Frame broadcast: "m*F<interval>:<pairs>\n" sets every module at once.
+// Frame broadcast: "m*f<interval>:<pairs>\n" sets every module at once.
 //   <pairs> has two bytes per module, for IDs 0, 1, 2, ... in order: the
 //   character to show, then its place in the animation as a printable byte,
 //   '!' + rank (rank 0 starts first). A module starts moving rank x
@@ -97,33 +108,36 @@
 // Each command's letter and accepted data are in COMMANDS in transceiver.cpp.
 enum CommandType : uint8_t {
   UNKNOWN_COMMAND,
+  // Actions
   DISPLAY_CHAR,           // '-'
   DISPLAY_INDEX,          // '+'
   HOME,                   // 'h'
   CALIBRATE,              // 'c'
-  SET_OFFSET,             // 'o'
-  SET_TOTAL_STEPS,        // 't'
-  SET_DEBOUNCE_MS,        // 'b'
-  NUDGE,                  // 's'
+  NUDGE,                  // 'n'
   MOVE_TO_STEP,           // 'g'
-  SET_MODULE_ID,          // 'i'
-  SET_AUTO_HOME,          // 'a'
-  DUMP_STATE,             // 'd'
-  SET_MOTOR_CW,           // 'w'
-  SET_MOTOR_RELEASE,      // 'r'
-  SET_RECALCULATE_HOME,   // 'j'
-  SET_STEP_DELAY,         // 'k'
-  SET_HOMING_STEP_DELAY,  // 'l'
   STOP,                   // 'x'
-  SET_RAMP_START_DELAY,   // 'u'
-  SET_RAMP_STEPS,         // 'n'
-  SET_SETTLE_MS,          // 'e'
-  SET_STAGGER_MS,         // 'y'
-  IDENTIFY,               // 'f'
-  REBOOT,                 // 'z'
-  RESET_SETTINGS,         // 'q'
-  EXERCISE,               // 'v'
-  FRAME,                  // 'F' (broadcast only, see above)
+  EXERCISE,               // 'e'
+  IDENTIFY,               // 'b'
+  REBOOT,                 // 'r'
+  FRAME,                  // 'f' (broadcast only, see above)
+  // Module
+  DUMP_STATE,             // '?'
+  RESET_SETTINGS,         // '!'
+  SET_MODULE_ID,          // '@'
+  // Settings
+  SET_OFFSET,             // 'O'
+  SET_TOTAL_STEPS,        // 'T'
+  SET_DEBOUNCE_MS,        // 'D'
+  SET_RECALCULATE_HOME,   // 'E'
+  SET_AUTO_HOME,          // 'A'
+  SET_MOTOR_CW,           // 'C'
+  SET_MOTOR_RELEASE,      // 'F'
+  SET_STEP_DELAY,         // 'S'
+  SET_HOMING_STEP_DELAY,  // 'H'
+  SET_RAMP_START_DELAY,   // 'R'
+  SET_RAMP_STEPS,         // 'L'
+  SET_SETTLE_MS,          // 'W'
+  SET_STAGGER_MS,         // 'P'
 };
 
 struct Command {
@@ -143,7 +157,7 @@ class Transceiver {
   uint8_t bufferLen = 0;
   uint32_t lastSerialTime = 0;
 
-  // Frame broadcast in progress: the header "m*F<interval>:" is in the
+  // Frame broadcast in progress: the header "m*f<interval>:" is in the
   // buffer and the pairs are being counted as they arrive.
   bool inFrame = false;
   uint16_t framePos = 0;       // bytes of pairs received so far
@@ -177,7 +191,7 @@ class Transceiver {
   // messages with a missed or absent terminator).
   bool poll(Command& command);
 
-  // Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelayUs>
+  // Sends: m<ID>?:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelayUs>
   //              :<homingStepDelayUs>:<clockwise>:<autoHome>:<releaseMotor>
   //              :<recalculateHome>:<rampStartDelayUs>:<rampSteps>:<settleMs>
   //              :<staggerMs>:<revolutions>:<drift>

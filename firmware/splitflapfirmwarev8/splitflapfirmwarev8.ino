@@ -72,7 +72,7 @@ void updateDump() {
   }
 }
 
-// millis() when identify ('f') was received, and whether it's still going.
+// millis() when identify ('b') was received, and whether it's still going.
 uint32_t identifyStartMs = 0;
 bool identifying = false;
 const uint16_t IDENTIFY_MS = 10000;

@@ -33,35 +33,43 @@ namespace {
     ArgKind arg;
   };
 
-  // Every command that can be sent by letter. FRAME isn't here: it's only
-  // reached through the frame header.
+  // The letters also used outside COMMANDS: the frame header, and the dump
+  // reply, which is marked with the dump command's letter.
+  const char FRAME_CODE = 'f';
+  const char DUMP_CODE = '?';
+
+  // Every command that can be sent by letter, grouped as in transceiver.h.
+  // FRAME isn't here: it's only reached through the frame header.
   const CommandSpec COMMANDS[] = {
+    // Actions
     {'-', DISPLAY_CHAR,          ARG_CHAR},
     {'+', DISPLAY_INDEX,         ARG_INT_BYTE},  // moveToIndex() ignores indexes past the last flap
     {'h', HOME,                  ARG_NONE},
     {'c', CALIBRATE,             ARG_NONE},
-    {'o', SET_OFFSET,            ARG_INT_BELOW_TOTAL},
-    {'t', SET_TOTAL_STEPS,       ARG_INT_NONZERO},
-    {'b', SET_DEBOUNCE_MS,       ARG_INT_ANY},
-    {'s', NUDGE,                 ARG_INT_BELOW_TOTAL},
+    {'n', NUDGE,                 ARG_INT_BELOW_TOTAL},
     {'g', MOVE_TO_STEP,          ARG_INT_BELOW_TOTAL},
-    {'i', SET_MODULE_ID,         ARG_INT_BYTE},
-    {'a', SET_AUTO_HOME,         ARG_INT_BOOLEAN},
-    {'d', DUMP_STATE,            ARG_NONE},
-    {'w', SET_MOTOR_CW,          ARG_INT_BOOLEAN},
-    {'r', SET_MOTOR_RELEASE,     ARG_INT_BOOLEAN},
-    {'j', SET_RECALCULATE_HOME,  ARG_INT_BOOLEAN},
-    {'k', SET_STEP_DELAY,        ARG_INT_NONZERO},
-    {'l', SET_HOMING_STEP_DELAY, ARG_INT_NONZERO},
     {'x', STOP,                  ARG_NONE},
-    {'u', SET_RAMP_START_DELAY,  ARG_INT_NONZERO},
-    {'n', SET_RAMP_STEPS,        ARG_INT_BYTE},
-    {'e', SET_SETTLE_MS,         ARG_INT_BYTE},
-    {'y', SET_STAGGER_MS,        ARG_INT_BYTE},
-    {'f', IDENTIFY,              ARG_NONE},
-    {'z', REBOOT,                ARG_NONE},
-    {'q', RESET_SETTINGS,        ARG_NONE},
-    {'v', EXERCISE,              ARG_INT_BYTE},
+    {'e', EXERCISE,              ARG_INT_BYTE},
+    {'b', IDENTIFY,              ARG_NONE},
+    {'r', REBOOT,                ARG_NONE},
+    // Module
+    {DUMP_CODE, DUMP_STATE,      ARG_NONE},
+    {'!', RESET_SETTINGS,        ARG_NONE},
+    {'@', SET_MODULE_ID,         ARG_INT_BYTE},
+    // Settings
+    {'O', SET_OFFSET,            ARG_INT_BELOW_TOTAL},
+    {'T', SET_TOTAL_STEPS,       ARG_INT_NONZERO},
+    {'D', SET_DEBOUNCE_MS,       ARG_INT_ANY},
+    {'E', SET_RECALCULATE_HOME,  ARG_INT_BOOLEAN},
+    {'A', SET_AUTO_HOME,         ARG_INT_BOOLEAN},
+    {'C', SET_MOTOR_CW,          ARG_INT_BOOLEAN},
+    {'F', SET_MOTOR_RELEASE,     ARG_INT_BOOLEAN},
+    {'S', SET_STEP_DELAY,        ARG_INT_NONZERO},
+    {'H', SET_HOMING_STEP_DELAY, ARG_INT_NONZERO},
+    {'R', SET_RAMP_START_DELAY,  ARG_INT_NONZERO},
+    {'L', SET_RAMP_STEPS,        ARG_INT_BYTE},
+    {'W', SET_SETTLE_MS,         ARG_INT_BYTE},
+    {'P', SET_STAGGER_MS,        ARG_INT_BYTE},
   };
 
   // The COMMANDS entry for the letter `c`, or nullptr if there isn't one.
@@ -73,7 +81,7 @@ namespace {
   }
 
   // Finishes a numeric command, rejecting it if it had no digits (a truncated
-  // "m05k" must not set a 0 µs delay) or its value is out of range.
+  // "m05S" must not set a 0 µs delay) or its value is out of range.
   bool finishDataInt(Command& command, ArgKind arg, uint16_t value, bool hasDigits) {
     if (!hasDigits) return false;
     uint16_t max = 0xFFFF;
@@ -214,7 +222,7 @@ void Transceiver::dump(uint32_t revolutions, int16_t drift) {
   uint8_t id = EepromStore::getModuleId();
   if (id < 10) Serial.print("0");
   Serial.print(id);
-  Serial.print("d");
+  Serial.print(DUMP_CODE);
   printField(EepromStore::getHomeOffset());
   printField(EepromStore::getTotalSteps());
   printField(EepromStore::getDebounceMs());
@@ -244,8 +252,8 @@ bool Transceiver::parseBuffer(Command& command) {
 }
 
 void Transceiver::checkFrameHeader() {
-  // "m*F" then at least one digit then ':'
-  if (bufferLen < 5 || buffer[0] != 'm' || buffer[1] != '*' || buffer[2] != 'F') return;
+  // "m*f" then at least one digit then ':'
+  if (bufferLen < 5 || buffer[0] != 'm' || buffer[1] != '*' || buffer[2] != FRAME_CODE) return;
   uint16_t interval = 0;
   for (uint8_t i = 3; i < bufferLen - 1; i++) {
     if (!isDigit(buffer[i])) return;
