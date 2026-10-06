@@ -27,6 +27,7 @@ namespace {
 SplitFlap::SplitFlap(DebugSerial* debugSerial) : debug(debugSerial) {}
 
 void SplitFlap::begin() {
+  revolutions = savedRevolutions = EepromStore::getRevolutions();
   autoHomePending = EepromStore::autoHomeEnabled();
 }
 
@@ -43,7 +44,15 @@ void SplitFlap::update() {
     }
   }
 
-  if (phase == PHASE_IDLE) return;
+  if (phase == PHASE_IDLE) {
+    // Save the revolution count now and then, while idle so the EEPROM write
+    // doesn't stall a move.
+    if (revolutions - savedRevolutions >= 16) {
+      EepromStore::saveRevolutions(revolutions);
+      savedRevolutions = revolutions;
+    }
+    return;
+  }
   uint32_t now = millis();
   if (phase == PHASE_SETTLE) {
     if (now - lastStepMs >= EepromStore::getSettleMs()) releaseNow();
@@ -148,6 +157,7 @@ void SplitFlap::stop() {
   // finished); homing or calibrating didn't establish the position.
   if (isHoming()) currentFlapIdx = -1;
   pendingFlapIdx = -1;
+  exerciseMoves = 0;
   releaseNow();
 }
 
@@ -174,6 +184,7 @@ bool SplitFlap::stepAdvance() {
   if (currentStepPos >= EepromStore::getTotalSteps()) currentStepPos = 0;
   if (HomeSensor::detectRisingEdge()) {
     debug->println("[Splitflap] hit home sensor");
+    revolutions++;
     uint16_t total = EepromStore::getTotalSteps();
     // Where the home edge should be, given the home offset. An offset of 0
     // puts the edge exactly on flap 0.
@@ -200,6 +211,8 @@ int8_t SplitFlap::currentFlapIndex() const { return currentFlapIdx; }
 SplitFlapError SplitFlap::lastError() const { return error; }
 
 int16_t SplitFlap::lastDrift() const { return drift; }
+
+uint32_t SplitFlap::revolutionCount() const { return revolutions; }
 
 uint16_t SplitFlap::currentStepPosition() const { return currentStepPos; }
 
@@ -241,11 +254,18 @@ void SplitFlap::finishTravel() {
     phase = PHASE_IDLE;
     if (next > 0) {
       // A move arrived while homing; carry on to it without releasing.
-      moveToIndex(next);
+      moveTo(next);
       return;
     }
   } else {
     currentFlapIdx = targetFlapIdx;
+    if (exerciseMoves > 0 && currentFlapIdx >= 0) {
+      // Next flap of an exercise, as a separate move so it ramps again.
+      exerciseMoves--;
+      phase = PHASE_IDLE;
+      moveTo((currentFlapIdx + 1) % NUM_FLAPS);
+      return;
+    }
   }
   halt();
 }
@@ -260,16 +280,32 @@ void SplitFlap::failHoming(SplitFlapError reason) {
 void SplitFlap::home() {
   debug->println("[Splitflap] homing");
   pendingFlapIdx = -1;
+  exerciseMoves = 0;
   startHoming(false);
 }
 
 void SplitFlap::calibrate() {
   debug->println("[Splitflap] calibrating");
   pendingFlapIdx = -1;
+  exerciseMoves = 0;
   startHoming(true);
 }
 
 void SplitFlap::moveToIndex(uint8_t targetIndex) {
+  exerciseMoves = 0;
+  moveTo(targetIndex);
+}
+
+void SplitFlap::exercise(uint8_t cycles) {
+  exerciseMoves = 0;
+  if (cycles == 0) return;
+  // The first move is to the next flap (flap 1 if the position isn't known
+  // as a flap: a home first if it's unknown, or straight there if it's -2).
+  exerciseMoves = (uint16_t)cycles * NUM_FLAPS - 1;
+  moveTo(currentFlapIdx >= 0 ? (currentFlapIdx + 1) % NUM_FLAPS : 1);
+}
+
+void SplitFlap::moveTo(uint8_t targetIndex) {
   debug->print("[Splitflap] moving to index: ");
   debug->println(targetIndex);
   if (targetIndex >= NUM_FLAPS) return;
@@ -313,6 +349,7 @@ void SplitFlap::goToRawStep(uint16_t targetStep) {
   debug->print("[Splitflap] going to step: ");
   debug->println(targetStep);
   if (isHoming()) return;
+  exerciseMoves = 0;
   startMove(targetStep, -2);  // Position known in steps but not as a named character
 }
 

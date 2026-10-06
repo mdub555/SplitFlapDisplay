@@ -97,7 +97,11 @@ window.fetch = async (url, options = {}) => {
     // Same shape the real backend returns: per-module config lives under `modules`
     // (only module 0 is provisioned here).
     return ok({ timezone: 'US/Eastern', zip_code: '02118', auto_home: true,
-      modules: { '0': { homeOffset: 2832, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false } } });
+      modules: { '0': { homeOffset: 2832, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false, drift: 3, revolutions: 12345,
+                       stepDelay: 1, homingStepDelay: 2, debounceMs: 100, rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 120 },
+                '2': { homeOffset: 480, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false } },
+      firmware: { stepDelay: 1, homingStepDelay: 2, debounceMs: 100, recalculateHome: true,
+                  rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 150 } });
   }
   if (url === '/playlists') {
     if (options.method === 'POST') return ok({ status: 'saved', name: 'Test' });
@@ -108,6 +112,22 @@ window.fetch = async (url, options = {}) => {
   }
   if (url.match(/^\/modules\/\d+\/home$/)) {
     return ok({ status: 'Homing' });
+  }
+  if (url.match(/^\/modules\/\d+\/exercise$/)) {
+    return ok({ status: 'success', cycles: JSON.parse(options.body).cycles });
+  }
+  if (url.match(/^\/modules\/\d+\/stop$/)) {
+    return ok({ status: 'success' });
+  }
+  if (url.match(/^\/modules\/\d+\/reboot$/)) {
+    return ok({ status: 'success' });
+  }
+  if (url.match(/^\/modules\/\d+\/reset_settings$/)) {
+    return ok({ status: 'success', settings: { auto_home: true, modules: {
+      '10': { homeOffset: 480, totalSteps: 4096, autoHome: false, motorClockwise: true, motorRelease: true } } } });
+  }
+  if (url.match(/^\/modules\/\d+\/identify$/)) {
+    return ok({ status: 'success' });
   }
   if (url.match(/^\/modules\/\d+\/adjust$/)) {
     return ok({ new_offset: 2900 });
@@ -126,12 +146,17 @@ window.fetch = async (url, options = {}) => {
   if (url === '/firmware_config') {
     if (options.method === 'POST') return ok({ status: 'success', values: JSON.parse(options.body) });
     return ok({
-      values: { stepDelay: 1, homingStepDelay: 2, debounceMs: 100, recalculateHome: true },
+      values: { stepDelay: 1, homingStepDelay: 2, debounceMs: 100, recalculateHome: true,
+                rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 150 },
       limits: {
         stepDelay:       { type: 'int',  min: 1, max: 255 },
         homingStepDelay: { type: 'int',  min: 1, max: 255 },
-        debounceMs:      { type: 'int',  min: 0, max: 255 },
+        debounceMs:      { type: 'int',  min: 0, max: 65535 },
         recalculateHome: { type: 'bool', min: null, max: null },
+        rampStartDelay:  { type: 'int',  min: 1, max: 255 },
+        rampSteps:       { type: 'int',  min: 0, max: 255 },
+        settleMs:        { type: 'int',  min: 0, max: 255 },
+        staggerMs:       { type: 'int',  min: 0, max: 255 },
       },
     });
   }

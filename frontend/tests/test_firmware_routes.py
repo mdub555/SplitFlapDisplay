@@ -19,7 +19,8 @@ from flask import Flask
 FRONTEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, FRONTEND)
 
-DEFAULTS = {'stepDelay': 1, 'homingStepDelay': 1, 'debounceMs': 100, 'recalculateHome': True}
+DEFAULTS = {'stepDelay': 1, 'homingStepDelay': 1, 'debounceMs': 50, 'recalculateHome': True,
+            'rampStartDelay': 3, 'rampSteps': 0, 'settleMs': 0, 'staggerMs': 150}
 
 
 def _module(name, **attrs):
@@ -68,17 +69,18 @@ class FirmwareRoutesTest(unittest.TestCase):
     def test_get_describes_the_limits(self):
         limits = self.client.get('/firmware_config').get_json()['limits']
         self.assertEqual(limits['stepDelay'], {'type': 'int', 'min': 1, 'max': 255})
-        self.assertEqual(limits['debounceMs'], {'type': 'int', 'min': 0, 'max': 255})
+        self.assertEqual(limits['debounceMs'], {'type': 'int', 'min': 0, 'max': 65535})
         self.assertEqual(limits['recalculateHome']['type'], 'bool')
 
     # ---- POST: success ----------------------------------------------------
 
     def test_post_broadcasts_each_setting_saves_and_returns_values(self):
-        body = {'stepDelay': 2, 'homingStepDelay': 3, 'debounceMs': 150, 'recalculateHome': False}
+        body = {'stepDelay': 2, 'homingStepDelay': 3, 'debounceMs': 150, 'recalculateHome': False,
+                'rampStartDelay': 6, 'rampSteps': 40, 'settleMs': 120, 'staggerMs': 80}
         res = self.post(body)
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.get_json()['values'], body)
-        self.assertCountEqual(self.sent, ['m*k2', 'm*l3', 'm*b150', 'm*j0'])
+        self.assertCountEqual(self.sent, ['m*k2', 'm*l3', 'm*b150', 'm*j0', 'm*u6', 'm*n40', 'm*e120', 'm*y80'])
         self.assertEqual(self.settings['firmware'], body)
         self.assertEqual(self.saves, 1)
 
@@ -92,11 +94,17 @@ class FirmwareRoutesTest(unittest.TestCase):
         self.post({'debounceMs': 0})
         self.assertEqual(self.sent, ['m*b0'])
         self.assertEqual(self.settings['firmware'],
-                         {'stepDelay': 4, 'homingStepDelay': 5, 'debounceMs': 0, 'recalculateHome': False})
+                         {**DEFAULTS, 'stepDelay': 4, 'homingStepDelay': 5, 'debounceMs': 0,
+                          'recalculateHome': False})
 
     def test_range_edges_are_accepted(self):
         body = {'stepDelay': 255, 'homingStepDelay': 1, 'debounceMs': 0}
         self.assertEqual(self.post(body).status_code, 200)
+        self.assertEqual(self.post({'debounceMs': 65535}).status_code, 200)
+        self.assertEqual(self.post({'rampStartDelay': 1, 'rampSteps': 0, 'settleMs': 0}).status_code, 200)
+        self.assertEqual(self.post({'rampStartDelay': 255, 'rampSteps': 255, 'settleMs': 255}).status_code, 200)
+        self.assertEqual(self.post({'staggerMs': 0}).status_code, 200)
+        self.assertEqual(self.post({'staggerMs': 255}).status_code, 200)
 
     # ---- POST: rejected, nothing sent or saved ----------------------------
 
@@ -109,7 +117,10 @@ class FirmwareRoutesTest(unittest.TestCase):
 
     def test_out_of_range_integers(self):
         for key, bad in [('stepDelay', 0), ('stepDelay', 256), ('homingStepDelay', 0),
-                         ('debounceMs', -1), ('debounceMs', 256)]:
+                         ('debounceMs', -1), ('debounceMs', 65536),
+                         ('rampStartDelay', 0), ('rampStartDelay', 256), ('rampSteps', -1),
+                         ('rampSteps', 256), ('settleMs', -1), ('settleMs', 256),
+                         ('staggerMs', -1), ('staggerMs', 256)]:
             with self.subTest(key=key, value=bad):
                 self.assert_rejected(self.post({key: bad}))
 
@@ -127,7 +138,7 @@ class FirmwareRoutesTest(unittest.TestCase):
         self.assert_rejected(self.post({'bogus': 1}))
 
     def test_one_bad_value_rejects_the_whole_request(self):
-        self.assert_rejected(self.post({'stepDelay': 2, 'debounceMs': 999}))
+        self.assert_rejected(self.post({'stepDelay': 2, 'debounceMs': 65536}))
 
     def test_empty_or_non_object_body(self):
         for body in ({}, [], [1], 'x'):

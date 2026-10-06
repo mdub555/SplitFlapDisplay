@@ -16,6 +16,7 @@
 // ==============================================================================
 
 #include <Arduino.h>
+#include <avr/wdt.h>
 
 #include "debug_serial.h"
 #include "eeprom_store.h"
@@ -30,16 +31,49 @@
 const uint8_t HARDCODED_ID = 255;
 
 const long RS485_BAUD = 9600;
-const long DEBUG_BAUD = 19200;
 
 Tranceiver tranceiver;
-DebugSerial debugSerial(255, DEBUG_PIN);  // no RX needed; TX on pin 5 (PB4)
+DebugSerial debugSerial;  // TX only, on DEBUG_PIN at 19200 baud
 SplitFlap splitFlap(&debugSerial);
 Command command;
 
 // A dump requested while the module is busy (moving, homing, calibrating) is
 // sent once it finishes, so a dump after a calibrate reports the result.
 bool dumpPending = false;
+
+// millis() when identify ('f') was received, and whether it's still going.
+uint32_t identifyStartMs = 0;
+bool identifying = false;
+const uint16_t IDENTIFY_MS = 10000;
+
+// The status LED, in order of priority:
+//   fast blink (8 Hz)  identify was requested in the last 10 seconds
+//   4 Hz blink         the last home or calibration failed (see lastError())
+//   1 Hz blink         unprovisioned (ID 255)
+//   solid              homing or calibrating
+//   off                otherwise
+void updateStatusLed() {
+  uint16_t now = millis();  // the low bits are all the blink phases need
+  bool on;
+  if (identifying && millis() - identifyStartMs < IDENTIFY_MS) {
+    on = now & 64;
+  } else {
+    identifying = false;
+    if (splitFlap.lastError() != SPLITFLAP_OK) {
+      on = now & 128;
+    } else if (EepromStore::getModuleId() == 255) {
+      on = now & 512;
+    } else {
+      on = splitFlap.isHoming();
+    }
+  }
+  digitalWriteFast(STATUS_LED, on);
+}
+
+// Restarts the module, the same as a power cycle apart from the brief delay.
+void reboot() {
+  _PROTECTED_WRITE(RSTCTRL.SWRR, RSTCTRL_SWRE_bm);
+}
 
 // Start up the various components inside the module.
 void setup() {
@@ -48,16 +82,21 @@ void setup() {
   HomeSensor::begin();
   Motor::begin();
   tranceiver.begin(RS485_BAUD);
-  debugSerial.begin(DEBUG_BAUD);
+  debugSerial.begin();
   splitFlap.begin();
+  // Watchdog: if loop() stops running for about 2 seconds (a hang), the
+  // module resets itself. loop() feeds it every iteration.
+  _PROTECTED_WRITE(WDT.CTRLA, WDT_PERIOD_2KCLK_gc);
 }
 
 void loop() {
+  wdt_reset();
   splitFlap.update();
+  updateStatusLed();
 
   if (dumpPending && !splitFlap.busy()) {
     dumpPending = false;
-    tranceiver.dump(splitFlap.lastDrift());
+    tranceiver.dump(splitFlap.revolutionCount(), splitFlap.lastDrift());
   }
 
   if (tranceiver.poll(command)) {
@@ -145,6 +184,26 @@ void loop() {
 
       case STOP:
         splitFlap.stop();
+        break;
+
+      case IDENTIFY:
+        identifying = true;
+        identifyStartMs = millis();
+        break;
+
+      case REBOOT:
+        reboot();
+        break;
+
+      case EXERCISE:
+        splitFlap.exercise(command.data.dataInt);
+        break;
+
+      case RESET_SETTINGS:
+        EepromStore::writeDefaults(EepromStore::getModuleId());
+        // Settings like total steps change under the current position, so
+        // start clean.
+        reboot();
         break;
 
       case SET_RAMP_START_DELAY:

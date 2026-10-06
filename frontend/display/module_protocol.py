@@ -28,12 +28,22 @@ def toggle_command(mod_id: int, key: str, value: bool) -> str:
 #   m*l<ms>   delay between motor steps while homing / calibrating
 #   m*b<ms>   home-sensor debounce
 #   m*j<0|1>  recalculate position every time the home sensor is passed
-# Both delays are stored by the firmware as a uint8, so 255 is their ceiling.
+#   m*u<ms>   step delay at the start and end of a move (moves ramp between
+#             this and the step delay)
+#   m*n<n>    steps the ramp takes at each end of a move (0 = no ramp)
+#   m*e<ms>   hold the coils this long after a move before releasing them
+#   m*y<ms>   startup stagger: auto-home waits this long per module ID
+# The delays, ramp steps, settle time and stagger are stored by the firmware
+# as a uint8, so 255 is their ceiling.
 GLOBAL_SETTINGS = {
     'stepDelay':       {'cmd': 'k', 'type': 'int',  'min': 1, 'max': 255, 'default': 1},
     'homingStepDelay': {'cmd': 'l', 'type': 'int',  'min': 1, 'max': 255, 'default': 1},
     'debounceMs':      {'cmd': 'b', 'type': 'int',  'min': 0, 'max': 65535, 'default': 50},
     'recalculateHome': {'cmd': 'j', 'type': 'bool', 'default': True},
+    'rampStartDelay':  {'cmd': 'u', 'type': 'int',  'min': 1, 'max': 255, 'default': 3},
+    'rampSteps':       {'cmd': 'n', 'type': 'int',  'min': 0, 'max': 255, 'default': 0},
+    'settleMs':        {'cmd': 'e', 'type': 'int',  'min': 0, 'max': 255, 'default': 0},
+    'staggerMs':       {'cmd': 'y', 'type': 'int',  'min': 0, 'max': 255, 'default': 150},
 }
 
 

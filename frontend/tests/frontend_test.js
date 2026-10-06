@@ -179,6 +179,24 @@ async function main() {
   click(document.getElementById('tab-tuning'));
   await sleep(30);
   check('tuning tab loaded module grid', document.querySelectorAll('#modMatrix .mod-cell').length === 64);
+  check('inspector shows the selected module\'s drift', document.getElementById('inspectDrift').textContent === '3');
+  check('inspector shows the revolution count', document.getElementById('inspectRevolutions').textContent === '12,345');
+  const timing = document.getElementById('inspectTiming');
+  check('inspector shows the timing the module reported',
+    timing.textContent.startsWith('From last sync: step 1 ms · homing 2 ms · debounce 100 ms · ramp start 3 ms · ramp 0 steps · settle 0 ms · stagger 120 ms'));
+  const flagged = [...timing.querySelectorAll('.mismatch')].map(s => s.dataset.key);
+  check('only values that differ from the shared settings are highlighted',
+    flagged.length === 1 && flagged[0] === 'staggerMs');
+  click(document.querySelector('#modMatrix .mod-cell[data-id="1"]'));
+  await sleep(20);
+  check('unprovisioned module shows no drift', document.getElementById('inspectDrift').textContent === '---');
+  check('unprovisioned module shows no timing', document.getElementById('inspectTiming').textContent === '');
+  click(document.querySelector('#modMatrix .mod-cell[data-id="2"]'));
+  await sleep(20);
+  check('module synced from older firmware asks for a sync',
+    document.getElementById('inspectTiming').textContent === 'Sync this module to read its timing settings.');
+  click(document.querySelector('#modMatrix .mod-cell[data-id="0"]'));
+  await sleep(20);
 
   console.log('\n--- Firmware settings shared by every module ---');
   const fw = (key) => document.getElementById(`fw-${key}`);
@@ -187,7 +205,7 @@ async function main() {
     fw('stepDelay').value === '1' && fw('homingStepDelay').value === '2' &&
     fw('debounceMs').value === '100' && fw('recalculateHome').checked === true);
   check('input ranges come from the backend limits',
-    fw('debounceMs').min === '0' && fw('debounceMs').max === '255' && fw('stepDelay').min === '1');
+    fw('debounceMs').min === '0' && fw('debounceMs').max === '65535' && fw('stepDelay').min === '1');
 
   calls.length = 0;
   fw('stepDelay').value = '5';
@@ -199,9 +217,12 @@ async function main() {
   check('apply posts to /firmware_config', !!fwPost);
   check('apply sends every setting with real numbers and a real boolean',
     fwPost && JSON.stringify(JSON.parse(fwPost.body)) ===
-      JSON.stringify({ stepDelay: 5, homingStepDelay: 2, debounceMs: 150, recalculateHome: false }));
+      JSON.stringify({ stepDelay: 5, homingStepDelay: 2, debounceMs: 150, recalculateHome: false,
+                       rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 150 }));
 
-  for (const [key, bad] of [['stepDelay', '0'], ['debounceMs', '256'], ['homingStepDelay', '']]) {
+  for (const [key, bad] of [['stepDelay', '0'], ['debounceMs', '65536'], ['homingStepDelay', ''],
+                            ['rampStartDelay', '0'], ['rampSteps', '256'], ['settleMs', '-1'],
+                            ['staggerMs', '256']]) {
     const good = fw(key).value;
     calls.length = 0;
     const toastsBefore = toastCount();
@@ -312,6 +333,41 @@ async function main() {
   await sleep(20);
   check('home request still addresses the module by its real decimal id', calls.some(c => c.url === '/modules/10/home'));
   check('homing toast names the module in hex, not decimal', lastToastText() === 'Homing module 0A');
+
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="identifySelected"]'));
+  await sleep(20);
+  check('identify posts to the selected module', calls.some(c => c.url === '/modules/10/identify' && c.method === 'POST'));
+  check('identify toast names the module in hex', lastToastText() === 'Module 0A: status LED blinking for 10 s');
+
+  calls.length = 0;
+  document.getElementById('exerciseInput').value = '3';
+  click(document.querySelector('[data-onclick="exerciseSelected"]'));
+  await sleep(20);
+  const exPost = calls.find(c => c.url === '/modules/10/exercise');
+  check('exercise posts the cycle count as a number', exPost && JSON.parse(exPost.body).cycles === 3);
+  calls.length = 0;
+  document.getElementById('exerciseInput').value = '0';
+  click(document.querySelector('[data-onclick="exerciseSelected"]'));
+  await sleep(20);
+  check('exercise with 0 cycles sends nothing', !calls.some(c => c.url === '/modules/10/exercise'));
+  click(document.querySelector('[data-onclick="stopSelected"]'));
+  await sleep(20);
+  check('stop posts to the selected module', calls.some(c => c.url === '/modules/10/stop'));
+
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="rebootSelected"]'));
+  await sleep(20);
+  check('reboot asks first, naming the module in hex', lastConfirmMsg === 'Reboot module 0A?');
+  check('reboot posts to the selected module', calls.some(c => c.url === '/modules/10/reboot' && c.method === 'POST'));
+
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="resetSettingsSelected"]'));
+  await sleep(20);
+  check('reset settings asks first', lastConfirmMsg.startsWith('Reset every setting on module 0A'));
+  check('reset settings posts to the selected module', calls.some(c => c.url === '/modules/10/reset_settings'));
+  check('reset settings shows the values the module reported',
+    document.getElementById('inspectOffset').textContent === '480' && lastToastText() === 'Module 0A reset to defaults');
 
   click(document.querySelector('[data-onclick="calibrateSelected"]'));
   await sleep(20);

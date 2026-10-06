@@ -37,6 +37,10 @@ namespace {
       case 'n': return SET_RAMP_STEPS;
       case 'e': return SET_SETTLE_MS;
       case 'y': return SET_STAGGER_MS;
+      case 'f': return IDENTIFY;
+      case 'z': return REBOOT;
+      case 'q': return RESET_SETTINGS;
+      case 'v': return EXERCISE;
       default:  return UNKNOWN_COMMAND;
     }
   }
@@ -76,8 +80,12 @@ namespace {
     BYTE,         // SET_RAMP_STEPS
     BYTE,         // SET_SETTLE_MS
     BYTE,         // SET_STAGGER_MS
+    ANY,          // IDENTIFY
+    ANY,          // REBOOT
+    ANY,          // RESET_SETTINGS
+    BYTE,         // EXERCISE
   };
-  static_assert(sizeof(LIMITS) == SET_STAGGER_MS + 1,
+  static_assert(sizeof(LIMITS) == EXERCISE + 1,
                 "LIMITS needs one entry per CommandType");
 
   // Finishes a numeric command, rejecting it if it had no digits (a truncated
@@ -168,12 +176,16 @@ namespace {
             case SET_RAMP_STEPS:
             case SET_SETTLE_MS:
             case SET_STAGGER_MS:
+            case EXERCISE:
               parseState = READING_DATA_INT;
               break;
             case HOME:
             case CALIBRATE:
             case DUMP_STATE:
             case STOP:
+            case IDENTIFY:
+            case REBOOT:
+            case RESET_SETTINGS:
               return true;
             case UNKNOWN_COMMAND:
               return false;
@@ -228,7 +240,7 @@ namespace {
   }
 }
 
-void Tranceiver::dump(int16_t drift) {
+void Tranceiver::dump(uint32_t revolutions, int16_t drift) {
   Serial.print("m");
   uint8_t id = EepromStore::getModuleId();
   if (id < 10) Serial.print("0");
@@ -247,6 +259,8 @@ void Tranceiver::dump(int16_t drift) {
   printField(EepromStore::getRampSteps());
   printField(EepromStore::getSettleMs());
   printField(EepromStore::getStaggerMs());
+  Serial.print(':');
+  Serial.print(revolutions);
   Serial.print(':');
   Serial.println(drift);
 }

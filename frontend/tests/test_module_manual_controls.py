@@ -52,6 +52,7 @@ class ManualControlRoutesTest(unittest.TestCase):
             'module_routes_manual_under_test', os.path.join(FRONTEND, 'routes', 'module_routes.py'))
         routes = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(routes)
+        self.routes = routes
 
         app = Flask(__name__)
         app.register_blueprint(routes.bp)
@@ -176,6 +177,71 @@ class ManualControlRoutesTest(unittest.TestCase):
 
     def test_goto_step_unprovisioned_module(self):
         self.assert_rejected(self.post(9, 'goto_step', {'step': 10}), 404)
+
+    # ---- exercise / stop ----------------------------------------------------
+
+    def test_exercise_sends_command(self):
+        res = self.post(5, 'exercise', {'cycles': 3})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(self.sent, ['m05v3'])
+
+    def test_exercise_bounds(self):
+        for good in (1, 255):
+            with self.subTest(cycles=good):
+                self.assertEqual(self.post(5, 'exercise', {'cycles': good}).status_code, 200)
+        self.sent.clear()
+        for bad in (0, 256, -1, '3', 1.5, True, None):
+            with self.subTest(cycles=bad):
+                self.assert_rejected(self.post(5, 'exercise', {'cycles': bad}), 400)
+
+    def test_exercise_unprovisioned_module(self):
+        self.assert_rejected(self.post(9, 'exercise', {'cycles': 1}), 404)
+
+    def test_stop_sends_command(self):
+        self.assertEqual(self.post(5, 'stop', {}).status_code, 200)
+        self.assertEqual(self.sent, ['m05x'])
+
+    # ---- reboot / reset_settings -------------------------------------------
+
+    def test_reboot_sends_command(self):
+        self.assertEqual(self.post(5, 'reboot', {}).status_code, 200)
+        self.assertEqual(self.sent, ['m05z'])
+        self.assertEqual(self.saves, 0)
+
+    def test_reset_settings_sends_command_then_stores_the_dump(self):
+        dump = {'homeOffset': 480, 'totalSteps': 4096, 'autoHome': False,
+                'motorClockwise': True, 'motorRelease': True}
+        self.routes.REBOOT_WAIT_S = 0
+        self.routes.read_dump = lambda mod_id: dump if mod_id == 5 else None
+        res = self.post(5, 'reset_settings', {})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(self.sent, ['m05q'])
+        self.assertEqual(self.settings['modules']['5'], dump)
+        self.assertEqual(self.saves, 1)
+
+    def test_reset_settings_without_a_reply_is_an_error(self):
+        self.routes.REBOOT_WAIT_S = 0
+        self.routes.read_dump = lambda mod_id: None
+        res = self.post(5, 'reset_settings', {})
+        self.assertEqual(res.status_code, 504)
+        self.assertEqual(self.sent, ['m05q'])
+        self.assertEqual(self.saves, 0)
+
+    def test_reset_settings_unprovisioned_module(self):
+        self.assert_rejected(self.post(9, 'reset_settings', {}), 404)
+
+    # ---- identify ---------------------------------------------------------
+
+    def test_identify_sends_command(self):
+        res = self.post(5, 'identify', {})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(self.sent, ['m05f'])
+        self.assertEqual(self.saves, 0)
+
+    def test_identify_works_for_unprovisioned_ids(self):
+        # Finding a module is useful before it's provisioned, too.
+        self.assertEqual(self.post(255, 'identify', {}).status_code, 200)
+        self.assertEqual(self.sent, ['m255f'])
 
 
 if __name__ == '__main__':

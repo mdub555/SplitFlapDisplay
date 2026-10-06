@@ -175,7 +175,10 @@
         <div class="inspector-stats">
           <div class="stat-box"><span class="stat-label">Home Offset</span><span class="stat-val" id="inspectOffset">2832</span></div>
           <div class="stat-box"><span class="stat-label">Total Steps</span><span class="stat-val" id="inspectCalib" style="color:var(--orange)">4096</span></div>
+          <div class="stat-box" title="Lifetime reel revolutions, from the last sync. Saved every 16 revolutions, so up to 15 can be lost at power-off."><span class="stat-label">Revolutions</span><span class="stat-val" id="inspectRevolutions">---</span></div>
+          <div class="stat-box" title="Steps the module's position was off by at the last pass over the home sensor, from the last sync. Positive means missed steps: try a longer step delay or a ramp."><span class="stat-label">Drift</span><span class="stat-val" id="inspectDrift">---</span></div>
         </div>
+        <div class="module-timing" id="inspectTiming"></div>
         <div class="adj-controls">
           <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="-32">-32</button>
           <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="-16">-16</button>
@@ -232,11 +235,22 @@
             <input type="number" id="gotoStepInput" min="0" step="1">
             <button class="btn btn-secondary btn-sm" data-onclick="gotoStep">GO</button>
           </div>
-          <span class="toggle-hint">Setting total steps only writes the module's EEPROM; home the module afterwards. Go to step only moves forward from the current position (wrapping at total steps).</span>
+          <div class="manual-row">
+            <label class="manual-label" for="exerciseInput">Exercise (cycles, 1–255)</label>
+            <input type="number" id="exerciseInput" min="1" max="255" step="1" value="1">
+            <button class="btn btn-secondary btn-sm" data-onclick="exerciseSelected">RUN</button>
+            <button class="btn btn-secondary btn-sm" data-onclick="stopSelected">STOP</button>
+          </div>
+          <span class="toggle-hint">Setting total steps only writes the module's EEPROM; home the module afterwards. Go to step only moves forward from the current position (wrapping at total steps). Exercise steps through every flap one at a time, round the reel the given number of times; STOP (or any other move) ends it.</span>
         </div>
         <div style="display:flex;gap:10px;margin-top:4px">
           <button class="btn" style="flex:1;background:#444;color:#fff" data-onclick="homeSelected">HOME MOTOR</button>
           <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
+          <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="identifySelected" title="Blink this module's status LED for 10 seconds">IDENTIFY</button>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:4px">
+          <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="rebootSelected">REBOOT</button>
+          <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="resetSettingsSelected" title="Reset every setting on this module to its firmware default, keeping its ID">RESET SETTINGS</button>
         </div>
       </div>
     </div>
@@ -267,6 +281,26 @@
             <span class="toggle-hint">On: every pass over the home sensor re-syncs the module's position. Off: position is only set while homing.</span>
           </div>
           <label class="switch"><input type="checkbox" id="fw-recalculateHome"><span class="slider"></span></label>
+        </div>
+        <div>
+          <label class="field-label" for="fw-rampStartDelay">Ramp start delay (ms)</label>
+          <input type="number" class="line-input" style="margin:0" id="fw-rampStartDelay" data-label="Ramp start delay" step="1">
+          <span class="toggle-hint">Step delay at the start and end of a move. Moves speed up from this to the step delay, and slow back down at the end.</span>
+        </div>
+        <div>
+          <label class="field-label" for="fw-rampSteps">Ramp length (steps)</label>
+          <input type="number" class="line-input" style="margin:0" id="fw-rampSteps" data-label="Ramp length" step="1">
+          <span class="toggle-hint">Steps spent speeding up and slowing down at each end of a move. 0 turns the ramp off.</span>
+        </div>
+        <div>
+          <label class="field-label" for="fw-settleMs">Settle time (ms)</label>
+          <input type="number" class="line-input" style="margin:0" id="fw-settleMs" data-label="Settle time" step="1">
+          <span class="toggle-hint">Keep the coils powered this long after a move so the flap stops swinging. Only applies when the motor is released when idle.</span>
+        </div>
+        <div>
+          <label class="field-label" for="fw-staggerMs">Startup stagger (ms per module)</label>
+          <input type="number" class="line-input" style="margin:0" id="fw-staggerMs" data-label="Startup stagger" step="1">
+          <span class="toggle-hint">After power-on, each module waits this long times its ID before auto-homing, so the motors don't all start at once. Takes effect at the next power-on.</span>
         </div>
       </div>
       <button class="btn btn-secondary" style="margin-top:14px" data-onclick="applyFirmwareConfig">Apply to All Modules</button>

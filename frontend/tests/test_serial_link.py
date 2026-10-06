@@ -68,6 +68,32 @@ class ParseBufferTest(unittest.TestCase):
         # values after the id; guessing at that layout would mis-assign them.
         self.assertIsNone(parse_buffer("m05d:480:4096:1:0:1\r\n", 5))
 
+    def test_extended_fields_are_parsed(self):
+        dump = parse_buffer("m05d:480:4096:50:2:1:1:0:1:1:6:40:120:80:-12\r\n", 5)
+        self.assertEqual(
+            {k: dump[k] for k in ('rampStartDelay', 'rampSteps', 'settleMs', 'staggerMs', 'drift')},
+            {'rampStartDelay': 6, 'rampSteps': 40, 'settleMs': 120, 'staggerMs': 80, 'drift': -12},
+        )
+        self.assertEqual(dump['stepDelay'], 2)
+
+    def test_revolutions_are_parsed_before_drift(self):
+        dump = parse_buffer("m05d:480:4096:50:2:1:1:0:1:1:6:40:120:80:12345:-3\r\n", 5)
+        self.assertEqual((dump['revolutions'], dump['drift'], dump['staggerMs']), (12345, -3, 80))
+
+    def test_dump_without_revolutions_still_has_drift(self):
+        # Firmware from before the revolution counter.
+        dump = parse_buffer("m05d:480:4096:50:2:1:1:0:1:1:6:40:120:80:-3\r\n", 5)
+        self.assertEqual(dump['drift'], -3)
+        self.assertNotIn('revolutions', dump)
+
+    def test_nine_field_dump_has_no_extended_keys(self):
+        dump = parse_buffer("m05d:480:4096:50:1:1:1:0:1:1\r\n", 5)
+        for key in ('rampStartDelay', 'rampSteps', 'settleMs', 'staggerMs', 'drift'):
+            self.assertNotIn(key, dump)
+
+    def test_malformed_extended_field_rejects_the_line(self):
+        self.assertIsNone(parse_buffer("m05d:480:4096:50:1:1:1:0:1:1:3:x:0:150:0\r\n", 5))
+
     def test_no_dump_returns_none(self):
         self.assertIsNone(parse_buffer("", 5))
 

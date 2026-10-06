@@ -64,6 +64,14 @@
 //         y, Set the startup stagger: the auto-home waits this many
 //            milliseconds per module ID after power-on (0-255). Takes effect
 //            on the next boot.
+//         f, Identify: blink the status LED quickly for 10 seconds, to find
+//            which physical module has this ID. No data expected
+//         z, Reboot the module. No data expected
+//         q, Reset every setting to its default, keeping the module ID, then
+//            reboot. No data expected
+//         v, Exercise: step through every flap one at a time, N times round
+//            the reel (1-255; 0 does nothing). Any other motion command or
+//            'x' ends it.
 // =============================================================================
 enum CommandType {
   UNKNOWN_COMMAND,
@@ -89,6 +97,10 @@ enum CommandType {
   SET_RAMP_STEPS,         // 'n'
   SET_SETTLE_MS,          // 'e'
   SET_STAGGER_MS,         // 'y'
+  IDENTIFY,               // 'f'
+  REBOOT,                 // 'z'
+  RESET_SETTINGS,         // 'q'
+  EXERCISE,               // 'v'
 };
 
 struct Command {
@@ -124,11 +136,10 @@ class Tranceiver {
   // Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>
   //              :<homingStepDelay>:<clockwise>:<autoHome>:<releaseMotor>
   //              :<recalculateHome>:<rampStartDelay>:<rampSteps>:<settleMs>
-  //              :<staggerMs>:<drift>
-  // where drift is SplitFlap::lastDrift(), passed in by the caller. Drift
-  // stays last; new fields go before it. Up to ~50 bytes with every field
-  // at its widest, typically ~45.
-  void dump(int16_t drift);
+  //              :<staggerMs>:<revolutions>:<drift>
+  // where revolutions and drift come from SplitFlap, passed in by the
+  // caller. Drift stays last; new fields go before it. Typically ~50 bytes.
+  void dump(uint32_t revolutions, int16_t drift);
 
   // The last message poll() parsed, as received (without the '\n'). Only
   // valid until the next call to poll().

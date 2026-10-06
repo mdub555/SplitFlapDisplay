@@ -41,6 +41,7 @@ def read_dump(mod_id: int, timeout: float = 5.0):
     Returns a dict or None on timeout/parse failure."""
     # Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>:<homingStepDelay>
     #              :<clockwise>:<autoHome>:<releaseMotor>:<recalculateHome>
+    #              [:<rampStartDelay>:<rampSteps>:<settleMs>:<staggerMs>[:<revolutions>]:<drift>]
     if not ser:
         return None
     with serial_lock:
@@ -66,6 +67,24 @@ def read_dump(mod_id: int, timeout: float = 5.0):
     return None
 
 
+# Fields newer firmware sends after the first nine, in this order, followed
+# by drift (steps the tracked position was off by at the last home edge;
+# positive = missed steps), which is always last. Each firmware version adds
+# fields before drift, so a dump has the first N of these plus drift.
+# Firmware from before any of them sends only the first nine fields.
+_EXTENDED_FIELDS = ('rampStartDelay', 'rampSteps', 'settleMs', 'staggerMs', 'revolutions')
+_MIN_EXTENDED = 4  # the ramp, settle and stagger settings came together
+
+
+def _parse_extended_fields(parts):
+    extra = parts[9:]
+    if len(extra) < _MIN_EXTENDED + 1:
+        return {}
+    fields = {key: int(value) for key, value in zip(_EXTENDED_FIELDS, extra[:-1])}
+    fields['drift'] = int(extra[-1])
+    return fields
+
+
 def _parse_dump_fields(text):
     parts = [p.strip() for p in text.split(':')]
     if len(parts) < 9:
@@ -83,6 +102,7 @@ def _parse_dump_fields(text):
             'autoHome': parts[6] == '1',
             'motorRelease': parts[7] == '1',
             'recalculateHome': parts[8] == '1',
+            **_parse_extended_fields(parts),
         }
     except ValueError:
         return None

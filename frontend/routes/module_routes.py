@@ -1,3 +1,5 @@
+import time
+
 from flask import Blueprint, request, jsonify
 
 from config import NUM_MODULES
@@ -8,6 +10,9 @@ from display.state import state
 from display.charset import FLAP_CHARS, COLOR_MAP, QUOTE_CHAR, QUOTE_SUBSTITUTE
 
 bp = Blueprint('module_routes', __name__)
+
+# How long a module takes to reboot and answer on the bus again.
+REBOOT_WAIT_S = 1.0
 
 
 @bp.route('/modules/<int:mod_id>/adjust', methods=['POST'])
@@ -30,6 +35,59 @@ def home_one(mod_id):
     send_raw(f"m{mod_id:02d}h")
     state.mark_module_char(mod_id, ' ')
     return jsonify(status='Homing')
+
+
+@bp.route('/modules/<int:mod_id>/identify', methods=['POST'])
+def identify(mod_id):
+    """Blink the module's status LED for 10 seconds (firmware `f`), to find
+    which physical module has this ID. Works for unprovisioned IDs too."""
+    send_raw(f"m{mod_id:02d}f")
+    return jsonify(status='success')
+
+
+@bp.route('/modules/<int:mod_id>/exercise', methods=['POST'])
+def exercise(mod_id):
+    """Step through every flap one at a time, `cycles` times round the reel
+    (firmware `v`), for burn-in. Any other move or /stop ends it."""
+    cycles = (request.json or {}).get('cycles')
+    if not _is_int(cycles) or not 1 <= cycles <= 255:
+        return _error('cycles must be an integer from 1 to 255', 400)
+    if str(mod_id) not in settings['modules']:
+        return _error('Unprovisioned module', 404)
+    send_raw(f"m{mod_id:02d}v{cycles}")
+    return jsonify(status='success', cycles=cycles)
+
+
+@bp.route('/modules/<int:mod_id>/stop', methods=['POST'])
+def stop(mod_id):
+    """Stop whatever the module's motor is doing (firmware `x`)."""
+    send_raw(f"m{mod_id:02d}x")
+    return jsonify(status='success')
+
+
+@bp.route('/modules/<int:mod_id>/reboot', methods=['POST'])
+def reboot(mod_id):
+    """Restart the module (firmware `z`). Its position is unknown afterwards
+    unless auto-home is on."""
+    send_raw(f"m{mod_id:02d}z")
+    return jsonify(status='success')
+
+
+@bp.route('/modules/<int:mod_id>/reset_settings', methods=['POST'])
+def reset_settings(mod_id):
+    """Reset every setting on the module to its firmware default, keeping its
+    ID (firmware `q`, which then reboots), and store what it reports."""
+    mod_id_str = str(mod_id)
+    if mod_id_str not in settings['modules']:
+        return jsonify(status='error', message='Unprovisioned module'), 404
+    send_raw(f"m{mod_id:02d}q")
+    time.sleep(REBOOT_WAIT_S)
+    dump = read_dump(mod_id)
+    if not dump:
+        return jsonify(status='error', message='Reset sent, but the module did not report back'), 504
+    settings['modules'][mod_id_str] = dump
+    save_settings(settings)
+    return jsonify(status='success', settings=settings)
 
 
 @bp.route('/modules/<int:mod_id>/calibrate', methods=['POST'])
@@ -93,7 +151,7 @@ def set_module_setting(mod_id):
 
 
 # --- Manual controls in the Hardware Inspector -----------------------------
-MAX_TOTAL_STEPS = 32767   # the firmware parses numbers into a 16-bit signed int
+MAX_TOTAL_STEPS = 32767   # well past any real reel; the firmware accepts up to 65535
 NUM_FLAPS = len(FLAP_CHARS)
 
 
@@ -178,9 +236,3 @@ def goto_step(mod_id):
 
     send_raw(f"m{mod_id:02d}g{step}")
     return jsonify(status='success', step=step)
-
-
-@bp.route('/assign_id', methods=['POST'])
-def assign_id():
-    send_raw(f"m*i{int((request.json or {}).get('id', 0)):02d}")
-    return jsonify(status='ID Assigned')

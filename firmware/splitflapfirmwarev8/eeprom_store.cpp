@@ -56,7 +56,7 @@ namespace {
   const uint16_t ADDR_RAMP_STEPS  = 12;  // 1 byte — steps to ramp over at each end of a move
   const uint16_t ADDR_SETTLE_MS   = 13;  // 1 byte — ms to hold the coils before releasing
   const uint16_t ADDR_STAGGER_MS  = 14;  // 1 byte — ms startup delay per module ID
-  const uint16_t ADDR_FLIP_COUNT  = 15;  // 4 bytes — reserved for the flip counter
+  const uint16_t ADDR_REVOLUTIONS = 15;  // 4 bytes — lifetime revolution count
 
   // Magic value written to ADDR_INIT to indicate EEPROM has been initialized.
   // Changing this value forces all modules to reset to defaults on next boot.
@@ -96,6 +96,8 @@ namespace EepromStore {
 void begin(uint8_t hardcodedId) {
   if (!isInitialized()) {
     writeDefaults(hardcodedId);
+    // Only on first initialization: the counter survives a settings reset.
+    saveRevolutions(0);
   }
   load();
 }
@@ -116,7 +118,6 @@ void writeDefaults(uint8_t hardcodedId) {
   saveRampSteps(RAMP_STEPS);
   saveSettleMs(SETTLE_MS);
   saveStaggerMs(STAGGER_MS);
-  EEPROM.put(ADDR_FLIP_COUNT, (uint32_t)0);
 }
 
 bool isInitialized() {
@@ -232,5 +233,15 @@ void saveStaggerMs(uint8_t ms) {
 }
 
 uint8_t getStaggerMs() { return config.staggerMs; }
+
+void saveRevolutions(uint32_t revolutions) {
+  EEPROM.put(ADDR_REVOLUTIONS, revolutions);
+}
+
+uint32_t getRevolutions() {
+  uint32_t revolutions;
+  EEPROM.get(ADDR_REVOLUTIONS, revolutions);
+  return revolutions;
+}
 }
 

@@ -12,7 +12,8 @@ namespace EepromStore {
   // True once EEPROM has been written with the magic value.
   bool isInitialized();
 
-  // Force write the default values.
+  // Force write the default values for every setting, with `hardcodedId` as
+  // the module ID. Doesn't touch the revolution counter.
   void writeDefaults(uint8_t hardcodedId);
 
   void saveHomeOffset(uint16_t offset);
@@ -63,6 +64,12 @@ namespace EepromStore {
   // homing at the same instant.
   void saveStaggerMs(uint8_t ms);
   uint8_t getStaggerMs();
+
+  // Lifetime count of reel revolutions, for maintenance. Read from and
+  // written to EEPROM directly (not cached); SplitFlap keeps the live count
+  // and saves it now and then.
+  void saveRevolutions(uint32_t revolutions);
+  uint32_t getRevolutions();
 }
 
 #endif

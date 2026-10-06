@@ -43,6 +43,9 @@ class SplitFlap {
   int8_t currentFlapIdx = -1;   // Which flap is currently showing (-1 = unknown)
   SplitFlapError error = SPLITFLAP_OK;
   int16_t drift = 0;            // see lastDrift()
+  uint32_t revolutions = 0;     // see revolutionCount()
+  uint32_t savedRevolutions = 0; // the count last written to EEPROM
+  uint16_t exerciseMoves = 0;   // single-flap moves left in an exercise
 
   Phase phase = PHASE_IDLE;
   bool calibrating = false;     // PHASE_SEEK_HOME leads to PHASE_MEASURE
@@ -62,6 +65,9 @@ class SplitFlap {
   // place motor movement and split-flap position tracking meet. Returns
   // whether the step crossed the home edge.
   bool stepAdvance();
+
+  // moveToIndex() without cancelling an exercise in progress.
+  void moveTo(uint8_t targetIndex);
 
   uint16_t stepsToTarget(uint16_t targetStepPos) const;
 
@@ -94,13 +100,12 @@ class SplitFlap {
   // start delay and the step delay at each end of the move.
   uint8_t moveStepDelay() const;
 
-  bool isHoming() const;
-
  public:
   SplitFlap(DebugSerial* debugSerial);
 
-  // Schedules the auto-home (if enabled) after the staggered startup delay,
-  // so all motors in a large display don't surge current at the same instant.
+  // Loads the revolution count, and schedules the auto-home (if enabled)
+  // after the staggered startup delay, so all motors in a large display
+  // don't surge current at the same instant.
   void begin();
 
   // Call every loop(). Takes the next step of the current operation when its
@@ -109,6 +114,9 @@ class SplitFlap {
 
   // True while an operation is in progress (the reel may be moving).
   bool busy() const;
+
+  // True while homing or calibrating (the position is being established).
+  bool isHoming() const;
 
   // Stops the current operation where it is. A stopped move leaves the step
   // position known (flap index -2); a stopped home or calibration leaves the
@@ -151,6 +159,17 @@ class SplitFlap {
   // is on; with it on, the position is corrected at each edge, so this is
   // the drift over one revolution. 0 until the first such edge.
   int16_t lastDrift() const;
+
+  // Lifetime number of reel revolutions (home edges crossed), for
+  // maintenance. Saved to EEPROM every 16 revolutions while idle, so up to
+  // 15 can be lost at power-off.
+  uint32_t revolutionCount() const;
+
+  // Burn-in: steps through every flap one at a time, `cycles` times round
+  // the reel (each flap is its own move, with the ramp). Homes first if the
+  // position is unknown. Any other motion command, or stop(), ends it.
+  // 0 does nothing.
+  void exercise(uint8_t cycles);
 
   // Moves to a flap by index (0–63), using an even division of the revolution.
   // Retargets a move in progress. If the position is unknown, homes first;

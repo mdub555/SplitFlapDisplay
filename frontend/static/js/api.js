@@ -81,6 +81,13 @@ const api = {
     method:'POST', headers: jsonHeaders, body: JSON.stringify({delta})
   }, 'Could not adjust offset'),
   homeModule:         (modId) => apiFetchJson(`/modules/${modId}/home`, {method:'POST'}, 'Could not home module'),
+  identifyModule:     (modId) => apiFetchJson(`/modules/${modId}/identify`, {method:'POST'}, 'Could not identify module'),
+  exerciseModule:     (modId, cycles) => apiFetchJson(`/modules/${modId}/exercise`, {
+    method:'POST', headers: jsonHeaders, body: JSON.stringify({cycles})
+  }, 'Could not start exercise'),
+  stopModule:         (modId) => apiFetchJson(`/modules/${modId}/stop`, {method:'POST'}, 'Could not stop module'),
+  rebootModule:       (modId) => apiFetchJson(`/modules/${modId}/reboot`, {method:'POST'}, 'Could not reboot module'),
+  resetModuleSettings:(modId) => apiFetchJson(`/modules/${modId}/reset_settings`, {method:'POST'}, 'Could not reset module settings'),
   calibrateModule:    (modId) => apiFetchJson(`/modules/${modId}/calibrate`, {method:'POST'}, 'Calibration failed'),
   syncModule:         (modId) => apiFetchJson(`/modules/${modId}/sync`, {method:'POST'}, 'Sync failed'),
   syncAllModules:     () => apiFetchJson('/modules/sync_all', {method:'POST'}, 'Sync failed'),

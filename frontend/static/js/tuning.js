@@ -88,12 +88,61 @@ function selectModule(id){
   if (mod) {
       document.getElementById('inspectOffset').textContent = mod.homeOffset !== undefined ? mod.homeOffset : 480;
       document.getElementById('inspectCalib').textContent = mod.totalSteps !== undefined ? mod.totalSteps : 4096;
+      document.getElementById('inspectDrift').textContent = mod.drift !== undefined ? mod.drift : '---';
+      document.getElementById('inspectRevolutions').textContent =
+        mod.revolutions !== undefined ? mod.revolutions.toLocaleString('en-US') : '---';
   } else {
       document.getElementById('inspectOffset').textContent = '---';
       document.getElementById('inspectCalib').textContent = '---';
+      document.getElementById('inspectDrift').textContent = '---';
+      document.getElementById('inspectRevolutions').textContent = '---';
   }
+  refreshModuleTiming();
   refreshModuleToggles();
   refreshManualControls();
+}
+
+// The shared firmware settings as the selected module reported them in its
+// last sync (the dump), so you can check that what was sent actually took.
+// Values that differ from the saved shared settings are highlighted.
+const MODULE_TIMING_FIELDS = [
+  ['stepDelay', 'step', 'ms'],
+  ['homingStepDelay', 'homing', 'ms'],
+  ['debounceMs', 'debounce', 'ms'],
+  ['rampStartDelay', 'ramp start', 'ms'],
+  ['rampSteps', 'ramp', 'steps'],
+  ['settleMs', 'settle', 'ms'],
+  ['staggerMs', 'stagger', 'ms'],
+];
+
+function refreshModuleTiming(){
+  const el = document.getElementById('inspectTiming');
+  el.textContent = '';
+  const mod = currentSettings && currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
+  if (!mod) return;
+  if (mod.settleMs === undefined) {
+    el.textContent = 'Sync this module to read its timing settings.';
+    return;
+  }
+  const shared = currentSettings.firmware || {};
+  let mismatches = 0;
+  el.appendChild(document.createTextNode('From last sync: '));
+  MODULE_TIMING_FIELDS.forEach(([key, label, unit], i)=>{
+    if (i) el.appendChild(document.createTextNode(' · '));
+    const span = document.createElement('span');
+    span.dataset.key = key;
+    span.textContent = `${label} ${mod[key]} ${unit}`;
+    if (shared[key] !== undefined && shared[key] !== mod[key]) {
+      span.className = 'mismatch';
+      span.title = `Shared setting is ${shared[key]} ${unit}`;
+      mismatches++;
+    }
+    el.appendChild(span);
+  });
+  if (mismatches) {
+    el.appendChild(document.createTextNode(
+      ' — highlighted values differ from the shared settings; Apply to All Modules resends them.'));
+  }
 }
 
 function selectModuleAction(el){
@@ -215,6 +264,22 @@ function gotoStep(){
   });
 }
 
+function exerciseSelected(){
+  const cycles = readIntInput('exerciseInput', 'Exercise cycles', 1, 255);
+  if (cycles === null) return;
+  const modId = selectedModule;
+  api.exerciseModule(modId, cycles).then(d=>{
+    if (d) showToast(`Module ${formatModuleId(modId)}: exercising ${cycles} cycle${cycles === 1 ? '' : 's'}`);
+  });
+}
+
+function stopSelected(){
+  const modId = selectedModule;
+  api.stopModule(modId).then(d=>{
+    if (d) showToast(`Module ${formatModuleId(modId)} stopped`);
+  });
+}
+
 function adjustOffset(el){
   const delta = parseInt(el.dataset.delta, 10);
   api.adjustOffset(selectedModule, delta).then(d=>{
@@ -231,6 +296,34 @@ function adjustOffset(el){
 function homeSelected(){
   api.homeModule(selectedModule).then(result=>{
     if (result) showToast(`Homing module ${formatModuleId(selectedModule)}`);
+  });
+}
+
+function identifySelected(){
+  const modId = selectedModule;
+  api.identifyModule(modId).then(result=>{
+    if (result) showToast(`Module ${formatModuleId(modId)}: status LED blinking for 10 s`);
+  });
+}
+
+function rebootSelected(){
+  const modId = selectedModule;
+  if(!confirm(`Reboot module ${formatModuleId(modId)}?`)) return;
+  api.rebootModule(modId).then(result=>{
+    if (result) showToast(`Module ${formatModuleId(modId)} rebooting`);
+  });
+}
+
+function resetSettingsSelected(){
+  const modId = selectedModule;
+  if(!confirm(`Reset every setting on module ${formatModuleId(modId)} to its firmware default? ` +
+              `Its ID is kept, but its home offset and total steps are lost.`)) return;
+  showToast('Resetting…', 'warn');
+  api.resetModuleSettings(modId).then(d=>{
+    if (!d) return;
+    currentSettings = d.settings;
+    selectModule(selectedModule);
+    showToast(`Module ${formatModuleId(modId)} reset to defaults`);
   });
 }
 
@@ -410,7 +503,8 @@ function applyFirmwareConfig(){
 }
 
 registerActions({
-  selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected,
+  selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected, identifySelected,
+  rebootSelected, resetSettingsSelected, exerciseSelected, stopSelected,
   syncOneFromHardware, syncAllFromHardware, toggleAutoHome, provisionModule,
   setTotalSteps, showChar, showIndex, gotoStep,
   applyFirmwareConfig,
