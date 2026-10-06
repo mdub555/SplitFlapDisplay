@@ -16,8 +16,8 @@
 // ==============================================================================
 
 #include <Arduino.h>
-#include <SoftwareSerial.h>
 
+#include "debug_serial.h"
 #include "eeprom_store.h"
 #include "home_sensor.h"
 #include "motor.h"
@@ -33,7 +33,7 @@ const long RS485_BAUD = 9600;
 const long DEBUG_BAUD = 19200;
 
 Tranceiver tranceiver;
-SoftwareSerial debugSerial(255, DEBUG_PIN);  // no RX needed; TX on pin 5 (PB4)
+DebugSerial debugSerial(255, DEBUG_PIN);  // no RX needed; TX on pin 5 (PB4)
 SplitFlap splitFlap(&debugSerial);
 Command command;
 
@@ -99,7 +99,7 @@ void loop() {
       case NUDGE:
         debugSerial.print("Nudge: ");
         debugSerial.println(command.data.dataInt);
-        splitFlap.stepAdvance(command.data.dataInt);
+        splitFlap.nudge(command.data.dataInt);
         break;
 
       case MOVE_TO_STEP:

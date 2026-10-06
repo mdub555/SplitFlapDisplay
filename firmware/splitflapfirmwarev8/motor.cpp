@@ -8,34 +8,39 @@
 namespace {
   int  currentPhase  = 0;    // Index into halfStepSequence[8]
 
-  // Half-step sequence for a 4-wire stepper motor. Each row energizes the
+  // The four coil pins are PB2-PB5, so a whole step is written to the port in
+  // one go instead of four digitalWrite() calls. digitalWrite() has to look
+  // up the port and bit for a pin at runtime, which costs ~270 bytes of flash.
+  static_assert(MOTOR_IN1 == PIN_PB2 && MOTOR_IN2 == PIN_PB3 &&
+                MOTOR_IN3 == PIN_PB4 && MOTOR_IN4 == PIN_PB5,
+                "motor.cpp writes the coils to PB2-PB5 directly");
+  const uint8_t COIL_SHIFT = 2;
+  const uint8_t COIL_MASK = 0x0F << COIL_SHIFT;
+
+  // Half-step sequence for a 4-wire stepper motor. Each entry energizes the
   // coils in the order needed to step forward; walking the table backward
   // (decrementing the index) steps the motor in the flap-advancing direction.
-  const uint8_t halfStepSequence[8][4] = {
-    {1, 0, 0, 0},   // Phase 0: coil A only
-    {1, 1, 0, 0},   // Phase 1: coils A+B
-    {0, 1, 0, 0},   // Phase 2: coil B only
-    {0, 1, 1, 0},   // Phase 3: coils B+C
-    {0, 0, 1, 0},   // Phase 4: coil C only
-    {0, 0, 1, 1},   // Phase 5: coils C+D
-    {0, 0, 0, 1},   // Phase 6: coil D only
-    {1, 0, 0, 1}    // Phase 7: coils D+A
+  // Bit 0 is coil A (MOTOR_IN1) up to bit 3 for coil D (MOTOR_IN4).
+  const uint8_t halfStepSequence[8] = {
+    0b0001,   // Phase 0: coil A only
+    0b0011,   // Phase 1: coils A+B
+    0b0010,   // Phase 2: coil B only
+    0b0110,   // Phase 3: coils B+C
+    0b0100,   // Phase 4: coil C only
+    0b1100,   // Phase 5: coils C+D
+    0b1000,   // Phase 6: coil D only
+    0b1001    // Phase 7: coils D+A
   };
 
-  void applyStep(const uint8_t *step) {
-    digitalWrite(MOTOR_IN1, step[0]);
-    digitalWrite(MOTOR_IN2, step[1]);
-    digitalWrite(MOTOR_IN3, step[2]);
-    digitalWrite(MOTOR_IN4, step[3]);
+  // Sets the four coil pins to `coils`, leaving the rest of port B alone.
+  void applyCoils(uint8_t coils) {
+    VPORTB.OUT = (VPORTB.OUT & ~COIL_MASK) | (coils << COIL_SHIFT);
   }
 }
 
 namespace Motor{
   void begin() {
-    pinMode(MOTOR_IN1, OUTPUT);
-    pinMode(MOTOR_IN2, OUTPUT);
-    pinMode(MOTOR_IN3, OUTPUT);
-    pinMode(MOTOR_IN4, OUTPUT);
+    VPORTB.DIR |= COIL_MASK;
   }
 
   void step() {
@@ -47,18 +52,15 @@ namespace Motor{
     if (currentPhase < 0) currentPhase = 7;
     if (currentPhase > 7) currentPhase = 0;
 
-    applyStep(halfStepSequence[currentPhase]);
+    applyCoils(halfStepSequence[currentPhase]);
   }
 
   void release() {
-    digitalWrite(MOTOR_IN1, 0);
-    digitalWrite(MOTOR_IN2, 0);
-    digitalWrite(MOTOR_IN3, 0);
-    digitalWrite(MOTOR_IN4, 0);
+    applyCoils(0);
   }
 
   void tense() {
-    applyStep(halfStepSequence[currentPhase]);
+    applyCoils(halfStepSequence[currentPhase]);
   }
 }
 

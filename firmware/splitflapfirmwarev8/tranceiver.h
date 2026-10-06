@@ -12,6 +12,11 @@
 // RS-485 link and message parser.
 //
 // Wire format: "m<ID><CMD>[data]\n"
+//
+// Numeric data is an unsigned 16-bit value (0–65535). The parser rejects a
+// number that doesn't fit, a numeric command with no digits, or a value
+// outside the command's range (see LIMITS in tranceiver.cpp), instead of
+// wrapping, defaulting to 0, or truncating it.
 //   - ID
 //         *, wildcard, all modules targeted
 //         N, the ID of the specific module targeted
@@ -25,10 +30,13 @@
 //            blank flap. data must be a number
 //         t, Set the number of steps in a full rotation. data must be a number
 //         b, Set the debounce delay for the home sensor. data must be a number
-//         s, Nudge the stepper motor N steps, adjusting home offset
-//            accordingly. data must be a number
+//         s, Nudge the stepper motor forward N steps. Doesn't change the home
+//            offset; use 'o0' afterwards to save the new position as the
+//            offset. data must be a number
 //         g, Goto a specific motor step. data must be a number
-//         i, Set the module ID. data must be a number
+//         i, Set the module ID. data must be a number. A broadcast ('m*i')
+//            is only accepted by unprovisioned modules (ID 255), so it can't
+//            give every module on the bus the same ID
 //         a, Enable or disable auto-home. data must be 0 for disable, 1 for
 //            enable
 //         w, Set the motor direction. data must be 1 for clockwise, 0 for
@@ -70,7 +78,7 @@ struct Command {
   CommandType type = UNKNOWN_COMMAND;
   union Data {
     char dataChar;
-    int dataInt;
+    uint16_t dataInt;
   };
   Data data = {'0'};
 };

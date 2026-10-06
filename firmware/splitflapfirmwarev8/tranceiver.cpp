@@ -36,11 +36,69 @@ namespace {
     }
   }
 
+  // Accepted range for each numeric command's value, indexed by CommandType
+  // (keep LIMITS in the same order as the enum). Checking ranges here, in one
+  // place, is much smaller than a check in each setter in the .ino.
+  enum Limit : uint8_t {
+    ANY,            // 0-65535
+    BOOLEAN,        // 0-1
+    BYTE,           // 0-255
+    DELAY,          // 1-255: 0 would remove the step delay entirely
+    TOTAL_STEPS,    // 1-65535: 0 breaks the movement math
+    BELOW_TOTAL,    // 0 to total steps - 1
+  };
+  const Limit LIMITS[] = {
+    ANY,          // UNKNOWN_COMMAND
+    ANY,          // DISPLAY_CHAR
+    BYTE,         // DISPLAY_INDEX: moveToIndex() ignores indexes past the last flap
+    ANY,          // HOME
+    ANY,          // CALIBRATE
+    BELOW_TOTAL,  // SET_OFFSET
+    TOTAL_STEPS,  // SET_TOTAL_STEPS
+    ANY,          // SET_DEBOUNCE_MS
+    BELOW_TOTAL,  // NUDGE
+    BELOW_TOTAL,  // MOVE_TO_STEP
+    BYTE,         // SET_MODULE_ID
+    BOOLEAN,      // SET_AUTO_HOME
+    ANY,          // DUMP_STATE
+    BOOLEAN,      // SET_MOTOR_CW
+    BOOLEAN,      // SET_MOTOR_RELEASE
+    BOOLEAN,      // SET_RECALCULATE_HOME
+    DELAY,        // SET_STEP_DELAY
+    DELAY,        // SET_HOMING_STEP_DELAY
+  };
+  static_assert(sizeof(LIMITS) == SET_HOMING_STEP_DELAY + 1,
+                "LIMITS needs one entry per CommandType");
+
+  // Finishes a numeric command, rejecting it if it had no digits (a truncated
+  // "m05k" must not set a 0 ms delay) or its value is out of range.
+  bool finishDataInt(Command& command, uint16_t value, bool hasDigits) {
+    if (!hasDigits) return false;
+    uint16_t total = EepromStore::getTotalSteps();
+    uint16_t max = 0xFFFF;
+    switch (LIMITS[command.type]) {
+      case BOOLEAN:     max = 1; break;
+      case DELAY:       if (value == 0) return false;  // fall through
+      case BYTE:        max = 255; break;
+      case TOTAL_STEPS: if (value == 0) return false; break;
+      case BELOW_TOTAL: max = total - 1; break;
+      case ANY:         break;
+    }
+    if (value > max) return false;
+    command.data.dataInt = value;
+    return true;
+  }
+
   __attribute__((noinline)) bool toCommand(Command& command, const char* buffer, uint8_t bufferLen) {
     command.data.dataInt = 0;
     command.type = UNKNOWN_COMMAND;
     ParseState parseState = IDLE;
-    uint8_t id = 0;
+    // Wider than a module ID so an ID above 255 can't wrap around and match
+    // a real module (e.g. "m261" must not reach module 5).
+    uint16_t id = 0;
+    uint16_t value = 0;
+    bool hasDigits = false;
+    bool broadcast = false;
     for (uint8_t i = 0; i < bufferLen; i++) {
       char c = buffer[i];
       switch (parseState) {
@@ -55,11 +113,14 @@ namespace {
         // the command on the first character that's neither.
         case READING_ID:
           if (c == '*') {
+            broadcast = true;
             parseState = READING_CMD;
             break;
           } else if (isDigit(c)) {
-            id *= 10;
-            id += c - '0';
+            if (id <= 255) {
+              id *= 10;
+              id += c - '0';
+            }
             break;
           } else {
             if (id != EepromStore::getModuleId()) {
@@ -74,13 +135,19 @@ namespace {
             case DISPLAY_CHAR:
               parseState = READING_DATA_CHAR;
               break;
+            case SET_MODULE_ID:
+              // A broadcast ID change would give every module the same ID, so
+              // only an unprovisioned module accepts one.
+              if (broadcast && EepromStore::getModuleId() != 255) {
+                return false;
+              }
+              // fall through
             case DISPLAY_INDEX:
             case SET_OFFSET:
             case SET_TOTAL_STEPS:
             case SET_DEBOUNCE_MS:
             case NUDGE:
             case MOVE_TO_STEP:
-            case SET_MODULE_ID:
             case SET_AUTO_HOME:
             case SET_MOTOR_CW:
             case SET_MOTOR_RELEASE:
@@ -98,14 +165,20 @@ namespace {
           }
           break;
 
-        // 'o','t','s','g','i','a','+' commands — accumulate digits, execute
-        // on any non-digit terminator (typically '\n').
+        // Numeric commands — accumulate digits, execute on any non-digit
+        // terminator (typically '\n'). Values that don't fit in 16 bits are
+        // rejected.
         case READING_DATA_INT:
           if (isDigit(c)) {
-            command.data.dataInt *= 10;
-            command.data.dataInt += c - '0';
+            uint8_t digit = c - '0';
+            // Reject anything above 65535 rather than wrapping.
+            if (value > 6553 || (value == 6553 && digit > 5)) {
+              return false;
+            }
+            value = value * 10 + digit;
+            hasDigits = true;
           } else {
-            return true;
+            return finishDataInt(command, value, hasDigits);
           }
           break;
 
@@ -113,6 +186,11 @@ namespace {
           command.data.dataChar = c;
           return true;
       }
+    }
+    // The buffer ended without a terminator (the '\n' is stripped by poll(),
+    // and the 50ms timeout path never has one).
+    if (parseState == READING_DATA_INT) {
+      return finishDataInt(command, value, hasDigits);
     }
     return true;
   }
