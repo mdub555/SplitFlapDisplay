@@ -6,7 +6,7 @@ import time
 import serial
 
 from config import SERIAL_PORT, BAUD_RATE
-from display.module_protocol import DUMP_SLOT_S
+from display.module_protocol import BROADCAST, DUMP_SLOT_S, Cmd, dump_reply_pattern, message
 from display.state import state
 
 serial_lock = threading.Lock()
@@ -47,9 +47,10 @@ def read_dump(mod_id: int, timeout: float = 5.0):
         return None
     with serial_lock:
         ser.reset_input_buffer()
-        ser.write(f"m{mod_id:02d}?\n".encode())
+        request = message(mod_id, Cmd.DUMP_STATE)
+        ser.write(f"{request}\n".encode())
         ser.flush()
-        state._broadcast_serial(f"SENT: m{mod_id:02d}?")
+        state._broadcast_serial(f"SENT: {request}")
         start = time.time()
         buffer = ""
         while time.time() - start < timeout:
@@ -78,9 +79,10 @@ def read_all_dumps(max_id: int, margin: float = 0.5):
         return {}
     with serial_lock:
         ser.reset_input_buffer()
-        ser.write(b"m*?\n")
+        request = message(BROADCAST, Cmd.DUMP_STATE)
+        ser.write(f"{request}\n".encode())
         ser.flush()
-        state._broadcast_serial("SENT: m*?")
+        state._broadcast_serial(f"SENT: {request}")
         deadline = time.time() + (max_id + 1) * DUMP_SLOT_S + margin
         buffer = ""
         while time.time() < deadline:
@@ -144,8 +146,8 @@ def parse_buffer(buffer, mod_id=None):
     firmware ends lines with \\r\\n (Serial.println), which is stripped here.
     Returns None when no complete, well-formed dump line is present."""
     id_pattern = r'\d+' if mod_id is None else f'{mod_id:02d}'
-    for match in re.finditer(rf'm{id_pattern}\?:([^\r\n]*)\r?\n', buffer):
-        dump = _parse_dump_fields(match.group(1))
+    for match in re.finditer(dump_reply_pattern(id_pattern), buffer):
+        dump = _parse_dump_fields(match.group(2))
         if dump is not None:
             return dump
     return None
@@ -154,7 +156,7 @@ def parse_buffer(buffer, mod_id=None):
 def parse_all_dumps(buffer):
     """Every complete, well-formed dump line in `buffer`, as {mod_id: dump}."""
     dumps = {}
-    for match in re.finditer(r'm(\d+)\?:([^\r\n]*)\r?\n', buffer):
+    for match in re.finditer(dump_reply_pattern(), buffer):
         dump = _parse_dump_fields(match.group(2))
         if dump is not None:
             dumps[int(match.group(1))] = dump
@@ -165,7 +167,7 @@ def calibrate_module(mod_id: int, timeout: float = 45.0):
     """m<ID>c — spin one revolution, parse the measured step count, and push
     it back as the module's new total-steps value. Returns the step count,
     or None on timeout."""
-    send_raw(f"m{mod_id:02d}c\n")
+    send_raw(message(mod_id, Cmd.CALIBRATE))
     dump = read_dump(mod_id, timeout)
     if dump is None:
         return None

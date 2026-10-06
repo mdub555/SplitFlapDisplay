@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify
 from config import NUM_MODULES
 from settings.store import settings, save_settings
 from display.serial_link import send_raw, read_dump, read_all_dumps, calibrate_module
-from display.module_protocol import TOGGLE_COMMANDS, toggle_command
+from display.module_protocol import TOGGLE_COMMANDS, Cmd, message, toggle_command
 from display.state import state
 from display.charset import FLAP_CHARS, COLOR_MAP, QUOTE_CHAR, QUOTE_SUBSTITUTE
 
@@ -26,13 +26,13 @@ def adjust_offset(mod_id):
     new_offset = int(settings['modules'][mod_id_str]['homeOffset']) + delta
     settings['modules'][mod_id_str]['homeOffset'] = new_offset
     save_settings(settings)
-    send_raw(f"m{mod_id:02d}O{new_offset}")
+    send_raw(message(mod_id, Cmd.SET_OFFSET, new_offset))
     return jsonify(new_offset=new_offset)
 
 
 @bp.route('/modules/<int:mod_id>/home', methods=['POST'])
 def home_one(mod_id):
-    send_raw(f"m{mod_id:02d}h")
+    send_raw(message(mod_id, Cmd.HOME))
     state.mark_module_char(mod_id, ' ')
     return jsonify(status='Homing')
 
@@ -41,7 +41,7 @@ def home_one(mod_id):
 def identify(mod_id):
     """Blink the module's status LED for 10 seconds (firmware `b`), to find
     which physical module has this ID. Works for unprovisioned IDs too."""
-    send_raw(f"m{mod_id:02d}b")
+    send_raw(message(mod_id, Cmd.IDENTIFY))
     return jsonify(status='success')
 
 
@@ -54,14 +54,14 @@ def exercise(mod_id):
         return _error('cycles must be an integer from 1 to 255', 400)
     if str(mod_id) not in settings['modules']:
         return _error('Unprovisioned module', 404)
-    send_raw(f"m{mod_id:02d}e{cycles}")
+    send_raw(message(mod_id, Cmd.EXERCISE, cycles))
     return jsonify(status='success', cycles=cycles)
 
 
 @bp.route('/modules/<int:mod_id>/stop', methods=['POST'])
 def stop(mod_id):
     """Stop whatever the module's motor is doing (firmware `x`)."""
-    send_raw(f"m{mod_id:02d}x")
+    send_raw(message(mod_id, Cmd.STOP))
     return jsonify(status='success')
 
 
@@ -69,7 +69,7 @@ def stop(mod_id):
 def reboot(mod_id):
     """Restart the module (firmware `r`). Its position is unknown afterwards
     unless auto-home is on."""
-    send_raw(f"m{mod_id:02d}r")
+    send_raw(message(mod_id, Cmd.REBOOT))
     return jsonify(status='success')
 
 
@@ -80,7 +80,7 @@ def reset_settings(mod_id):
     mod_id_str = str(mod_id)
     if mod_id_str not in settings['modules']:
         return jsonify(status='error', message='Unprovisioned module'), 404
-    send_raw(f"m{mod_id:02d}!")
+    send_raw(message(mod_id, Cmd.RESET_SETTINGS))
     time.sleep(REBOOT_WAIT_S)
     dump = read_dump(mod_id)
     if not dump:
@@ -194,7 +194,7 @@ def set_total_steps(mod_id):
     if mod is None:
         return _error('Unprovisioned module', 404)
 
-    send_raw(f"m{mod_id:02d}T{steps}")
+    send_raw(message(mod_id, Cmd.SET_TOTAL_STEPS, steps))
     mod['totalSteps'] = steps
     save_settings(settings)
     return jsonify(status='success', steps=steps)
@@ -212,12 +212,12 @@ def display_on_module(mod_id):
         if not _is_int(index) or not 0 <= index < NUM_FLAPS:
             return _error(f'index must be an integer from 0 to {NUM_FLAPS - 1}', 400)
         char = FLAP_CHARS[index]
-        command = f"m{mod_id:02d}+{index}"
+        command = message(mod_id, Cmd.DISPLAY_INDEX, index)
     else:
         char = _to_flap_char(data['char'])
         if char is None:
             return _error('char must be a single character that has a flap', 400)
-        command = f"m{mod_id:02d}-{char}"
+        command = message(mod_id, Cmd.DISPLAY_CHAR, char)
 
     if str(mod_id) not in settings['modules']:
         return _error('Unprovisioned module', 404)
@@ -241,5 +241,5 @@ def goto_step(mod_id):
     if _is_int(total) and step >= total:
         return _error(f'step must be less than total steps ({total})', 400)
 
-    send_raw(f"m{mod_id:02d}g{step}")
+    send_raw(message(mod_id, Cmd.MOVE_TO_STEP, step))
     return jsonify(status='success', step=step)

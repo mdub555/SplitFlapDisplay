@@ -12,6 +12,9 @@ const ROOT = path.join(__dirname, '..');
 let html = fs.readFileSync(path.join(ROOT, 'templates/index.html'), 'utf8');
 html = html.replace(/\{\{\s*url_for\([^}]*filename='([^']+)'\)\s*\}\}/g, '/static/$1');
 html = html.replace(/<script src="[^"]*"><\/script>\s*/g, '');
+// Loops filled in by Flask (the serial debug panel's quick commands) have no
+// data here; drop them rather than leave template syntax in the page.
+html = html.replace(/\{%\s*for[\s\S]*?\{%\s*endfor\s*%\}/g, '');
 
 const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'http://localhost/' });
 const { window } = dom;

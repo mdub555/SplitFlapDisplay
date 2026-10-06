@@ -4,6 +4,7 @@ import threading
 from flask import Flask, render_template
 
 from routes import BLUEPRINTS
+from display.module_protocol import BROADCAST, Cmd, message
 from display.player import playlist_loop
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -13,9 +14,17 @@ for bp in BLUEPRINTS:
     app.register_blueprint(bp)
 
 
+# The serial debug panel's quick commands: (message, label).
+DEBUG_COMMANDS = [
+    (message(BROADCAST, Cmd.HOME), 'Home All'),
+    (message(1, Cmd.DUMP_STATE), 'Dump Mod 01'),
+    (message(1, Cmd.CALIBRATE), 'Calib Mod 01'),
+]
+
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', debug_commands=DEBUG_COMMANDS)
 
 
 threading.Thread(target=playlist_loop, daemon=True).start()

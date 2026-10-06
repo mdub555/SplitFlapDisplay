@@ -5,6 +5,7 @@ from flask import Blueprint, Response, request, jsonify, stream_with_context
 
 from config import NUM_MODULES
 from display.state import state
+from display.module_protocol import BROADCAST, Cmd, message
 from display.serial_link import send_raw
 
 bp = Blueprint('control', __name__)
@@ -113,6 +114,6 @@ def stop_app():
 
 @bp.route('/home_all')
 def home_all():
-    send_raw('m*h')
+    send_raw(message(BROADCAST, Cmd.HOME))
     state.set_display(' ' * NUM_MODULES, [0] * NUM_MODULES)
     return jsonify(status='Homing All')
