@@ -17,14 +17,14 @@ namespace {
   // Checking ranges here, in one place, is much smaller than a check in each
   // setter in the .ino.
   enum ArgKind : uint8_t {
-    ARG_NONE,         // no data: the command is complete once its letter is read
-    ARG_CHAR,         // a single character
-    ARG_ANY,          // 0-65535
-    ARG_BOOLEAN,      // 0-1
-    ARG_BYTE,         // 0-255
-    ARG_DELAY,        // 1-255: 0 would remove the step delay entirely
-    ARG_TOTAL_STEPS,  // 1-65535: 0 breaks the movement math
-    ARG_BELOW_TOTAL,  // 0 to total steps - 1
+    ARG_NONE,             // no data: the command is complete once its letter is read
+    ARG_CHAR,             // a single character
+    ARG_INT_ANY,          // a number 0-65535
+    ARG_INT_BOOLEAN,      // 0-1
+    ARG_INT_BYTE,         // 0-255
+    ARG_INT_DELAY,        // 1-255: 0 would remove the step delay entirely
+    ARG_INT_TOTAL_STEPS,  // 1-65535: 0 breaks the movement math
+    ARG_INT_BELOW_TOTAL,  // 0 to total steps - 1
   };
 
   struct CommandSpec {
@@ -37,31 +37,31 @@ namespace {
   // reached through the frame header.
   const CommandSpec COMMANDS[] = {
     {'-', DISPLAY_CHAR,          ARG_CHAR},
-    {'+', DISPLAY_INDEX,         ARG_BYTE},  // moveToIndex() ignores indexes past the last flap
+    {'+', DISPLAY_INDEX,         ARG_INT_BYTE},  // moveToIndex() ignores indexes past the last flap
     {'h', HOME,                  ARG_NONE},
     {'c', CALIBRATE,             ARG_NONE},
-    {'o', SET_OFFSET,            ARG_BELOW_TOTAL},
-    {'t', SET_TOTAL_STEPS,       ARG_TOTAL_STEPS},
-    {'b', SET_DEBOUNCE_MS,       ARG_ANY},
-    {'s', NUDGE,                 ARG_BELOW_TOTAL},
-    {'g', MOVE_TO_STEP,          ARG_BELOW_TOTAL},
-    {'i', SET_MODULE_ID,         ARG_BYTE},
-    {'a', SET_AUTO_HOME,         ARG_BOOLEAN},
+    {'o', SET_OFFSET,            ARG_INT_BELOW_TOTAL},
+    {'t', SET_TOTAL_STEPS,       ARG_INT_TOTAL_STEPS},
+    {'b', SET_DEBOUNCE_MS,       ARG_INT_ANY},
+    {'s', NUDGE,                 ARG_INT_BELOW_TOTAL},
+    {'g', MOVE_TO_STEP,          ARG_INT_BELOW_TOTAL},
+    {'i', SET_MODULE_ID,         ARG_INT_BYTE},
+    {'a', SET_AUTO_HOME,         ARG_INT_BOOLEAN},
     {'d', DUMP_STATE,            ARG_NONE},
-    {'w', SET_MOTOR_CW,          ARG_BOOLEAN},
-    {'r', SET_MOTOR_RELEASE,     ARG_BOOLEAN},
-    {'j', SET_RECALCULATE_HOME,  ARG_BOOLEAN},
-    {'k', SET_STEP_DELAY,        ARG_DELAY},
-    {'l', SET_HOMING_STEP_DELAY, ARG_DELAY},
+    {'w', SET_MOTOR_CW,          ARG_INT_BOOLEAN},
+    {'r', SET_MOTOR_RELEASE,     ARG_INT_BOOLEAN},
+    {'j', SET_RECALCULATE_HOME,  ARG_INT_BOOLEAN},
+    {'k', SET_STEP_DELAY,        ARG_INT_DELAY},
+    {'l', SET_HOMING_STEP_DELAY, ARG_INT_DELAY},
     {'x', STOP,                  ARG_NONE},
-    {'u', SET_RAMP_START_DELAY,  ARG_DELAY},
-    {'n', SET_RAMP_STEPS,        ARG_BYTE},
-    {'e', SET_SETTLE_MS,         ARG_BYTE},
-    {'y', SET_STAGGER_MS,        ARG_BYTE},
+    {'u', SET_RAMP_START_DELAY,  ARG_INT_DELAY},
+    {'n', SET_RAMP_STEPS,        ARG_INT_BYTE},
+    {'e', SET_SETTLE_MS,         ARG_INT_BYTE},
+    {'y', SET_STAGGER_MS,        ARG_INT_BYTE},
     {'f', IDENTIFY,              ARG_NONE},
     {'z', REBOOT,                ARG_NONE},
     {'q', RESET_SETTINGS,        ARG_NONE},
-    {'v', EXERCISE,              ARG_BYTE},
+    {'v', EXERCISE,              ARG_INT_BYTE},
   };
 
   // The COMMANDS entry for the letter `c`, or nullptr if there isn't one.
@@ -78,14 +78,14 @@ namespace {
     if (!hasDigits) return false;
     uint16_t max = 0xFFFF;
     switch (arg) {
-      case ARG_BOOLEAN:     max = 1; break;
-      case ARG_DELAY:       if (value == 0) return false;  // fall through
-      case ARG_BYTE:        max = 255; break;
-      case ARG_TOTAL_STEPS: if (value == 0) return false; break;
-      case ARG_BELOW_TOTAL: max = EepromStore::getTotalSteps() - 1; break;
-      case ARG_ANY:
+      case ARG_INT_BOOLEAN:     max = 1; break;
+      case ARG_INT_DELAY:       if (value == 0) return false;  // fall through
+      case ARG_INT_BYTE:        max = 255; break;
+      case ARG_INT_TOTAL_STEPS: if (value == 0) return false; break;
+      case ARG_INT_BELOW_TOTAL: max = EepromStore::getTotalSteps() - 1; break;
+      case ARG_INT_ANY:
       case ARG_NONE:
-      case ARG_CHAR:        break;
+      case ARG_CHAR:            break;
     }
     if (value > max) return false;
     command.data.dataInt = value;
@@ -151,7 +151,7 @@ namespace {
               case ARG_CHAR:
                 parseState = READING_DATA_CHAR;
                 break;
-              default:
+              default:  // every ARG_INT_* kind
                 parseState = READING_DATA_INT;
                 break;
             }
