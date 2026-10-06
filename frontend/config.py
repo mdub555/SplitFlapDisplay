@@ -10,6 +10,11 @@ NUM_MODULES = GRID_ROWS * GRID_COLS
 SERIAL_PORT = os.environ.get('SPLITFLAP_SERIAL_PORT', '/dev/ttyUSB0')
 BAUD_RATE = int(os.environ.get('SPLITFLAP_BAUD', 9600))
 
+# Send each page as one frame broadcast (m*F...) instead of one message per
+# module. Needs module firmware with frame support; set to 0 for older
+# firmware.
+FRAME_BROADCAST = os.environ.get('SPLITFLAP_FRAME_BROADCAST', '1') != '0'
+
 # Defaults to <repo_root>/settings.json but can be overridden so this isn't
 # tied to one machine's home directory.
 CONFIG_PATH = os.environ.get(

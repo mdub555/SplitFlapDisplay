@@ -45,7 +45,7 @@ class ModuleRoutesTest(unittest.TestCase):
             'settings.store': _module('settings.store', settings=self.settings,
                                       save_settings=save_settings),
             'display.serial_link': _module('display.serial_link', send_raw=self.sent.append,
-                                           read_dump=None, calibrate_module=None),
+                                           read_dump=None, read_all_dumps=None, calibrate_module=None),
             'display.state': _module('display.state', state=None),
         }
         patcher = mock.patch.dict(sys.modules, fakes)
@@ -56,6 +56,7 @@ class ModuleRoutesTest(unittest.TestCase):
             'module_routes_under_test', os.path.join(FRONTEND, 'routes', 'module_routes.py'))
         routes = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(routes)
+        self.routes = routes
 
         app = Flask(__name__)
         app.register_blueprint(routes.bp)
@@ -63,6 +64,36 @@ class ModuleRoutesTest(unittest.TestCase):
 
     def post(self, mod_id, body):
         return self.client.post(f'/modules/{mod_id}/setting', json=body)
+
+    # ---- /modules/sync_all ------------------------------------------------
+
+    def test_sync_all_uses_one_broadcast_and_stores_every_reply(self):
+        self.settings['modules'] = {}
+        dumps = {0: {'homeOffset': 1}, 7: {'homeOffset': 2}}
+        asked = []
+        self.routes.read_all_dumps = lambda max_id: asked.append(max_id) or dumps
+        self.routes.read_dump = lambda mod_id: self.fail('no individual reads needed')
+        res = self.client.post('/modules/sync_all')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(asked, [self.routes.NUM_MODULES - 1])
+        self.assertEqual(self.settings['modules'], {'0': {'homeOffset': 1}, '7': {'homeOffset': 2}})
+        self.assertEqual(self.saves, 1)
+
+    def test_sync_all_asks_provisioned_modules_that_missed_their_slot(self):
+        self.settings['modules'] = {'3': {'homeOffset': 9}, '4': {'homeOffset': 9}}
+        self.routes.read_all_dumps = lambda max_id: {4: {'homeOffset': 40}}
+        asked = []
+        self.routes.read_dump = lambda mod_id: asked.append(mod_id) or {'homeOffset': 30}
+        self.client.post('/modules/sync_all')
+        self.assertEqual(asked, [3])
+        self.assertEqual(self.settings['modules'], {'3': {'homeOffset': 30}, '4': {'homeOffset': 40}})
+
+    def test_sync_all_keeps_a_module_that_never_answers(self):
+        self.settings['modules'] = {'3': {'homeOffset': 9}}
+        self.routes.read_all_dumps = lambda max_id: {}
+        self.routes.read_dump = lambda mod_id: None
+        self.client.post('/modules/sync_all')
+        self.assertEqual(self.settings['modules'], {'3': {'homeOffset': 9}})
 
     # ---- /adjust ----------------------------------------------------------
 

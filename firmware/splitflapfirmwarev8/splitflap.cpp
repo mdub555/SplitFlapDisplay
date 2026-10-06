@@ -32,6 +32,11 @@ void SplitFlap::begin() {
 }
 
 void SplitFlap::update() {
+  if (charQueued && (int32_t)(millis() - queuedAtMs) >= 0) {
+    charQueued = false;
+    moveToChar(queuedChar);
+  }
+
   if (autoHomePending) {
     // Staggered startup: delay proportional to module ID so all motors in a
     // large display don't surge current at the same instant. A move that
@@ -145,7 +150,19 @@ uint8_t SplitFlap::moveStepDelay() const {
   return cruise + (uint16_t)(start - cruise) * (rampSteps - fromEnd) / rampSteps;
 }
 
-bool SplitFlap::busy() const { return phase != PHASE_IDLE; }
+bool SplitFlap::busy() const { return phase != PHASE_IDLE || charQueued; }
+
+void SplitFlap::cancelQueued() {
+  exerciseMoves = 0;
+  charQueued = false;
+}
+
+void SplitFlap::moveToCharAfter(char targetChar, uint16_t delayMs) {
+  cancelQueued();
+  queuedChar = targetChar;
+  queuedAtMs = millis() + delayMs;
+  charQueued = true;
+}
 
 bool SplitFlap::isHoming() const {
   return phase == PHASE_SEEK_HOME || phase == PHASE_MEASURE || phase == PHASE_OFFSET;
@@ -157,7 +174,7 @@ void SplitFlap::stop() {
   // finished); homing or calibrating didn't establish the position.
   if (isHoming()) currentFlapIdx = -1;
   pendingFlapIdx = -1;
-  exerciseMoves = 0;
+  cancelQueued();
   releaseNow();
 }
 
@@ -280,24 +297,24 @@ void SplitFlap::failHoming(SplitFlapError reason) {
 void SplitFlap::home() {
   debug->println("[Splitflap] homing");
   pendingFlapIdx = -1;
-  exerciseMoves = 0;
+  cancelQueued();
   startHoming(false);
 }
 
 void SplitFlap::calibrate() {
   debug->println("[Splitflap] calibrating");
   pendingFlapIdx = -1;
-  exerciseMoves = 0;
+  cancelQueued();
   startHoming(true);
 }
 
 void SplitFlap::moveToIndex(uint8_t targetIndex) {
-  exerciseMoves = 0;
+  cancelQueued();
   moveTo(targetIndex);
 }
 
 void SplitFlap::exercise(uint8_t cycles) {
-  exerciseMoves = 0;
+  cancelQueued();
   if (cycles == 0) return;
   // The first move is to the next flap (flap 1 if the position isn't known
   // as a flap: a home first if it's unknown, or straight there if it's -2).
@@ -349,7 +366,7 @@ void SplitFlap::goToRawStep(uint16_t targetStep) {
   debug->print("[Splitflap] going to step: ");
   debug->println(targetStep);
   if (isHoming()) return;
-  exerciseMoves = 0;
+  cancelQueued();
   startMove(targetStep, -2);  // Position known in steps but not as a named character
 }
 

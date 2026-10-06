@@ -1,7 +1,7 @@
 import logging
 import time
 
-from config import NUM_MODULES
+from config import NUM_MODULES, BAUD_RATE, FRAME_BROADCAST
 from display.state import state
 from display.charset import FLAP_CHARS, COLOR_MAP, QUOTE_CHAR, QUOTE_SUBSTITUTE
 from display.layout import get_animation_order
@@ -11,11 +11,37 @@ from apps.registry import registry
 from settings.store import settings
 
 
+# Seconds for a module to turn one flap position (64 per revolution, about 4 s).
+SECONDS_PER_FLAP = 4.0 / 64.0
+
+# A frame broadcast gives each module's place in the animation as one
+# printable byte ('!' + rank), so it covers up to 94 modules.
+FRAME_MAX_MODULES = 94
+
+
+def _bus_ms(num_bytes):
+    """Time to send `num_bytes` at BAUD_RATE (8N1: 10 bits per byte)."""
+    return num_bytes * 10 * 1000.0 / BAUD_RATE
+
+
+def frame_message(text, order, interval_ms):
+    """The frame broadcast for `text`: m*F<interval>:<pairs>, where pairs
+    are each module's character and its rank in `order`, for modules 0, 1,
+    2, ... in turn. A module starts moving rank x interval_ms after the
+    frame ends. See tranceiver.h in the firmware."""
+    ranks = [0] * len(text)
+    for rank, i in enumerate(order):
+        if i < len(text):
+            ranks[i] = rank
+    pairs = ''.join(char + chr(ord('!') + rank) for char, rank in zip(text, ranks))
+    return f"m*F{interval_ms}:{pairs}\n"
+
+
 def send_to_display(text, order=None, raw=False, step_delay_ms=15):
-    """Push one frame of text to the physical modules in `order`, updating
-    DisplayState to match. Returns the largest single-module travel
-    distance (in flap positions) so the caller can wait out the physical
-    rotation time before moving on."""
+    """Push one frame of text to the physical modules, starting them in
+    `order` `step_delay_ms` apart, and update DisplayState to match. Returns
+    how many seconds until the last module has finished turning, so the
+    caller can wait it out before moving on."""
     if not text:
         return 0
 
@@ -37,25 +63,39 @@ def send_to_display(text, order=None, raw=False, step_delay_ms=15):
         indices = list(state.current_indices)
 
     max_dist = 0
-    with serial_lock:
-        for i in order:
-            if i >= len(clean_text):
-                continue
-            char = clean_text[i]
-            if ser:
-                ser.write(f"m{i:02d}-{char}\n".encode())
-                ser.flush()
-                time.sleep(step_delay_ms / 1000.0)
+    for i in order:
+        if i >= len(clean_text):
+            continue
+        target_idx = FLAP_CHARS.find(clean_text[i])
+        if target_idx == -1:
+            target_idx = 0
+        dist = 128 if indices[i] == -1 else (target_idx - indices[i]) % 64
+        max_dist = max(max_dist, dist)
+        indices[i] = target_idx
 
-            target_idx = FLAP_CHARS.find(char)
-            if target_idx == -1:
-                target_idx = 0
-            dist = 128 if indices[i] == -1 else (target_idx - indices[i]) % 64
-            max_dist = max(max_dist, dist)
-            indices[i] = target_idx
+    # One message per module took its send time plus step_delay_ms each, so
+    # a frame keeps the same spacing between modules.
+    interval_ms = round(step_delay_ms + _bus_ms(len("m00-A\n")))
+    if FRAME_BROADCAST and NUM_MODULES <= FRAME_MAX_MODULES and interval_ms <= 255:
+        # The modules cascade on their own; we only wait for the last one.
+        cascade_s = (len(order) - 1) * interval_ms / 1000.0
+        if ser:
+            with serial_lock:
+                ser.write(frame_message(clean_text, order, interval_ms).encode())
+                ser.flush()
+    else:
+        cascade_s = 0  # sending one message at a time is the cascade
+        with serial_lock:
+            for i in order:
+                if i >= len(clean_text):
+                    continue
+                if ser:
+                    ser.write(f"m{i:02d}-{clean_text[i]}\n".encode())
+                    ser.flush()
+                    time.sleep(step_delay_ms / 1000.0)
 
     state.set_display(clean_text, indices)
-    return max_dist
+    return cascade_s + max_dist * SECONDS_PER_FLAP
 
 
 def wait(seconds, stop_event, poll=0.1):
@@ -109,12 +149,12 @@ def playlist_loop():
 
             order = get_animation_order(frame.style)
             if frame.raw or frame.text != state.last_sent_page:
-                max_dist = send_to_display(frame.text, order, raw=frame.raw, step_delay_ms=frame.speed)
+                busy_s = send_to_display(frame.text, order, raw=frame.raw, step_delay_ms=frame.speed)
                 state.last_sent_page = frame.text
             else:
-                max_dist = 0
+                busy_s = 0
 
-            if not wait(max_dist * (4.0 / 64.0), state.stop_event, poll=0.1):
+            if not wait(busy_s, state.stop_event, poll=0.1):
                 break
             if not wait(frame.delay if frame.delay is not None else 5, state.stop_event):
                 break

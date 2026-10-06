@@ -84,8 +84,9 @@ namespace {
     ANY,          // REBOOT
     ANY,          // RESET_SETTINGS
     BYTE,         // EXERCISE
+    ANY,          // FRAME
   };
-  static_assert(sizeof(LIMITS) == EXERCISE + 1,
+  static_assert(sizeof(LIMITS) == FRAME + 1,
                 "LIMITS needs one entry per CommandType");
 
   // Finishes a numeric command, rejecting it if it had no digits (a truncated
@@ -110,6 +111,7 @@ namespace {
   __attribute__((noinline)) bool toCommand(Command& command, const char* buffer, uint8_t bufferLen) {
     command.data.dataInt = 0;
     command.type = UNKNOWN_COMMAND;
+    command.broadcast = false;
     ParseState parseState = IDLE;
     // Wider than a module ID so an ID above 255 can't wrap around and match
     // a real module (e.g. "m261" must not reach module 5).
@@ -132,6 +134,7 @@ namespace {
         case READING_ID:
           if (c == '*') {
             broadcast = true;
+            command.broadcast = true;
             parseState = READING_CMD;
             break;
           } else if (isDigit(c)) {
@@ -188,6 +191,7 @@ namespace {
             case RESET_SETTINGS:
               return true;
             case UNKNOWN_COMMAND:
+            case FRAME:  // only reached through the frame header, never here
               return false;
           }
           break;
@@ -267,11 +271,55 @@ void Tranceiver::dump(uint32_t revolutions, int16_t drift) {
 
 const char* Tranceiver::message() const { return buffer; }
 
+void Tranceiver::checkFrameHeader() {
+  // "m*F" then at least one digit then ':'
+  if (bufferLen < 5 || buffer[0] != 'm' || buffer[1] != '*' || buffer[2] != 'F') return;
+  uint16_t interval = 0;
+  for (uint8_t i = 3; i < bufferLen - 1; i++) {
+    if (!isDigit(buffer[i])) return;
+    interval = interval * 10 + (buffer[i] - '0');
+    if (interval > 255) return;
+  }
+  inFrame = true;
+  framePos = 0;
+  frameInterval = interval;
+  frameHit = false;
+}
+
+bool Tranceiver::frameByte(char c, Command& command) {
+  if (c == '\n') {
+    inFrame = false;
+    buffer[bufferLen] = '\0';  // the header, for message()
+    bufferLen = 0;
+    if (!frameHit) return false;
+    command.type = FRAME;
+    command.broadcast = true;
+    command.data.dataChar = frameChar;
+    command.frameDelayMs = (uint16_t)frameRank * frameInterval;
+    return true;
+  }
+  uint8_t id = EepromStore::getModuleId();
+  if (id != 255 && framePos / 2 == id) {
+    if (framePos & 1) {
+      frameRank = c > '!' ? c - '!' : 0;
+      frameHit = true;
+    } else {
+      frameChar = c;
+    }
+  }
+  if (framePos < 0xFFFF) framePos++;
+  return false;
+}
+
 bool Tranceiver::poll(Command& command) {
   uint32_t safety = millis();
   while (Serial.available() > 0) {
     char c = Serial.read();
     lastSerialTime = millis();
+    if (inFrame) {
+      if (frameByte(c, command)) return true;
+      continue;
+    }
     // Command is complete
     if (c == '\n') {
       buffer[bufferLen] = '\0';
@@ -281,10 +329,12 @@ bool Tranceiver::poll(Command& command) {
     }
     if (bufferLen < BUFFER_SIZE - 1) {
       buffer[bufferLen++] = c;
+      if (c == ':') checkFrameHeader();
     }
 
     if (lastSerialTime - safety > 500) {
       bufferLen = 0;
+      inFrame = false;
       return false;
     }
   }
@@ -293,6 +343,12 @@ bool Tranceiver::poll(Command& command) {
   // whatever is in the buffer as complete and return it. Handles messages
   // that don't have an explicit terminator or whose terminator was missed.
   if (bufferLen > 0 && millis() - lastSerialTime > 50) {
+    if (inFrame) {
+      // A frame that stalls is dropped rather than half-applied.
+      inFrame = false;
+      bufferLen = 0;
+      return false;
+    }
     buffer[bufferLen] = '\0';
     bool gotCommand = toCommand(command, buffer, bufferLen);
     bufferLen = 0;

@@ -39,7 +39,14 @@ Command command;
 
 // A dump requested while the module is busy (moving, homing, calibrating) is
 // sent once it finishes, so a dump after a calibrate reports the result.
+// A broadcast dump is answered in this module's slot: ID x DUMP_SLOT_MS after
+// the request, or after the module goes idle if it was busy, so every
+// module's reply has the bus to itself. A slot fits a ~50-byte dump at 9600
+// baud (about 52 ms) with room for the line turnaround and timing skew.
+const uint8_t DUMP_SLOT_MS = 75;
 bool dumpPending = false;
+uint16_t dumpDelayMs = 0;  // wait before replying, once idle
+uint32_t dumpAtMs = 0;     // millis() to reply at
 
 // millis() when identify ('f') was received, and whether it's still going.
 uint32_t identifyStartMs = 0;
@@ -94,9 +101,13 @@ void loop() {
   splitFlap.update();
   updateStatusLed();
 
-  if (dumpPending && !splitFlap.busy()) {
-    dumpPending = false;
-    tranceiver.dump(splitFlap.revolutionCount(), splitFlap.lastDrift());
+  if (dumpPending) {
+    if (splitFlap.busy()) {
+      dumpAtMs = millis() + dumpDelayMs;  // the wait starts once idle
+    } else if ((int32_t)(millis() - dumpAtMs) >= 0) {
+      dumpPending = false;
+      tranceiver.dump(splitFlap.revolutionCount(), splitFlap.lastDrift());
+    }
   }
 
   if (tranceiver.poll(command)) {
@@ -178,9 +189,14 @@ void loop() {
         EepromStore::saveRecalculateHome(command.data.dataInt);
         break;
 
-      case DUMP_STATE:
+      case DUMP_STATE: {
+        uint8_t id = EepromStore::getModuleId();
+        if (command.broadcast && id == 255) break;
+        dumpDelayMs = command.broadcast ? id * DUMP_SLOT_MS : 0;
+        dumpAtMs = millis() + dumpDelayMs;
         dumpPending = true;
         break;
+      }
 
       case STOP:
         splitFlap.stop();
@@ -193,6 +209,10 @@ void loop() {
 
       case REBOOT:
         reboot();
+        break;
+
+      case FRAME:
+        splitFlap.moveToCharAfter(command.data.dataChar, command.frameDelayMs);
         break;
 
       case EXERCISE:

@@ -44,8 +44,12 @@
 //         r, Enable or disable releasing the motor coils when idle. data must
 //            be 1 to release, 0 to keep them energized
 //         d, Dump the module state back to the Raspberry Pi (format at
-//            Tranceiver::dump() below). If the module is moving, homing or calibrating, the reply is
-//            sent once that finishes. No data expected
+//            Tranceiver::dump() below). If the module is moving, homing or
+//            calibrating, the reply is sent once that finishes. A broadcast
+//            ('m*d') is answered by every provisioned module in turn: each
+//            waits ID x 75 ms (after finishing anything in progress) so the
+//            replies don't collide. Unprovisioned modules don't answer a
+//            broadcast. No data expected
 //         j, Enable or disable recalculating home. 1 to continuously recalculate,
 //            0 to only calculate on home.
 //         k, Set the delay between each motor step during normal operation, in
@@ -69,6 +73,17 @@
 //         z, Reboot the module. No data expected
 //         q, Reset every setting to its default, keeping the module ID, then
 //            reboot. No data expected
+//
+// Frame broadcast: "m*F<interval>:<pairs>\n" sets every module at once.
+//   <pairs> has two bytes per module, for IDs 0, 1, 2, ... in order: the
+//   character to show, then its place in the animation as a printable byte,
+//   '!' + rank (rank 0 starts first). A module starts moving rank x
+//   <interval> ms (0-255) after the frame ends, so the display can still
+//   cascade in any order without a message per module. A module whose ID has
+//   no pair ignores the frame. The pairs are read as they arrive rather than
+//   buffered, so a frame can be longer than BUFFER_SIZE; up to 94 modules
+//   (the printable ranks).
+//
 //         v, Exercise: step through every flap one at a time, N times round
 //            the reel (1-255; 0 does nothing). Any other motion command or
 //            'x' ends it.
@@ -101,15 +116,18 @@ enum CommandType {
   REBOOT,                 // 'z'
   RESET_SETTINGS,         // 'q'
   EXERCISE,               // 'v'
+  FRAME,                  // 'F' (broadcast only, see above)
 };
 
 struct Command {
   CommandType type = UNKNOWN_COMMAND;
+  bool broadcast = false;  // addressed with '*' rather than this module's ID
   union Data {
     char dataChar;
     uint16_t dataInt;
   };
   Data data = {'0'};
+  uint16_t frameDelayMs = 0;  // FRAME: wait before moving to dataChar
 };
 
 class Tranceiver {
@@ -117,6 +135,22 @@ class Tranceiver {
   char buffer[BUFFER_SIZE];
   uint8_t bufferLen = 0;
   uint32_t lastSerialTime = 0;
+
+  // Frame broadcast in progress: the header "m*F<interval>:" is in the
+  // buffer and the pairs are being counted as they arrive.
+  bool inFrame = false;
+  uint16_t framePos = 0;       // bytes of pairs received so far
+  uint8_t frameInterval = 0;   // ms per rank
+  char frameChar = ' ';        // this module's character, once received
+  uint8_t frameRank = 0;       // and its rank
+  bool frameHit = false;       // both of this module's bytes received
+
+  // Starts frame mode if the buffer holds a complete frame header.
+  void checkFrameHeader();
+
+  // Handles one byte of a frame's pairs. Returns true with `command` filled
+  // in when the frame ends with this module's pair received.
+  bool frameByte(char c, Command& command);
 
  public:
   // Sets up the DE pin and RS-485 serial link. Call once from setup().

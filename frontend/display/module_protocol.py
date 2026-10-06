@@ -47,6 +47,12 @@ GLOBAL_SETTINGS = {
 }
 
 
+# A broadcast dump (m*d) is answered by each provisioned module in turn, ID
+# x DUMP_SLOT_S after the request (or after it finishes a move it was busy
+# with). Matches DUMP_SLOT_MS in the firmware.
+DUMP_SLOT_S = 0.075
+
+
 def global_command(key: str, value) -> str:
     """The broadcast message that sets global setting `key` on every module."""
     return f"m*{GLOBAL_SETTINGS[key]['cmd']}{int(value)}"

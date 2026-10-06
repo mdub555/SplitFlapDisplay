@@ -46,6 +46,9 @@ class SplitFlap {
   uint32_t revolutions = 0;     // see revolutionCount()
   uint32_t savedRevolutions = 0; // the count last written to EEPROM
   uint16_t exerciseMoves = 0;   // single-flap moves left in an exercise
+  bool charQueued = false;      // moveToCharAfter() is waiting to start
+  char queuedChar = ' ';
+  uint32_t queuedAtMs = 0;      // millis() to start moving to queuedChar
 
   Phase phase = PHASE_IDLE;
   bool calibrating = false;     // PHASE_SEEK_HOME leads to PHASE_MEASURE
@@ -68,6 +71,10 @@ class SplitFlap {
 
   // moveToIndex() without cancelling an exercise in progress.
   void moveTo(uint8_t targetIndex);
+
+  // Ends an exercise and drops a character queued by moveToCharAfter().
+  // Every public motion command calls this first.
+  void cancelQueued();
 
   uint16_t stepsToTarget(uint16_t targetStepPos) const;
 
@@ -112,7 +119,8 @@ class SplitFlap {
   // step delay has passed.
   void update();
 
-  // True while an operation is in progress (the reel may be moving).
+  // True while an operation is in progress (the reel may be moving), or a
+  // moveToCharAfter() is waiting to start.
   bool busy() const;
 
   // True while homing or calibrating (the position is being established).
@@ -179,6 +187,10 @@ class SplitFlap {
   // Looks up a character's index in FLAP_CHARS and delegates to moveToIndex().
   // No-op if the character isn't on this reel.
   void moveToChar(char targetChar);
+
+  // moveToChar() after `delayMs`, for a frame broadcast's cascade. Replaces
+  // anything already queued; any other motion command, or stop(), cancels it.
+  void moveToCharAfter(char targetChar, uint16_t delayMs);
 
   // Moves to an absolute raw step position, bypassing character/index logic.
   // Ignored while homing or calibrating.

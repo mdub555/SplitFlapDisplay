@@ -6,6 +6,7 @@ import time
 import serial
 
 from config import SERIAL_PORT, BAUD_RATE
+from display.module_protocol import DUMP_SLOT_S
 from display.state import state
 
 serial_lock = threading.Lock()
@@ -67,6 +68,30 @@ def read_dump(mod_id: int, timeout: float = 5.0):
     return None
 
 
+def read_all_dumps(max_id: int, margin: float = 0.5):
+    """m*d — ask every module for its dump at once. Each provisioned module
+    answers in its own slot (ID x DUMP_SLOT_S after the request), so this
+    listens until module `max_id`'s slot has passed, plus `margin`. Returns
+    {mod_id: dump} for every reply received; modules that were busy (they
+    answer after finishing) or didn't answer are missing."""
+    if not ser:
+        return {}
+    with serial_lock:
+        ser.reset_input_buffer()
+        ser.write(b"m*d\n")
+        ser.flush()
+        state._broadcast_serial("SENT: m*d")
+        deadline = time.time() + (max_id + 1) * DUMP_SLOT_S + margin
+        buffer = ""
+        while time.time() < deadline:
+            if ser.in_waiting > 0:
+                buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+            time.sleep(0.02)
+    if buffer:
+        state._broadcast_serial(f"RECV: {buffer}")
+    return parse_all_dumps(buffer)
+
+
 # Fields newer firmware sends after the first nine, in this order, followed
 # by drift (steps the tracked position was off by at the last home edge;
 # positive = missed steps), which is always last. Each firmware version adds
@@ -122,6 +147,16 @@ def parse_buffer(buffer, mod_id=None):
         if dump is not None:
             return dump
     return None
+
+
+def parse_all_dumps(buffer):
+    """Every complete, well-formed dump line in `buffer`, as {mod_id: dump}."""
+    dumps = {}
+    for match in re.finditer(r'm(\d+)d:([^\r\n]*)\r?\n', buffer):
+        dump = _parse_dump_fields(match.group(2))
+        if dump is not None:
+            dumps[int(match.group(1))] = dump
+    return dumps
 
 
 def calibrate_module(mod_id: int, timeout: float = 45.0):

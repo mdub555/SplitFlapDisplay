@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from display.serial_link import parse_buffer  # noqa: E402
+from display.serial_link import parse_buffer, parse_all_dumps  # noqa: E402
 
 
 class ParseBufferTest(unittest.TestCase):
@@ -96,6 +96,25 @@ class ParseBufferTest(unittest.TestCase):
 
     def test_no_dump_returns_none(self):
         self.assertIsNone(parse_buffer("", 5))
+
+
+class ParseAllDumpsTest(unittest.TestCase):
+    def test_collects_every_module_in_a_broadcast_reply(self):
+        buffer = ("m00d:480:4096:50:1:1:1:0:1:1:3:0:0:150:7:0\r\n"
+                  "m05d:470:4075:50:1:1:1:0:1:1:3:0:0:150:9:-2\r\n"
+                  "m63d:460:4096:50:1:1:1:0:1:1:3:0:0:150:11:1\r\n")
+        dumps = parse_all_dumps(buffer)
+        self.assertEqual(sorted(dumps), [0, 5, 63])
+        self.assertEqual((dumps[5]['totalSteps'], dumps[5]['drift']), (4075, -2))
+
+    def test_skips_partial_and_malformed_lines(self):
+        buffer = ("m01d:480:4096:50:1:1:1:0:1:1\r\n"
+                  "m02d:garbage\r\n"
+                  "m03d:480:4096:50:1:1:1:0")
+        self.assertEqual(sorted(parse_all_dumps(buffer)), [1])
+
+    def test_empty_buffer(self):
+        self.assertEqual(parse_all_dumps(""), {})
 
 
 if __name__ == '__main__':

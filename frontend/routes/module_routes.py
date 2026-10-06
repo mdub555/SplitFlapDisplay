@@ -4,7 +4,7 @@ from flask import Blueprint, request, jsonify
 
 from config import NUM_MODULES
 from settings.store import settings, save_settings
-from display.serial_link import send_raw, read_dump, calibrate_module
+from display.serial_link import send_raw, read_dump, read_all_dumps, calibrate_module
 from display.module_protocol import TOGGLE_COMMANDS, toggle_command
 from display.state import state
 from display.charset import FLAP_CHARS, COLOR_MAP, QUOTE_CHAR, QUOTE_SUBSTITUTE
@@ -119,11 +119,18 @@ def sync_one(mod_id):
 
 @bp.route('/modules/sync_all', methods=['POST'])
 def sync_all():
-    for i in range(NUM_MODULES):
-        dump = read_dump(i)
-        if dump:
-            mod_id_str = str(i)
-            settings['modules'][mod_id_str] = dump
+    """Read every module's dump with one broadcast (each module answers in
+    its own time slot), then ask any provisioned module that didn't answer
+    on its own, e.g. because it was still moving."""
+    dumps = {i: d for i, d in read_all_dumps(NUM_MODULES - 1).items() if i < NUM_MODULES}
+    for mod_id_str in list(settings['modules']):
+        i = int(mod_id_str)
+        if i not in dumps and i < NUM_MODULES:
+            dump = read_dump(i)
+            if dump:
+                dumps[i] = dump
+    for i, dump in dumps.items():
+        settings['modules'][str(i)] = dump
     save_settings(settings)
     return jsonify(status='success', settings=settings)
 
