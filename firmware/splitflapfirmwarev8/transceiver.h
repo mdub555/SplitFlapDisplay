@@ -88,9 +88,8 @@
 //   (the printable ranks).
 // =============================================================================
 
-// Each command's letter and accepted data are in COMMANDS in transceiver.cpp,
-// which is indexed by this enum: keep the two in the same order.
-enum CommandType {
+// Each command's letter and accepted data are in COMMANDS in transceiver.cpp.
+enum CommandType : uint8_t {
   UNKNOWN_COMMAND,
   DISPLAY_CHAR,           // '-'
   DISPLAY_INDEX,          // '+'

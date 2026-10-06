@@ -28,59 +28,56 @@ namespace {
   };
 
   struct CommandSpec {
-    char code;    // the command's letter on the wire
+    char code;         // the command's letter on the wire
+    CommandType type;
     ArgKind arg;
   };
 
-  // Every command's letter and data, indexed by CommandType (keep it in the
-  // same order as the enum).
+  // Every command that can be sent by letter. FRAME isn't here: it's only
+  // reached through the frame header.
   const CommandSpec COMMANDS[] = {
-    {'\0', ARG_NONE},         // UNKNOWN_COMMAND
-    {'-', ARG_CHAR},          // DISPLAY_CHAR
-    {'+', ARG_BYTE},          // DISPLAY_INDEX: moveToIndex() ignores indexes past the last flap
-    {'h', ARG_NONE},          // HOME
-    {'c', ARG_NONE},          // CALIBRATE
-    {'o', ARG_BELOW_TOTAL},   // SET_OFFSET
-    {'t', ARG_TOTAL_STEPS},   // SET_TOTAL_STEPS
-    {'b', ARG_ANY},           // SET_DEBOUNCE_MS
-    {'s', ARG_BELOW_TOTAL},   // NUDGE
-    {'g', ARG_BELOW_TOTAL},   // MOVE_TO_STEP
-    {'i', ARG_BYTE},          // SET_MODULE_ID
-    {'a', ARG_BOOLEAN},       // SET_AUTO_HOME
-    {'d', ARG_NONE},          // DUMP_STATE
-    {'w', ARG_BOOLEAN},       // SET_MOTOR_CW
-    {'r', ARG_BOOLEAN},       // SET_MOTOR_RELEASE
-    {'j', ARG_BOOLEAN},       // SET_RECALCULATE_HOME
-    {'k', ARG_DELAY},         // SET_STEP_DELAY
-    {'l', ARG_DELAY},         // SET_HOMING_STEP_DELAY
-    {'x', ARG_NONE},          // STOP
-    {'u', ARG_DELAY},         // SET_RAMP_START_DELAY
-    {'n', ARG_BYTE},          // SET_RAMP_STEPS
-    {'e', ARG_BYTE},          // SET_SETTLE_MS
-    {'y', ARG_BYTE},          // SET_STAGGER_MS
-    {'f', ARG_NONE},          // IDENTIFY
-    {'z', ARG_NONE},          // REBOOT
-    {'q', ARG_NONE},          // RESET_SETTINGS
-    {'v', ARG_BYTE},          // EXERCISE
-    {'\0', ARG_NONE},         // FRAME: only reached through the frame header
+    {'-', DISPLAY_CHAR,          ARG_CHAR},
+    {'+', DISPLAY_INDEX,         ARG_BYTE},  // moveToIndex() ignores indexes past the last flap
+    {'h', HOME,                  ARG_NONE},
+    {'c', CALIBRATE,             ARG_NONE},
+    {'o', SET_OFFSET,            ARG_BELOW_TOTAL},
+    {'t', SET_TOTAL_STEPS,       ARG_TOTAL_STEPS},
+    {'b', SET_DEBOUNCE_MS,       ARG_ANY},
+    {'s', NUDGE,                 ARG_BELOW_TOTAL},
+    {'g', MOVE_TO_STEP,          ARG_BELOW_TOTAL},
+    {'i', SET_MODULE_ID,         ARG_BYTE},
+    {'a', SET_AUTO_HOME,         ARG_BOOLEAN},
+    {'d', DUMP_STATE,            ARG_NONE},
+    {'w', SET_MOTOR_CW,          ARG_BOOLEAN},
+    {'r', SET_MOTOR_RELEASE,     ARG_BOOLEAN},
+    {'j', SET_RECALCULATE_HOME,  ARG_BOOLEAN},
+    {'k', SET_STEP_DELAY,        ARG_DELAY},
+    {'l', SET_HOMING_STEP_DELAY, ARG_DELAY},
+    {'x', STOP,                  ARG_NONE},
+    {'u', SET_RAMP_START_DELAY,  ARG_DELAY},
+    {'n', SET_RAMP_STEPS,        ARG_BYTE},
+    {'e', SET_SETTLE_MS,         ARG_BYTE},
+    {'y', SET_STAGGER_MS,        ARG_BYTE},
+    {'f', IDENTIFY,              ARG_NONE},
+    {'z', REBOOT,                ARG_NONE},
+    {'q', RESET_SETTINGS,        ARG_NONE},
+    {'v', EXERCISE,              ARG_BYTE},
   };
-  static_assert(sizeof(COMMANDS) / sizeof(COMMANDS[0]) == FRAME + 1,
-                "COMMANDS needs one entry per CommandType");
 
-  CommandType toCommandType(char c) {
-    // UNKNOWN_COMMAND and FRAME have no letter, so they're skipped.
-    for (uint8_t type = UNKNOWN_COMMAND + 1; type < FRAME; type++) {
-      if (COMMANDS[type].code == c) return (CommandType)type;
+  // The COMMANDS entry for the letter `c`, or nullptr if there isn't one.
+  const CommandSpec* findCommand(char c) {
+    for (const CommandSpec& spec : COMMANDS) {
+      if (spec.code == c) return &spec;
     }
-    return UNKNOWN_COMMAND;
+    return nullptr;
   }
 
   // Finishes a numeric command, rejecting it if it had no digits (a truncated
   // "m05k" must not set a 0 ms delay) or its value is out of range.
-  bool finishDataInt(Command& command, uint16_t value, bool hasDigits) {
+  bool finishDataInt(Command& command, ArgKind arg, uint16_t value, bool hasDigits) {
     if (!hasDigits) return false;
     uint16_t max = 0xFFFF;
-    switch (COMMANDS[command.type].arg) {
+    switch (arg) {
       case ARG_BOOLEAN:     max = 1; break;
       case ARG_DELAY:       if (value == 0) return false;  // fall through
       case ARG_BYTE:        max = 255; break;
@@ -105,6 +102,7 @@ namespace {
     uint16_t id = 0;
     uint16_t value = 0;
     bool hasDigits = false;
+    ArgKind arg = ARG_NONE;
     for (uint8_t i = 0; i < bufferLen; i++) {
       char c = buffer[i];
       switch (parseState) {
@@ -136,25 +134,29 @@ namespace {
           }
           // fall through: this character is the command
 
-        case READING_CMD:
-          command.type = toCommandType(c);
-          // A broadcast ID change would give every module the same ID, so
-          // only an unprovisioned module accepts one.
-          if (command.type == SET_MODULE_ID && command.broadcast &&
-              EepromStore::getModuleId() != EepromStore::UNPROVISIONED_ID) {
-            return false;
+        case READING_CMD: {
+            const CommandSpec* spec = findCommand(c);
+            if (!spec) return false;
+            command.type = spec->type;
+            arg = spec->arg;
+            // A broadcast ID change would give every module the same ID, so
+            // only an unprovisioned module accepts one.
+            if (command.type == SET_MODULE_ID && command.broadcast &&
+                EepromStore::getModuleId() != EepromStore::UNPROVISIONED_ID) {
+              return false;
+            }
+            switch (arg) {
+              case ARG_NONE:
+                return true;
+              case ARG_CHAR:
+                parseState = READING_DATA_CHAR;
+                break;
+              default:
+                parseState = READING_DATA_INT;
+                break;
+            }
+            break;
           }
-          switch (COMMANDS[command.type].arg) {
-            case ARG_NONE:
-              return command.type != UNKNOWN_COMMAND;
-            case ARG_CHAR:
-              parseState = READING_DATA_CHAR;
-              break;
-            default:
-              parseState = READING_DATA_INT;
-              break;
-          }
-          break;
 
         // Numeric commands — accumulate digits, execute on any non-digit
         // terminator (typically '\n'). Values that don't fit in 16 bits are
@@ -169,7 +171,7 @@ namespace {
             value = value * 10 + digit;
             hasDigits = true;
           } else {
-            return finishDataInt(command, value, hasDigits);
+            return finishDataInt(command, arg, value, hasDigits);
           }
           break;
 
@@ -181,7 +183,7 @@ namespace {
     // The buffer ended without a terminator (the '\n' is stripped by poll(),
     // and the 50ms timeout path never has one).
     if (parseState == READING_DATA_INT) {
-      return finishDataInt(command, value, hasDigits);
+      return finishDataInt(command, arg, value, hasDigits);
     }
     return true;
   }
