@@ -43,7 +43,7 @@ namespace EepromStore {
   void saveHomingStepDelayUs(uint16_t delayUs);
   uint16_t getHomingStepDelayUs();
 
-  void saveDebounceMs(uint16_t millis);
+  void saveDebounceMs(uint16_t ms);
   uint16_t getDebounceMs();
 
   void saveAutoHome(bool enabled);
