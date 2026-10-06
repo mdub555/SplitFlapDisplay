@@ -19,7 +19,7 @@
 // wrapping, defaulting to 0, or truncating it.
 //   - ID
 //         *, wildcard, all modules targeted
-//         N, the ID of the specific module targeted
+//         N, the ID of the specific module targeted (at least one digit)
 //   - CMD
 //         -, Display a character. data must be a single character
 //         +, Display an index. data must be a number
@@ -27,13 +27,19 @@
 //         c, Calibrate the module, calculating the number of steps in a full
 //            rotation. No data expected
 //         o, Set the offset number of steps from where home is detected to the
-//            blank flap. data must be a number
-//         t, Set the number of steps in a full rotation. data must be a number
+//            blank flap. data must be a number. 0 instead makes the current
+//            position the blank flap (only while the position is known and
+//            the reel is still). A changed offset marks the position unknown,
+//            so the next move homes first
+//         t, Set the number of steps in a full rotation. data must be a number.
+//            A changed value stops any move and marks the position unknown,
+//            so the next move homes first
 //         b, Set the debounce delay for the home sensor. data must be a number
 //         s, Nudge the stepper motor forward N steps. Doesn't change the home
 //            offset; use 'o0' afterwards to save the new position as the
 //            offset. data must be a number
-//         g, Goto a specific motor step. data must be a number
+//         g, Goto a specific motor step. data must be a number. Ignored until
+//            the module has been homed
 //         i, Set the module ID. data must be a number. A broadcast ('m*i')
 //            is only accepted by unprovisioned modules (ID 255), so it can't
 //            give every module on the bus the same ID

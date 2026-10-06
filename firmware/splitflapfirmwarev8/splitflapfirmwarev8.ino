@@ -145,16 +145,16 @@ void handleCommand(const Command& command) {
       break;
 
     case SET_OFFSET:
-      // 0 is a special case that means set the current position as the offset
+      // 0 is a special case that means make the current position flap 0
       if (command.data.dataInt == 0) {
-        EepromStore::saveHomeOffset(splitFlap.currentStepPosition());
+        splitFlap.setHomeOffsetHere();
       } else {
-        EepromStore::saveHomeOffset(command.data.dataInt);
+        splitFlap.setHomeOffset(command.data.dataInt);
       }
       break;
 
     case SET_TOTAL_STEPS:
-      EepromStore::saveTotalSteps(command.data.dataInt);
+      splitFlap.setTotalSteps(command.data.dataInt);
       break;
 
     case SET_DEBOUNCE_MS:

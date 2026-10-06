@@ -79,6 +79,17 @@ class SplitFlap {
   // moveToIndex() without cancelling an exercise in progress.
   void moveTo(uint8_t targetIndex);
 
+  // Moves to a raw step position (see nudge() and goToRawStep()). Ignored
+  // while homing or calibrating.
+  void rawMove(uint16_t targetStep);
+
+  // Marks the position unknown, including where a move in progress ends, so
+  // the next move homes first.
+  void forgetPosition();
+
+  // True once the startup stagger for this module's ID has passed.
+  bool staggerElapsed() const;
+
   // Ends an exercise and drops a character queued by moveToCharAfter().
   // Every public motion command calls this first.
   void cancelQueued();
@@ -147,7 +158,7 @@ class SplitFlap {
 
   // Nudges the motor forward `steps` steps. The step position stays known,
   // but the flap index becomes FLAP_BETWEEN since the reel is no longer on a
-  // flap.
+  // flap. If the position is unknown it stays unknown.
   // Ignored while homing or calibrating.
   void nudge(uint16_t steps);
 
@@ -198,8 +209,23 @@ class SplitFlap {
   void moveToCharAfter(char targetChar, uint16_t delayMs);
 
   // Moves to an absolute raw step position, bypassing character/index logic.
-  // Ignored while homing or calibrating.
+  // Ignored while homing or calibrating, or if the position is unknown.
   void goToRawStep(uint16_t targetStep);
+
+  // Saves a new home offset. The current position was measured from the old
+  // flap 0, so it becomes unknown and the next move homes first. Sent during
+  // the offset phase of a home, the home starts over.
+  void setHomeOffset(uint16_t offset);
+
+  // Makes the current position flap 0, saving the matching home offset.
+  // Ignored unless the position is known and the reel is standing still.
+  void setHomeOffsetHere();
+
+  // Saves a new number of steps per revolution. The current position was
+  // counted in the old units, so it becomes unknown (stopping a move in
+  // progress) and the next move homes first. No effect on a home or
+  // calibration in progress.
+  void setTotalSteps(uint16_t steps);
 };
 
 #endif

@@ -100,6 +100,7 @@ namespace {
     // Wider than a module ID so an ID above 255 can't wrap around and match
     // a real module (e.g. "m261" must not reach module 5).
     uint16_t id = 0;
+    bool hasId = false;
     uint16_t value = 0;
     bool hasDigits = false;
     ArgKind arg = ARG_NONE;
@@ -113,25 +114,27 @@ namespace {
           }
           break;
 
-        // Accumulate the module ID field (digits or '*'), then start reading
-        // the command on the first character that's neither.
+        // Accumulate the module ID field ('*', or one or more digits), then
+        // start reading the command on the first character after it.
         case READING_ID:
-          if (c == '*') {
-            command.broadcast = true;
-            parseState = READING_CMD;
-            break;
-          } else if (isDigit(c)) {
+          if (isDigit(c)) {
             if (id <= 255) {
               id *= 10;
               id += c - '0';
             }
+            hasId = true;
             break;
-          } else {
-            if (id != EepromStore::getModuleId()) {
-              return false;
-            }
-            parseState = READING_CMD;
           }
+          if (c == '*' && !hasId) {
+            command.broadcast = true;
+            parseState = READING_CMD;
+            break;
+          }
+          // A missing ID mustn't read as module 0.
+          if (!hasId || id != EepromStore::getModuleId()) {
+            return false;
+          }
+          parseState = READING_CMD;
           // fall through: this character is the command
 
         case READING_CMD: {
@@ -181,11 +184,12 @@ namespace {
       }
     }
     // The buffer ended without a terminator (the '\n' is stripped by poll(),
-    // and the 50ms timeout path never has one).
+    // and the 50ms timeout path never has one). Only a number can end there;
+    // anything else was cut short.
     if (parseState == READING_DATA_INT) {
       return finishDataInt(command, arg, value, hasDigits);
     }
-    return true;
+    return false;
   }
 }
 

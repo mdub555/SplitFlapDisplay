@@ -10,7 +10,7 @@ namespace {
   // blank (the "home" flap). The index corresponds to a physical flap.
   // PROGMEM puts this into flash and doesn't consume SRAM (good since this is
   // so limited). This requires using pgm_read_byte() to read from flash.
-  const char FLAP_CHARS[] PROGMEM = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!,.q:@#$&()+-*/=\%dhwroygbp";
+  const char FLAP_CHARS[] PROGMEM = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!,.q:@#$&()+-*/=%dhwroygbp";
   // -1 removes the trailing null
   const uint8_t NUM_FLAPS = sizeof(FLAP_CHARS) - 1;
 
@@ -48,12 +48,9 @@ void SplitFlap::update() {
     moveToChar(queuedChar);
   }
 
-  if (autoHomePending) {
-    // Staggered startup: delay proportional to module ID so all motors in a
-    // large display don't surge current at the same instant. A move that
-    // arrives first homes straight away, which makes this a no-op.
-    uint8_t id = EepromStore::getModuleId();
-    if (id != EepromStore::UNPROVISIONED_ID && millis() < (uint32_t)id * EepromStore::getStaggerMs()) return;
+  if (autoHomePending && staggerElapsed()) {
+    // A move that arrived first has already homed (or is homing), which
+    // makes this a no-op.
     autoHomePending = false;
     if (phase == PHASE_IDLE && currentFlapIdx == FLAP_UNKNOWN) {
       home();
@@ -161,6 +158,12 @@ uint8_t SplitFlap::moveStepDelay() const {
   return cruise + (uint16_t)(start - cruise) * (rampSteps - fromEnd) / rampSteps;
 }
 
+bool SplitFlap::staggerElapsed() const {
+  uint8_t id = EepromStore::getModuleId();
+  return id == EepromStore::UNPROVISIONED_ID ||
+         millis() >= (uint32_t)id * EepromStore::getStaggerMs();
+}
+
 bool SplitFlap::busy() const { return phase != PHASE_IDLE || charQueued; }
 
 void SplitFlap::cancelQueued() {
@@ -180,12 +183,12 @@ bool SplitFlap::isHoming() const {
 }
 
 void SplitFlap::stop() {
+  cancelQueued();  // also while idle: a frame's character may be waiting
   if (phase == PHASE_IDLE) return;
   // A move already marks the flap as FLAP_BETWEEN (and a settle is after the
   // move finished); homing or calibrating didn't establish the position.
   if (isHoming()) currentFlapIdx = FLAP_UNKNOWN;
   pendingFlapIdx = NO_PENDING_FLAP;
-  cancelQueued();
   releaseNow();
 }
 
@@ -251,7 +254,8 @@ void SplitFlap::startMove(uint16_t stepPos, int8_t flapIdx) {
   targetStepPos = stepPos;
   targetFlapIdx = flapIdx;
   stepsRemaining = stepsToTarget(stepPos);
-  currentFlapIdx = FLAP_BETWEEN;  // between flaps until the move finishes
+  // Between flaps until the move finishes; an unknown position stays unknown.
+  if (currentFlapIdx != FLAP_UNKNOWN) currentFlapIdx = FLAP_BETWEEN;
 }
 
 void SplitFlap::startHoming(bool calibrate) {
@@ -361,15 +365,61 @@ void SplitFlap::moveToChar(char targetChar) {
 void SplitFlap::nudge(uint16_t steps) {
   // The target wraps past the end of the revolution without overflowing.
   uint16_t untilWrap = EepromStore::getTotalSteps() - currentStepPos;
-  goToRawStep(steps < untilWrap ? currentStepPos + steps : steps - untilWrap);
+  rawMove(steps < untilWrap ? currentStepPos + steps : steps - untilWrap);
 }
 
 void SplitFlap::goToRawStep(uint16_t targetStep) {
   debug->print("[Splitflap] going to step: ");
   debug->println(targetStep);
+  // A step position only means something once the reel has been homed.
+  if (currentFlapIdx == FLAP_UNKNOWN) return;
+  rawMove(targetStep);
+}
+
+void SplitFlap::rawMove(uint16_t targetStep) {
   if (isHoming()) return;
   cancelQueued();
-  startMove(targetStep, FLAP_BETWEEN);  // Position known in steps but not as a named character
+  // Known in steps but not as a flap, unless the position was unknown.
+  startMove(targetStep, currentFlapIdx == FLAP_UNKNOWN ? FLAP_UNKNOWN : FLAP_BETWEEN);
+}
+
+void SplitFlap::forgetPosition() {
+  currentFlapIdx = FLAP_UNKNOWN;
+  targetFlapIdx = FLAP_UNKNOWN;  // so a move in progress doesn't restore it
+}
+
+void SplitFlap::setHomeOffset(uint16_t offset) {
+  if (offset == EepromStore::getHomeOffset()) return;
+  EepromStore::saveHomeOffset(offset);
+  // Flap 0 has moved, so a position measured from the old one is wrong.
+  if (phase == PHASE_OFFSET) {
+    // Already advancing the old offset: find the home edge again.
+    startHoming(false);
+  } else if (!isHoming()) {
+    forgetPosition();
+  }
+}
+
+void SplitFlap::setHomeOffsetHere() {
+  // The current position has to be known, and the reel standing still.
+  if (currentFlapIdx == FLAP_UNKNOWN || (phase != PHASE_IDLE && phase != PHASE_SETTLE)) return;
+  // currentStepPos counts from flap 0, which is the old offset past the edge.
+  uint32_t offset = (uint32_t)EepromStore::getHomeOffset() + currentStepPos;
+  EepromStore::saveHomeOffset(offset % EepromStore::getTotalSteps());
+  currentStepPos = 0;
+  currentFlapIdx = 0;
+}
+
+void SplitFlap::setTotalSteps(uint16_t steps) {
+  if (steps == EepromStore::getTotalSteps()) return;
+  EepromStore::saveTotalSteps(steps);
+  // Homing establishes the position in the new units (and a calibration
+  // measures the total itself). Otherwise the position, counted in the old
+  // units, is no longer meaningful.
+  if (isHoming()) return;
+  if (phase == PHASE_MOVE) stop();  // its target is in the old units too
+  forgetPosition();
+  currentStepPos = 0;  // keep it below the new total
 }
 
 uint16_t SplitFlap::stepsToTarget(uint16_t targetStepPos) const {
