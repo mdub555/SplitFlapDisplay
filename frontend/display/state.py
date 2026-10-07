@@ -94,6 +94,11 @@ class DisplayState:
         # running thing is scheduled. Set by the scheduler only.
         self.scheduled_target = None
 
+        # Goes up by one every time settings.json is saved (settings/store.py),
+        # so every open page hears that the settings changed, whoever changed
+        # them, and can reload what it shows.
+        self.settings_version = 0
+
         self.last_sent_page = None
 
         # Cooperative-cancellation flag: routes set this after changing
@@ -130,6 +135,7 @@ class DisplayState:
                 'playlist': playing,
                 'scheduled': target is not None and target == self.scheduled_target,
                 'hardware_connected': self.hardware_connected,
+                'settings_version': self.settings_version,
             }
 
     def _current_target(self):
@@ -190,6 +196,11 @@ class DisplayState:
             if self.playlist_page == index:
                 return
             self.playlist_page = index
+        self._broadcast()
+
+    def settings_changed(self):
+        with self.lock:
+            self.settings_version += 1
         self._broadcast()
 
     def set_scheduled_target(self, target):

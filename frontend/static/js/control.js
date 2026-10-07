@@ -275,16 +275,19 @@ function pageControl(icon, control, field, unit) {
 }
 
 function buildPlaylistRow(item, idx) {
-  const button = (text, action, cls = 'btn btn-secondary btn-sm', dir) =>
-    el('button', {class: cls, dataset: {onclick: action, ...(dir !== undefined && {dir})}}, text);
+  const button = (text, action, title, cls = 'btn btn-secondary btn-sm', dir) =>
+    el('button', {class: cls, title, dataset: {onclick: action, ...(dir !== undefined && {dir})}}, text);
 
   const header = el('div', {class: 'playlist-item-header'},
+    el('span', {class: 'drag-handle', title: 'Drag to reorder'}, '⠿'),
     el('span', {class: 'playlist-item-title'}, `Page ${idx + 1}`),
     el('div', {class: 'row row-tight'},
-      button('▲', 'movePlaylist', undefined, -1),
-      button('▼', 'movePlaylist', undefined, 1),
-      button('EDIT', 'editPlaylist'),
-      button('DEL', 'removeFromPlaylist', 'btn btn-danger btn-sm')));
+      button('▲', 'movePlaylist', 'Move up', undefined, -1),
+      button('▼', 'movePlaylist', 'Move down', undefined, 1),
+      button('▶', 'pushPlaylistPage', 'Show just this page now'),
+      button('⧉', 'duplicatePlaylistPage', 'Duplicate'),
+      button('EDIT', 'editPlaylist', 'Edit in the grid'),
+      button('DEL', 'removeFromPlaylist', 'Remove', 'btn btn-danger btn-sm')));
 
   // One line per display row. Spaces become non-breaking so a run of them
   // keeps its width.
@@ -317,11 +320,25 @@ function renderPlaylist() {
 // The playlist index of the row that `control` is in.
 const rowIndex = control => parseInt(control.closest('[data-idx]').dataset.idx, 10);
 
+// A page's delay, style or speed changed in its row. A number outside the
+// input's range (or not a number) is refused and put back.
 function updatePlaylistItemFromInput(control) {
   const item = playlist[rowIndex(control)];
   if (!item) return;
   const field = control.dataset.field;
-  item[field] = field === 'style' ? control.value : (parseFloat(control.value) || 0);
+  if (field === 'style') {
+    item.style = control.value;
+  } else {
+    const n = Number(control.value);
+    const min = Number(control.min), max = Number(control.max);
+    const whole = field === 'speed';
+    if (control.value.trim() === '' || !Number.isFinite(n) || n < min || n > max || (whole && !Number.isInteger(n))) {
+      showToast(`${field === 'delay' ? 'Delay' : 'Speed'} must be ${whole ? 'a whole number ' : ''}from ${min} to ${max}`, 'warn');
+      control.value = item[field];
+      return;
+    }
+    item[field] = n;
+  }
   saveDraft();
 }
 
@@ -336,26 +353,89 @@ function editPlaylist(button) {
   saveDraft();
 }
 
+// Changes the playlist with `change(playlist)`, keeping the page being
+// edited (if it's still there) as the one being edited, wherever it ends up.
+function changePlaylist(change) {
+  const editing = editingIndex !== null ? playlist[editingIndex] : null;
+  change(playlist);
+  const at = editing ? playlist.indexOf(editing) : -1;
+  if (at >= 0) startEditing(at);
+  else if (editing) clearDisplay();   // its page was removed
+  renderPlaylist();
+}
+
+function movePage(from, to) {
+  if (from === to || to < 0 || to >= playlist.length) return;
+  changePlaylist(pages => pages.splice(to, 0, ...pages.splice(from, 1)));
+}
+
 function movePlaylist(button) {
   const idx = rowIndex(button);
-  const to = idx + parseInt(button.dataset.dir, 10);
-  if (to < 0 || to >= playlist.length) return;
-  [playlist[idx], playlist[to]] = [playlist[to], playlist[idx]];
-  if (editingIndex === idx) startEditing(to);
-  else if (editingIndex === to) startEditing(idx);
-  renderPlaylist();
+  movePage(idx, idx + parseInt(button.dataset.dir, 10));
 }
 
 function removeFromPlaylist(button) {
   const idx = rowIndex(button);
-  playlist.splice(idx, 1);
-  if (editingIndex === idx) clearDisplay();
-  else if (editingIndex > idx) startEditing(editingIndex - 1);
-  renderPlaylist();
+  changePlaylist(pages => pages.splice(idx, 1));
+}
+
+function duplicatePlaylistPage(button) {
+  const idx = rowIndex(button);
+  changePlaylist(pages => pages.splice(idx + 1, 0, {...pages[idx]}));
+}
+
+// Shows one page of the playlist on the display now, on its own.
+function pushPlaylistPage(button) {
+  const page = pageForDisplay(playlist[rowIndex(button)]);
+  api.updatePlaylist([page], page.delay).then(result => {
+    if (result) showToast(`Showing page ${rowIndex(button) + 1}`);
+  });
+}
+
+// Dragging a page by its handle. Pointer events, so it works with a finger
+// as well as a mouse: the row follows the pointer through the list, and
+// the new order is kept when it's let go.
+function startPageDrag(e) {
+  const handle = e.target.closest('.drag-handle');
+  if (!handle || e.button > 0) return;
+  e.preventDefault();
+  const list = byId('playlistList');
+  const row = handle.closest('.playlist-item');
+  const from = rowIndex(row);
+  row.classList.add('dragging');
+
+  const move = ev => {
+    // Before the first other row whose middle is below the pointer.
+    const before = [...list.querySelectorAll('.playlist-item:not(.dragging)')].find(other => {
+      const box = other.getBoundingClientRect();
+      return ev.clientY < box.top + box.height / 2;
+    });
+    if (before) {
+      if (row.nextElementSibling !== before) list.insertBefore(row, before);
+    } else if (list.lastElementChild !== row) {
+      list.append(row);
+    }
+    // Near the top or bottom of the screen, scroll so a long list can be crossed.
+    if (ev.clientY < 40) window.scrollBy(0, -12);
+    else if (ev.clientY > window.innerHeight - 40) window.scrollBy(0, 12);
+  };
+  const end = () => {
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', end);
+    document.removeEventListener('pointercancel', end);
+    row.classList.remove('dragging');
+    const to = [...list.querySelectorAll('.playlist-item')].indexOf(row);
+    if (to === from) renderPlaylist();
+    else movePage(from, to);
+  };
+  document.addEventListener('pointermove', move);
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
 }
 
 function sync() {
-  api.updatePlaylist(currentPages(), byId('delayInput').value).then(result => {
+  const pages = currentPages();
+  api.updatePlaylist(pages, defaultTiming().delay).then(result => {
     if (result) showToast('Pushed to display');
   });
 }
@@ -382,10 +462,21 @@ function buildSavedPlaylistRow(name, item) {
   // characters are safe.
   return el('div', {class: `saved-pl-item${name === loadedPlaylist ? ' loaded' : ''}`, dataset: {name}},
     el('span', {class: 'saved-pl-name'}, name),
-    el('span', {class: 'saved-pl-meta'}, `${item.pages.length}p·${item.delay}s`),
+    el('span', {class: 'saved-pl-meta'}, playlistSummary(item)),
     el('button', {class: 'btn btn-secondary btn-sm', dataset: {onclick: 'loadSavedPlaylist'}}, 'Edit'),
     el('button', {class: 'btn btn-success btn-sm', dataset: {onclick: 'runSavedPlaylist'}}, 'Run'),
     el('button', {class: 'btn btn-danger btn-sm', dataset: {onclick: 'deleteSavedPlaylist'}}, '✕'));
+}
+
+// "3 pages · 5 s each", or "3 pages · 2–8 s" when the pages differ.
+function playlistSummary(item) {
+  const n = item.pages.length;
+  const count = `${n} page${n === 1 ? '' : 's'}`;
+  if (!n) return count;
+  const delays = item.pages.map(page => Number((page && page.delay) || item.delay) || PAGE_DEFAULTS.delay);
+  const low = Math.min(...delays), high = Math.max(...delays);
+  if (low !== high) return `${count} · ${low}–${high} s`;
+  return `${count} · ${low} s${n > 1 ? ' each' : ''}`;
 }
 
 function renderSavedPlaylists(data) {
@@ -420,7 +511,7 @@ function saveCurrentPlaylist() {
     // Saving over the playlist being edited is the point; over another one,
     // check first.
     if (replacing && name !== loadedPlaylist && !confirm(`Replace the saved playlist "${name}"?`)) return;
-    api.savePlaylist(name, currentPages(), byId('delayInput').value).then(result => {
+    api.savePlaylist(name, currentPages(), defaultTiming().delay).then(result => {
       if (!result) return;
       showToast(replacing ? `Updated "${name}"` : `Saved "${name}"`);
       byId('savePlaylistName').value = name;
@@ -541,6 +632,7 @@ function initControlPage() {
   // Typing a name or changing a default is part of the draft too.
   byId('page-control').addEventListener('input', saveDraft);
   byId('page-control').addEventListener('change', saveDraft);
+  byId('playlistList').addEventListener('pointerdown', startPageDrag);
   // A playlist being edited that's since been deleted (elsewhere) isn't
   // being edited any more.
   loadSavedPlaylists().then(data => {
@@ -551,6 +643,6 @@ function initControlPage() {
 registerActions({
   clearDisplay, saveMessage, sync, saveCurrentPlaylist, stopApp,
   toggleMultiMode, centerLines, updatePlaylistItemFromInput,
-  movePlaylist, editPlaylist, removeFromPlaylist,
+  movePlaylist, editPlaylist, removeFromPlaylist, duplicatePlaylistPage, pushPlaylistPage,
   loadSavedPlaylist, runSavedPlaylist, deleteSavedPlaylist,
 });

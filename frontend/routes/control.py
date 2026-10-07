@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify
 
 from config import NUM_MODULES
 from display.state import state
+from display.pages import clean_playlist
 from display.module_protocol import BROADCAST, Cmd, message
 from display.serial_link import send_raw
 from routes.common import error, json_body, sse_response
@@ -42,8 +43,11 @@ def serial_send():
 
 @bp.route('/update_playlist', methods=['POST'])
 def update_playlist():
-    data = json_body()
-    state.run_playlist(data.get('pages', []), data.get('delay'))
+    try:
+        pages, delay = clean_playlist(json_body())
+    except ValueError as e:
+        return error(str(e), 400)
+    state.run_playlist(pages, delay)
     return jsonify(status='success')
 
 
@@ -60,7 +64,7 @@ def stop_app():
     return jsonify(status='stopped')
 
 
-@bp.route('/home_all')
+@bp.route('/home_all', methods=['POST'])
 def home_all():
     send_raw(message(BROADCAST, Cmd.HOME))
     state.set_display(' ' * NUM_MODULES, [0] * NUM_MODULES)

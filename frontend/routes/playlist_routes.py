@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from display.pages import clean_playlist
 from display.state import state
 from settings.store import settings, save_settings
 from routes.common import error, json_body
@@ -15,10 +16,11 @@ def playlists():
     name = (data.get('name') or '').strip()
     if not name:
         return error('Name required', 400)
-    playlist = {
-        'pages': data.get('pages', []),
-        'delay': data.get('delay', 5),
-    }
+    try:
+        pages, delay = clean_playlist(data)
+    except ValueError as e:
+        return error(str(e), 400)
+    playlist = {'pages': pages, 'delay': delay}
     settings.setdefault('saved_playlists', {})[name] = playlist
     save_settings(settings)
     # Editing the playlist that's playing changes what's on the display too.

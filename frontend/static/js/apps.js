@@ -54,7 +54,9 @@ function loadGlobalSettings() {
 function saveGlobal() {
   api.globalFields().then(fields => {
     if (!fields) return;
-    api.saveGlobalSettings(readFieldValues(fields, 'gsf_')).then(result => {
+    const values = readFieldValues(fields, 'gsf_');
+    if (!values) return;
+    api.saveGlobalSettings(values).then(result => {
       if (result) showToast('Settings saved');
     });
   });

@@ -24,7 +24,9 @@ function closeAppSettings() {
 function saveAppSettings() {
   const appInfo = window.appsByKey[currentAppSettingsKey];
   if (!appInfo) return;
-  api.saveAppSettings(currentAppSettingsKey, readFieldValues(appInfo.settings_fields, 'asf_')).then(result => {
+  const values = readFieldValues(appInfo.settings_fields, 'asf_');
+  if (!values) return;
+  api.saveAppSettings(currentAppSettingsKey, values).then(result => {
     if (!result) return;
     showToast('Settings saved');
     closeAppSettings();

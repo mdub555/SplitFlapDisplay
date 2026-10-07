@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify
 
+from apps.base import clean_settings
 from apps.registry import registry
 from settings.store import settings, save_settings
 from routes.common import error, json_body
@@ -26,8 +27,10 @@ def save_app_settings(app_key):
     app = registry.get(app_key)
     if not app:
         return error('Unknown app', 404)
-    data = json_body()
-    valid_keys = {f.key for f in app.settings_fields}
-    settings.update({k: v for k, v in data.items() if k in valid_keys})
+    try:
+        values = clean_settings(app.settings_fields, json_body())
+    except ValueError as e:
+        return error(str(e), 400)
+    settings.update(values)
     save_settings(settings)
     return jsonify(status='saved')

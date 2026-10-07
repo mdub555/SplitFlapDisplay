@@ -693,6 +693,128 @@ async function main() {
     enabled: true, default: 'app:time',
     entries: [{ days: [0, 1, 2, 3, 4, 5], start: '22:00', end: '06:00', target: 'app:weather' }] }));
 
+  console.log('\n--- Settings fields keep their types ---');
+  const fieldBox = document.createElement('div');
+  document.body.append(fieldBox);
+  const typedFields = [
+    { key: 'spd', label: 'Speed', type: 'number', default: '0.4', min: '0.1', max: '5' },
+    { key: 'on', label: 'Enabled', type: 'checkbox' },
+    { key: 'nm', label: 'Name', type: 'text' },
+  ];
+  fieldBox.append(...typedFields.map(f => window.buildField(f, { spd: 2, on: 'true', nm: 'x' }[f.key], 'tf_')));
+  check('a checkbox field is a switch, on from a stored "true"', document.getElementById('tf_on').checked);
+  document.getElementById('tf_spd').value = '1.5';
+  check('numbers are read as numbers and checkboxes as true/false',
+    JSON.stringify(window.readFieldValues(typedFields, 'tf_')) === '{"spd":1.5,"on":true,"nm":"x"}');
+  document.getElementById('tf_spd').value = '';
+  check('a blank number is sent blank (the backend uses the default)', window.readFieldValues(typedFields, 'tf_').spd === '');
+  fieldBox.remove();
+
+  console.log('\n--- Playlist: duplicate, show one page, drag, checked values ---');
+  click(document.getElementById('tab-control'));
+  await sleep(20);
+  window.eval(`playlist = [{text: 'AAA', delay: 2, style: 'ltr', speed: 15},
+                           {text: 'BBB', delay: 3, style: 'rtl', speed: 15}]`);
+  window.stopEditing();
+  window.renderPlaylist();
+  const plRows = () => [...document.querySelectorAll('#playlistList .playlist-item')];
+  const plTexts = () => globalVar('playlist').map(p => p.text).join();
+  click(plRows()[0].querySelector('[data-onclick="duplicatePlaylistPage"]'));
+  check('⧉ puts a copy right after the page', plTexts() === 'AAA,AAA,BBB' &&
+    globalVar('playlist')[0] !== globalVar('playlist')[1]);
+
+  calls.length = 0;
+  click(plRows()[2].querySelector('[data-onclick="pushPlaylistPage"]'));
+  await sleep(20);
+  const onePage = calls.find(c => c.url === '/update_playlist');
+  check('▶ shows just that page, with its delay as a number', onePage &&
+    JSON.parse(onePage.body).pages.length === 1 && JSON.parse(onePage.body).pages[0].text === 'BBB' &&
+    JSON.parse(onePage.body).delay === 3);
+
+  click(plRows()[0].querySelector('[data-onclick="editPlaylist"]'));   // page 1 is being edited
+  // Lay the rows out 100px apart, as a browser would.
+  plRows().forEach((row, i) => { row.getBoundingClientRect = () => ({ top: i * 100, height: 100 }); });
+  const pointer = (target, type, clientY) =>
+    target.dispatchEvent(new window.MouseEvent(type, { bubbles: true, clientY, button: 0 }));
+  pointer(plRows()[0].querySelector('.drag-handle'), 'pointerdown', 50);
+  check('the dragged row is marked', plRows()[0].classList.contains('dragging'));
+  pointer(document, 'pointermove', 260);
+  pointer(document, 'pointerup', 260);
+  check('dragging a page to the bottom moves it there', plTexts() === 'AAA,BBB,AAA' && !document.querySelector('.dragging'));
+  check('the page being edited stays the one being edited',
+    globalVar('editingIndex') === 2 && document.getElementById('saveMsgBtn').textContent === 'Save Changes to Page 3');
+  click(plRows()[1].querySelector('[data-onclick="movePlaylist"][data-dir="-1"]'));
+  check('▲ still moves a page up', plTexts() === 'BBB,AAA,AAA' && globalVar('editingIndex') === 2);
+  click(plRows()[2].querySelector('[data-onclick="removeFromPlaylist"]'));
+  check('removing the page being edited stops editing', globalVar('editingIndex') === null && plTexts() === 'BBB,AAA');
+
+  const delayBox = plRows()[0].querySelector('[data-field="delay"]');
+  delayBox.value = '0';
+  change(delayBox);
+  check('a delay out of range is refused and put back', delayBox.value === '3' && globalVar('playlist')[0].delay === 3 &&
+    [...document.querySelectorAll('.toast.warn')].some(t => t.textContent === 'Delay must be from 0.5 to 60'));
+  const speedBox = plRows()[0].querySelector('[data-field="speed"]');
+  speedBox.value = '20';
+  change(speedBox);
+  check('a good value is kept as a number', globalVar('playlist')[0].speed === 20);
+
+  document.getElementById('delayInput').value = '4';
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="sync"]'));
+  await sleep(20);
+  check('PUSH sends the default delay as a number', JSON.parse(calls.find(c => c.url === '/update_playlist').body).delay === 4);
+
+  const summary = window.playlistSummary;
+  check('saved playlists sum up their pages', summary({ pages: [{ delay: 2 }, { delay: 8 }, {}], delay: 5 }) === '3 pages · 2–8 s' &&
+    summary({ pages: [{}, 'X'], delay: '5' }) === '2 pages · 5 s each' && summary({ pages: [{}], delay: 5 }) === '1 page · 5 s' &&
+    summary({ pages: [], delay: 5 }) === '0 pages');
+
+  console.log('\n--- Home All is a POST ---');
+  click(document.getElementById('tab-modules'));
+  await sleep(30);
+  window.confirm = () => true;
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="homeAll"]'));
+  await sleep(20);
+  check('Home All posts to /home_all', calls.some(c => c.url === '/home_all' && c.method === 'POST'));
+
+  console.log('\n--- Settings saved elsewhere reload the Modules page ---');
+  live.emit(snapshot({ settings_version: 5 }));
+  await sleep(10);
+  calls.length = 0;
+  live.emit(snapshot({ settings_version: 6 }));
+  live.emit(snapshot({ settings_version: 7 }));   // a burst: one reload
+  await sleep(400);
+  check('a new settings version reloads the module data and shared settings, once',
+    calls.filter(c => c.url === '/settings').length === 1 && calls.filter(c => c.url === '/firmware_config').length === 1);
+  check('and the saved playlists', calls.some(c => c.url === '/playlists'));
+  const fwInput = document.querySelector('#firmwareSettings input[type="number"]');
+  fwInput.value = '1234';
+  fwInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+  calls.length = 0;
+  live.emit(snapshot({ settings_version: 8 }));
+  await sleep(400);
+  check('shared settings being edited are not overwritten',
+    calls.some(c => c.url === '/settings') && !calls.some(c => c.url === '/firmware_config') && fwInput.value === '1234');
+  calls.length = 0;
+  click(document.getElementById('tab-control'));
+  live.emit(snapshot({ settings_version: 9 }));
+  await sleep(400);
+  check('with the Modules page closed, nothing of it is reloaded', !calls.some(c => c.url === '/settings'));
+
+  console.log('\n--- Install as an app ---');
+  const installBtn = document.getElementById('installBtn');
+  check('no Install button until the browser offers it', installBtn.hidden);
+  let prompted = false;
+  const offer = new window.Event('beforeinstallprompt', { cancelable: true });
+  offer.prompt = () => { prompted = true; };
+  offer.userChoice = Promise.resolve({ outcome: 'accepted' });
+  window.dispatchEvent(offer);
+  check('the button shows when it does, instead of the browser banner', !installBtn.hidden && offer.defaultPrevented);
+  click(installBtn);
+  await sleep(10);
+  check('it opens the browser\'s install prompt, then goes', prompted && installBtn.hidden);
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

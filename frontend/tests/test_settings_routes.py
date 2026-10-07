@@ -18,6 +18,7 @@ from flask import Flask
 FRONTEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, FRONTEND)
 
+from apps.base import SettingField  # noqa: E402
 from display.state import DisplayState  # noqa: E402
 
 
@@ -49,12 +50,14 @@ class SettingsRoutesTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
         app = Flask(__name__)
-        for name in ('settings_routes', 'playlist_routes'):
+        self.routes = {}
+        for name in ('settings_routes', 'playlist_routes', 'control'):
             spec = importlib.util.spec_from_file_location(
                 f'{name}_under_test', os.path.join(FRONTEND, 'routes', f'{name}.py'))
             routes = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(routes)
             app.register_blueprint(routes.bp)
+            self.routes[name] = routes
         self.client = app.test_client()
 
     def test_get_settings(self):
@@ -74,7 +77,8 @@ class SettingsRoutesTest(unittest.TestCase):
         self.assertEqual(self.client.get('/playlists').get_json(), {})
         res = self.client.post('/playlists', json={'name': ' Morning ', 'pages': ['HI'], 'delay': 3})
         self.assertEqual(res.get_json(), {'status': 'saved', 'name': 'Morning'})
-        self.assertEqual(self.client.get('/playlists').get_json(), {'Morning': {'pages': ['HI'], 'delay': 3}})
+        # A page sent as a plain string is stored as a page.
+        self.assertEqual(self.client.get('/playlists').get_json(), {'Morning': {'pages': [{'text': 'HI'}], 'delay': 3}})
         self.client.delete('/playlists/Morning')
         self.assertEqual(self.client.get('/playlists').get_json(), {})
 
@@ -97,10 +101,59 @@ class SettingsRoutesTest(unittest.TestCase):
         self.client.post('/playlists', json={'name': 'Morning', 'pages': ['HI']})
         self.client.post('/playlists/Morning/run')
         self.client.post('/playlists', json={'name': 'Morning', 'pages': ['HI', 'THERE']})
-        self.assertEqual(self.state.current_playlist, ['HI', 'THERE'])
+        self.assertEqual(self.state.current_playlist, [{'text': 'HI'}, {'text': 'THERE'}])
         # Saving another one leaves the display alone.
         self.client.post('/playlists', json={'name': 'Other', 'pages': ['X']})
         self.assertEqual(self.state.playlist_name, 'Morning')
+
+    def test_a_saved_playlist_is_stored_with_numbers(self):
+        self.client.post('/playlists', json={'name': 'M', 'delay': '2.5', 'pages': [
+            {'text': 'HI', 'delay': '3', 'style': 'rtl', 'speed': '20'}]})
+        self.assertEqual(self.settings['saved_playlists']['M'], {
+            'pages': [{'text': 'HI', 'delay': 3, 'style': 'rtl', 'speed': 20}], 'delay': 2.5})
+
+    def test_a_bad_page_is_refused_with_the_reason(self):
+        cases = [
+            ({'delay': 'soon'}, 'Delay must be a number'),
+            ({'delay': 0}, 'Delay must be more than 0 and at most 3600'),
+            ({'pages': 'HI'}, 'Pages must be a list'),
+            ({'pages': ['OK', {'text': 'X', 'delay': -1}]}, 'Page 2 delay must be more than 0 and at most 3600'),
+            ({'pages': [{'text': 'X', 'speed': 2.5}]}, 'Page 1 speed must be a whole number of ms'),
+            ({'pages': [{'text': 'X', 'speed': 900}]}, 'Page 1 speed must be at least 0 and at most 500'),
+            ({'pages': [{'text': 'X', 'style': 'sideways'}]}, 'Page 1 has an unknown transition: sideways'),
+            ({'pages': [{'delay': 5}]}, 'Page 1 needs its text'),
+            ({'pages': [7]}, 'Page 1 must be an object'),
+            ({'pages': [{'text': 'X', 'delay': True}]}, 'Page 1 delay must be a number'),
+        ]
+        for body, message in cases:
+            with self.subTest(body=body):
+                for url, extra in (('/playlists', {'name': 'Bad'}), ('/update_playlist', {})):
+                    res = self.client.post(url, json={**body, **extra})
+                    self.assertEqual(res.status_code, 400)
+                    self.assertEqual(res.get_json()['message'], message)
+        self.assertNotIn('Bad', self.settings['saved_playlists'])
+        self.assertEqual(self.state.current_playlist, [])
+
+    def test_pushing_a_playlist_plays_it(self):
+        res = self.client.post('/update_playlist', json={'pages': [{'text': 'HI', 'delay': '4'}], 'delay': 6})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(self.state.current_playlist, [{'text': 'HI', 'delay': 4}])
+        self.assertEqual(self.state.loop_delay, 6)
+
+    def test_home_all_is_a_post(self):
+        self.assertEqual(self.client.get('/home_all').status_code, 405)
+        self.assertEqual(self.sent, [])
+        self.assertEqual(self.client.post('/home_all').status_code, 200)
+        self.assertEqual(self.sent, ['m*h'])
+
+    def test_global_settings_are_type_checked(self):
+        with mock.patch.object(self.routes['settings_routes'], 'GLOBAL_FIELDS', [
+                SettingField('volume', 'Volume', type='number', default='5', min='0', max='10')]):
+            self.assertEqual(self.client.post('/settings', json={'volume': '7'}).status_code, 200)
+            self.assertEqual(self.settings['volume'], 7)
+            res = self.client.post('/settings', json={'volume': 11})
+            self.assertEqual((res.status_code, res.get_json()['message']), (400, 'Volume must be at most 10'))
+            self.assertEqual(self.settings['volume'], 7)
 
     def test_a_playlist_needs_a_name(self):
         res = self.client.post('/playlists', json={'name': '  '})

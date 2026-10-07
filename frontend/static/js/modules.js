@@ -14,6 +14,18 @@ function loadModulesPage() {
   });
 }
 
+// The settings changed elsewhere (another device, a sync, a restore) while
+// this page is open: show the new module data. The shared firmware settings
+// are only reloaded if nobody's part-way through editing them.
+function refreshModulesPage() {
+  api.getSettings().then(settings => {
+    if (!settings) return;
+    currentSettings = settings;
+    selectModule(selectedModule);
+  });
+  if (!firmwareEdited) loadFirmwareConfig();
+}
+
 // --- The hardware inspector -----------------------------------------------
 
 // The stored settings of module `id` (the selected one by default), or null
@@ -142,7 +154,9 @@ function refreshManualControls() {
   const box = byId('manualControls');
   box.classList.toggle('disabled', !mod);
   box.querySelectorAll('input, button').forEach(control => { control.disabled = !mod; });
-  byId('totalStepsInput').value = mod && mod.totalSteps !== undefined ? mod.totalSteps : '';
+  // Not while it's being typed in (a reload can come at any time).
+  const steps = byId('totalStepsInput');
+  if (document.activeElement !== steps) steps.value = mod && mod.totalSteps !== undefined ? mod.totalSteps : '';
 }
 
 // Whole number from a number input, or null (after a warning toast) if it's
@@ -318,11 +332,15 @@ function provisionModule() {
 // ...). The inputs are rendered from the backend's definitions (fw-<key>);
 // the values and their ranges come from GET /firmware_config.
 let firmwareLimits = null;
+let firmwareEdited = false;   // the inputs hold changes that haven't been applied
+byId('firmwareSettings').addEventListener('input', () => { firmwareEdited = true; });
+byId('firmwareSettings').addEventListener('change', () => { firmwareEdited = true; });
 
 function loadFirmwareConfig() {
   api.firmwareConfig().then(cfg => {
     if (!cfg) return; // error toast already shown by the api layer
     firmwareLimits = cfg.limits;
+    firmwareEdited = false;
     Object.entries(cfg.limits).forEach(([key, lim]) => {
       const input = byId(`fw-${key}`);
       if (lim.type === 'bool') {
@@ -349,6 +367,7 @@ function applyFirmwareConfig() {
   api.saveFirmwareConfig(payload).then(result => {
     if (!result) return;
     if (currentSettings) currentSettings.firmware = result.values;
+    firmwareEdited = false;
     showToast('Settings sent to all modules');
   });
 }

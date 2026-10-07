@@ -3,6 +3,7 @@ import logging
 import os
 
 from config import CONFIG_PATH
+from display.state import state
 from display.module_protocol import GLOBAL_SETTINGS
 from settings.schema import GLOBAL_FIELDS
 from settings.shared import migrate
@@ -49,6 +50,8 @@ def load_settings():
 def save_settings(data):
     with open(CONFIG_PATH, 'w') as f:
         json.dump(data, f, indent=4)
+    # Tell every open page, so one showing the old settings reloads them.
+    state.settings_changed()
 
 
 settings = load_settings()

@@ -84,7 +84,7 @@ const api = {
   setTotalSteps:      (modId, steps) => apiPost(`/modules/${modId}/total_steps`, {steps}, 'Could not set total steps'),
   showOnModule:       (modId, payload) => apiPost(`/modules/${modId}/display`, payload, 'Could not update module display'),
   gotoStep:           (modId, step) => apiPost(`/modules/${modId}/goto_step`, {step}, 'Could not move module'),
-  homeAll:            () => apiGet('/home_all', 'Could not home all modules'),
+  homeAll:            () => apiPost('/home_all', undefined, 'Could not home all modules'),
   provisionModule:    (id) => apiPost('/provision_module', {id}, 'Could not provision module'),
 
   firmwareConfig:     () => apiGet('/firmware_config', 'Could not load firmware settings'),

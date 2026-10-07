@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Split-Flap OS</title>
+<!-- Adding the page to a phone's home screen opens it like an app, full screen. -->
+<link rel="manifest" href="{{ url_for('pages.manifest') }}">
+<meta name="theme-color" content="#121212">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Split-Flap">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
 {% for sheet in ['base', 'control', 'apps', 'modules', 'modals', 'debug'] %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/' + sheet + '.css') }}">
 {% endfor %}
@@ -240,7 +249,7 @@
     <div class="config-section">
       <h3>Settings for All Modules</h3>
       <p class="note">Shared by every module: saved here and sent to all modules at once (each keeps them in its EEPROM).</p>
-      <div class="settings-grid">
+      <div class="settings-grid" id="firmwareSettings">
         {% for key, spec in firmware_settings.items() %}
         {% if spec.type == 'bool' %}
         {{ toggle_row('fw-' + key, spec.label, spec.hint) }}
@@ -329,6 +338,10 @@
     </div>
 
   </div><!-- /page-debug -->
+  <!-- Only shown when the browser offers to install the page as an app. -->
+  <div class="app-footer">
+    <button class="btn btn-secondary btn-sm" id="installBtn" data-onclick="installApp" hidden>📲 Install as an app</button>
+  </div>
 </div><!-- /container -->
 
 <!-- ══════════ APP SETTINGS MODAL ══════════ -->
@@ -348,7 +361,7 @@
 
 <script>const CONFIG = {{ config | tojson }};</script>
 {% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control',
-                  'apps', 'schedule', 'app-settings-modal', 'modules', 'debug', 'main'] %}
+                  'apps', 'schedule', 'app-settings-modal', 'modules', 'debug', 'install', 'main'] %}
 <script src="{{ url_for('static', filename='js/' + script + '.js') }}"></script>
 {% endfor %}
 </body>

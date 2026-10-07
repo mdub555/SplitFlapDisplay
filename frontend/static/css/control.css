@@ -289,12 +289,38 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .playlist-item-title {
+  flex: 1;
   color: var(--accent);
   font-weight: bold;
   font-family: monospace;
+}
+
+/* Grab a page here to drag it up or down the list. touch-action: none so a
+   finger drags the page instead of scrolling the page. */
+.drag-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 4px 6px;
+  margin: -4px 0 -4px -4px;
+}
+
+.playlist-item.dragging {
+  opacity: .85;
+  outline: 2px dashed var(--accent);
+  cursor: grabbing;
+}
+
+.playlist-item.dragging .drag-handle {
+  cursor: grabbing;
 }
 
 /* The page's text, row by row. */

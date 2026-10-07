@@ -99,6 +99,25 @@ function applyLiveState(data) {
   });
   renderBanner();
   markRunning();
+  noticeSettingsVersion(data.settings_version);
+}
+
+// The settings were saved (here or on another device) since this page last
+// heard: reload what shows them, once a burst of saves has settled.
+let seenSettingsVersion;
+let settingsReloadTimer = null;
+function noticeSettingsVersion(version) {
+  if (version === undefined || version === seenSettingsVersion) return;
+  const first = seenSettingsVersion === undefined;
+  seenSettingsVersion = version;
+  if (first) return;   // the page loaded everything itself just now
+  clearTimeout(settingsReloadTimer);
+  settingsReloadTimer = setTimeout(settingsChanged, 300);
+}
+
+function settingsChanged() {
+  if (byId('page-modules').classList.contains('active')) refreshModulesPage();
+  loadSavedPlaylists();
 }
 
 function renderBanner() {

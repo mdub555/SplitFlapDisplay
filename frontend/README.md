@@ -95,6 +95,24 @@ implement `frames()`; the update-order and speed settings are built for it.
   what the schedule calls for changes (checked every 20 s, and straight
   away on startup or when the schedule is saved), so starting or stopping
   something by hand lasts until the next scheduled change.
+- **Playlist pages** can be dragged by their ⠿ handle (mouse or finger),
+  duplicated (⧉), or shown on their own (▶). The backend checks every page
+  it's sent (`display/pages.py`): delays, speeds and transitions must be
+  real values, and they're stored as numbers.
+- **Settings are typed**: `SettingField.clean()` (apps/base.py) turns what
+  the page sends into the field's type (number, checkbox, select option or
+  text) and refuses anything else with the field's name, for app and global
+  settings alike. A blank number field means its default.
+- **Pages stay current**: every save of settings.json bumps
+  `settings_version` in the live state, so an open Modules page reloads its
+  module data when another device (or a sync or restore) changes it, and the
+  saved playlist list refreshes. Shared firmware settings someone is
+  part-way through editing aren't overwritten.
+- **Phone install**: the page has a web app manifest
+  (`/manifest.webmanifest`) and icons (`static/icons/`, drawn by
+  `tools/make_icons.py`), so Add to Home Screen gives it an icon and opens
+  it full screen. Browsers that offer to install it get an Install button
+  at the bottom of the page.
 - **The Control page's draft** (the grid, the playlist being built, its
   defaults and name) is kept in the browser's localStorage, so a reload
   doesn't lose it. It's per browser and best-effort; nothing depends on it.

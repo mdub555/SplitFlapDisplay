@@ -87,6 +87,12 @@ class PlayingTest(unittest.TestCase):
         self.assertIsNone(self.state.snapshot()['playlist'])
         self.assertEqual(self.state.current_playlist, [])
 
+    def test_a_settings_save_is_pushed_to_subscribers(self):
+        q = self.state.subscribe()
+        self.assertEqual(q.get_nowait()['settings_version'], 0)
+        self.state.settings_changed()
+        self.assertEqual(q.get_nowait()['settings_version'], 1)
+
     def test_scheduled_only_while_the_scheduled_thing_runs(self):
         self.state.run_app('time')
         self.state.set_scheduled_target('app:time')

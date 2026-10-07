@@ -1,7 +1,7 @@
 """The page itself. Everything it needs that the backend already knows
 (grid size, character set, animation styles, the settings forms) is put into
 the page when it's rendered, so the frontend never keeps its own copy."""
-from flask import Blueprint, render_template
+from flask import Blueprint, jsonify, render_template, url_for
 
 from config import GRID_ROWS, GRID_COLS, NUM_MODULES
 from display.charset import COLOR_TILES, DISPLAY_CHARS, FLAP_CHARS, SYMBOL_TILES
@@ -37,6 +37,27 @@ def client_config():
         'broadcast': BROADCAST,
         'max_module_id': UNPROVISIONED_ID,
     }
+
+
+@bp.route('/manifest.webmanifest')
+def manifest():
+    """What a phone needs to put the page on its home screen as an app."""
+    icon = lambda name, size, purpose='any': {
+        'src': url_for('static', filename=f'icons/{name}'), 'sizes': size, 'type': 'image/png', 'purpose': purpose}
+    response = jsonify(
+        name='Split-Flap OS',
+        short_name='Split-Flap',
+        description='Control the split-flap display',
+        start_url='/',
+        scope='/',
+        display='standalone',
+        background_color='#121212',
+        theme_color='#121212',
+        icons=[icon('icon-192.png', '192x192'), icon('icon-512.png', '512x512'),
+               icon('icon-maskable-512.png', '512x512', 'maskable')],
+    )
+    response.mimetype = 'application/manifest+json'
+    return response
 
 
 @bp.route('/')

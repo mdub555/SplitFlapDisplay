@@ -2,6 +2,7 @@ import time
 
 from flask import Blueprint, jsonify, request
 
+from apps.base import clean_settings
 from config import NUM_MODULES
 from settings.store import settings, save_settings
 from settings.schema import GLOBAL_FIELDS
@@ -29,9 +30,11 @@ def global_fields():
 @bp.route('/settings', methods=['GET', 'POST'])
 def handle_settings():
     if request.method == 'POST':
-        data = json_body()
-        global_keys = {f.key for f in GLOBAL_FIELDS}
-        settings.update({k: v for k, v in data.items() if k in global_keys})
+        try:
+            values = clean_settings(GLOBAL_FIELDS, json_body())
+        except ValueError as e:
+            return error(str(e), 400)
+        settings.update(values)
         save_settings(settings)
         return jsonify(status='Saved')
     return jsonify(settings)

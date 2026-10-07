@@ -552,3 +552,10 @@ input:checked + .slider:before {
     font-size: .82rem;
   }
 }
+
+/* Under the pages: the Install button, when the browser offers one. */
+.app-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
