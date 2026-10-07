@@ -4,5 +4,5 @@ document.addEventListener('DOMContentLoaded', () => {
   startLiveUpdates();
   initControlPage();
   buildAppsGrid();   // fills appsByKey, so the live display can name a running app straight away
-  debugPanel.init();
+  debugPage.init();
 });

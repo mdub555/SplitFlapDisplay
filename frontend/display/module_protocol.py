@@ -53,6 +53,11 @@ BROADCAST = '*'
 UNPROVISIONED_ID = 255
 
 
+# A frame broadcast (m*f<interval>:<pairs>) gives each module's place in the
+# animation as one printable byte ('!' + rank), so it covers up to 94 modules.
+FRAME_MAX_MODULES = 94
+
+
 def message(mod_id, cmd: str, data='') -> str:
     """The bus message m<ID><cmd><data>, without the newline. `mod_id` is a
     module ID (sent as at least two digits) or BROADCAST."""
@@ -69,7 +74,7 @@ DUMP_REVOLUTIONS = '#'
 DUMP_DRIFT = '~'
 
 # key: the settings key the value is stored under; kind: 'int' or 'bool';
-# name and unit: how the debug panel describes it.
+# name and unit: how the Debug page describes it.
 DumpField = namedtuple('DumpField', 'key kind name unit')
 
 # Label -> field, in the order the firmware sends them.
@@ -115,7 +120,7 @@ def parse_dump_fields(fields: str):
 
 
 def dump_format():
-    """The dump layout for the debug panel, which parses replies itself."""
+    """The dump layout for the Debug page, which parses replies itself."""
     return {
         'marker': Cmd.DUMP_STATE,
         'fields': [dict(label=label, **spec._asdict()) for label, spec in DUMP_FIELDS.items()],

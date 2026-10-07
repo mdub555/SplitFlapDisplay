@@ -176,6 +176,9 @@ window.fetch = async (url, options = {}) => {
   if (url === '/provision_module') {
     return ok({ status: 'success', assigned_id: 10 });
   }
+  if (url === '/serial/send') {
+    return ok({ status: 'success' });
+  }
 
   throw new Error(`Unmocked fetch: ${url}`);
 };

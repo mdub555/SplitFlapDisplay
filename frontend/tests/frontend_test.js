@@ -44,12 +44,11 @@ async function main() {
   check('live flap grids built (control)', document.querySelectorAll('.live-grid-control .live-flap').length === 64);
   check('apps grid pre-populated by main.js', Object.keys(window.appsByKey).length === 2);
 
-  console.log('\n--- Serial debug panel ---');
-  const debugPanelEl = document.getElementById('debug-panel');
+  console.log('\n--- Debug page ---');
   click(document.getElementById('tab-debug'));
-  check('SERIAL DEBUG tab opens the debug panel', debugPanelEl.classList.contains('visible'));
-  click(debugPanelEl.querySelector('[data-onclick="toggleDebug"]'));
-  check('CLOSE button hides the debug panel again', !debugPanelEl.classList.contains('visible'));
+  check('DEBUG tab shows the debug page', document.getElementById('page-debug').classList.contains('active'));
+  check('and hides the control page', !document.getElementById('page-control').classList.contains('active'));
+  click(document.getElementById('tab-control'));
 
   console.log('\n--- Tab switching (data-onclick delegation) ---');
   const appsTab = document.getElementById('tab-apps');
@@ -137,7 +136,7 @@ async function main() {
   console.log('\n--- Live state arrives over SSE, not polling ---');
   const stateStreams = MockEventSource.instances.filter(s => s.url === '/current_state/stream');
   check('exactly one EventSource was opened at /current_state/stream', stateStreams.length === 1);
-  check('the only other EventSource is the debug panel\'s /serial_log/stream',
+  check('the only other EventSource is the Debug page\'s /serial_log/stream',
     MockEventSource.instances.length === 2 &&
     MockEventSource.instances.filter(s => s.url === '/serial_log/stream').length === 1);
   check('no /current_state polling request was ever made', !calls.some(c => c.url === '/current_state'));
@@ -394,9 +393,9 @@ async function main() {
   await sleep(20);
   check('provisioned-module toast names the assigned id in hex, not decimal', lastToastText() === 'Module assigned ID 0A');
 
-  console.log('\n--- Debug panel shows dump replies as labelled values ---');
+  console.log('\n--- Debug page shows dump replies as labelled values ---');
   const serialLog = MockEventSource.instances.find(s => s.url === '/serial_log/stream');
-  const logEl = document.querySelector('#debug-panel .debug-log');
+  const logEl = document.getElementById('debugLog');
   const logLines = () => [...logEl.querySelectorAll('.debug-log-line')];
   const logBefore = logLines().length;
   const fields = '\tO480\tT4096\tD100\tS1250\tH1800\tC1\tA0\tF1\tE1\tR3000\tL0\tW0\tP150\t#123456\t~-3';
@@ -419,6 +418,71 @@ async function main() {
   check('a garbled reply is shown as received', !garbled.classList.contains('dump') &&
     garbled.textContent.endsWith('RECV: m07?\tO48x'));
   check('other received text is shown as received', noise.textContent.endsWith('RECV: junk'));
+
+  console.log('\n--- Debug page builds and sends any command ---');
+  const debugSelect = document.getElementById('debugCommand');
+  const preview = () => document.getElementById('debugPreview').textContent;
+  const param = name => document.getElementById(`debugParam-${name}`);
+  const choose = key => { debugSelect.value = key; change(debugSelect); };
+  const typeInto = (input, value) => { input.value = value; input.dispatchEvent(new window.Event('input', { bubbles: true })); };
+  const sentCmds = () => calls.filter(c => c.url === '/serial/send').map(c => JSON.parse(c.body).cmd);
+  const commandKeys = [...debugSelect.options].map(o => o.value);
+  check('the dropdown lists every command, grouped',
+    commandKeys.length === globalVar('CONFIG').debug_commands.length &&
+    [...debugSelect.querySelectorAll('optgroup')].map(g => g.label).join('|') ===
+      'Actions|Module|Settings (saved to EEPROM)|Utilities');
+  typeInto(document.getElementById('debugModuleId'), '10');
+  choose('home');
+  check('a command without data goes to the chosen module', preview() === 'm10h');
+  check('no inputs for a command without data', document.getElementById('debugParams').children.length === 0);
+  choose('show_index');
+  typeInto(param('index'), '7');
+  check('an index command carries its value', preview() === 'm10+7');
+  check('the flap at that index is named', document.getElementById('debugNote').textContent === 'Flap 7: G');
+  typeInto(param('index'), '99');
+  check('an out-of-range value is refused', document.getElementById('debugSend').disabled);
+  choose('show_char');
+  typeInto(param('char'), '"');
+  check('a quote is sent as its code', preview() === 'm10-q');
+  typeInto(param('char'), '\u{1F7E5}');
+  check('a colour emoji is sent as its code', preview() === 'm10-r');
+  choose('motorClockwise');
+  param('value').value = '0'; change(param('value'));
+  check('a yes/no setting is a dropdown sent as 0/1', param('value').tagName === 'SELECT' && preview() === 'm10C0');
+  const broadcast = document.getElementById('debugBroadcast');
+  broadcast.checked = true; change(broadcast);
+  check('broadcast sends to *', preview() === 'm*C0' && document.getElementById('debugModuleId').disabled);
+  broadcast.checked = false; change(broadcast);
+  choose('frame');
+  typeInto(param('text'), 'HI!');
+  typeInto(param('interval'), '20');
+  param('order').value = 'rtl'; change(param('order'));
+  check('a frame broadcast always goes to every module, with each character\'s rank',
+    preview() === 'm*f20:H#I"!!' && document.getElementById('debugModuleId').disabled);
+  choose('calibrate');
+  document.getElementById('debugDumpAfter').checked = true;
+  change(document.getElementById('debugDumpAfter'));
+  calls.length = 0;
+  click(document.getElementById('debugSend'));
+  await sleep(20);
+  check('calibrate can be followed by a state dump', sentCmds().join(',') === 'm10c,m10?');
+  choose('reset_settings');
+  calls.length = 0;
+  click(document.getElementById('debugSend'));
+  await sleep(20);
+  check('a destructive command asks first, naming the module in hex',
+    lastConfirmMsg === 'Reset ALL settings on module 0A to their defaults?' && sentCmds().join() === 'm10!');
+  choose('raw');
+  typeInto(param('message'), 'm05-B');
+  calls.length = 0;
+  click(document.getElementById('debugSend'));
+  await sleep(20);
+  check('a raw message is sent as typed', sentCmds().join() === 'm05-B');
+  click(document.querySelector('#flapTable .flap-cell[data-index="3"]'));
+  check('picking a flap from the table fills in Show character',
+    debugSelect.value === 'show_char' && preview() === 'm10-C');
+  click(document.querySelector('[data-onclick="clearDebugLog"]'));
+  check('the log can be cleared', logLines().length === 0);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

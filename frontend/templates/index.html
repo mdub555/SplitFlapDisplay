@@ -57,35 +57,12 @@
          ('control', 'CONTROL', 'CTRL', 'switchTab'),
          ('apps', 'APPS', 'APPS', 'switchTab'),
          ('tuning', 'TUNING &amp; SETTINGS', 'TUNE', 'switchTab'),
-         ('debug', 'SERIAL DEBUG', 'DBG', 'toggleDebug')] %}
+         ('debug', 'DEBUG', 'DBG', 'switchTab')] %}
     <button id="tab-{{ tab }}" class="tab-btn{% if loop.first %} active{% endif %}"
             data-onclick="{{ action }}" data-tab="{{ tab }}">
       <span class="tab-label-full">{{ full | safe }}</span><span class="tab-label-short">{{ short }}</span>
     </button>
     {% endfor %}
-  </div>
-
-  <!-- ══════════ DEBUG PANEL ══════════ -->
-  <div id="debug-panel" class="debug-panel">
-    <div class="debug-panel-header">
-      <h3 class="debug-title">SERIAL DEBUG</h3>
-      <button class="btn btn-secondary btn-sm" data-onclick="toggleDebug">CLOSE</button>
-    </div>
-    <div class="debug-panel-content">
-      <div class="debug-command-row">
-        <select class="input debug-cmd-select">
-          <option value="">-- Quick Command --</option>
-          {% for cmd, label in debug_commands %}
-          <option value="{{ cmd }}">{{ label }} ({{ cmd }})</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="debug-command-row">
-        <input type="text" class="input debug-cmd-input" placeholder="Arbitrary command...">
-        <button class="btn btn-primary btn-sm debug-cmd-send">SEND</button>
-      </div>
-      <div class="debug-log"></div>
-    </div>
   </div>
 
   <!-- Shown only while the live-state stream (SSE) is disconnected — the
@@ -279,6 +256,64 @@
     </div>
 
   </div><!-- /page-tuning -->
+
+  <!-- ══════════ DEBUG PAGE ══════════ -->
+  <div id="page-debug" class="page">
+
+    <!-- Any command in the firmware's protocol (see display/debug_commands.py) -->
+    <div class="config-section config-section-main">
+      <h3>Send Command</h3>
+      <div class="debug-form">
+        <div class="debug-target" id="debugTarget">
+          <label class="field-label" for="debugModuleId">Module ID</label>
+          <div class="row">
+            <input type="number" class="input input-id" id="debugModuleId" value="0"
+                   min="0" max="{{ config.max_module_id }}" step="1" data-oninput="updateDebugPreview">
+            <label class="check-label"><input type="checkbox" id="debugBroadcast" data-onchange="toggleDebugBroadcast"> Broadcast to all ({{ config.broadcast }})</label>
+          </div>
+          <span class="hint" id="debugModuleHint"></span>
+        </div>
+        <div>
+          <label class="field-label" for="debugCommand">Command</label>
+          <select class="input debug-cmd-select" id="debugCommand" data-onchange="selectDebugCommand">
+            {% for command in debug_commands %}
+            {% if loop.changed(command.group) %}
+            {% if not loop.first %}</optgroup>{% endif %}
+            <optgroup label="{{ command.group }}">
+            {% endif %}
+              <option value="{{ command.key }}">{{ command.label }}</option>
+            {% if loop.last %}</optgroup>{% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div class="debug-params" id="debugParams"></div>
+        <span class="hint" id="debugCommandHint"></span>
+        <div class="debug-send-row">
+          <code class="debug-preview" id="debugPreview" title="The message that will be sent"></code>
+          <button class="btn btn-primary btn-sm" id="debugSend" data-onclick="sendDebugCommand">SEND</button>
+        </div>
+        <div class="debug-note" id="debugNote" hidden></div>
+      </div>
+    </div>
+
+    <!-- Everything sent or received on the bus, live -->
+    <div class="config-section">
+      <div class="section-head">
+        <h3>Serial Log</h3>
+        <button class="btn btn-secondary btn-sm" data-onclick="clearDebugLog">Clear</button>
+      </div>
+      <div class="debug-log" id="debugLog"></div>
+    </div>
+
+    <!-- Flap character table: which character each index shows -->
+    <div class="config-section">
+      <details>
+        <summary><h3 class="debug-summary">Flap Character Table</h3></summary>
+        <div class="flap-table" id="flapTable"></div>
+      </details>
+    </div>
+
+  </div><!-- /page-debug -->
 </div><!-- /container -->
 
 <!-- ══════════ APP SETTINGS MODAL ══════════ -->

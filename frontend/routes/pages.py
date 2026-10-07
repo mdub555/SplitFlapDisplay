@@ -5,18 +5,12 @@ from flask import Blueprint, render_template
 
 from config import GRID_ROWS, GRID_COLS, NUM_MODULES
 from display.charset import COLOR_TILES, DISPLAY_CHARS, FLAP_CHARS
+from display.debug_commands import DEBUG_COMMANDS
 from display.layout import STYLES
 from display.module_protocol import (
-    BROADCAST, DUMP_FIELDS, GLOBAL_SETTINGS, MODULE_TOGGLES, Cmd, dump_format, message)
+    BROADCAST, DUMP_FIELDS, GLOBAL_SETTINGS, MODULE_TOGGLES, UNPROVISIONED_ID, dump_format)
 
 bp = Blueprint('pages', __name__)
-
-# The serial debug panel's quick commands: (message, label).
-DEBUG_COMMANDS = [
-    (message(BROADCAST, Cmd.HOME), 'Home All'),
-    (message(1, Cmd.DUMP_STATE), 'Dump Mod 01'),
-    (message(1, Cmd.CALIBRATE), 'Calib Mod 01'),
-]
 
 
 def client_config():
@@ -37,6 +31,10 @@ def client_config():
             for key, spec in GLOBAL_SETTINGS.items() if spec['type'] == 'int'
         ],
         'dump_format': dump_format(),
+        # Everything the Debug page can send (see display/debug_commands.py).
+        'debug_commands': DEBUG_COMMANDS,
+        'broadcast': BROADCAST,
+        'max_module_id': UNPROVISIONED_ID,
     }
 
 

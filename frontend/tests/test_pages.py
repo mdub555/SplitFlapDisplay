@@ -16,7 +16,8 @@ sys.path.insert(0, FRONTEND)
 from config import NUM_MODULES  # noqa: E402
 from display.charset import FLAP_CHARS  # noqa: E402
 from display.layout import STYLES  # noqa: E402
-from display.module_protocol import GLOBAL_SETTINGS, MODULE_TOGGLES  # noqa: E402
+from display.debug_commands import DEBUG_COMMANDS  # noqa: E402
+from display.module_protocol import GLOBAL_SETTINGS, MODULE_TOGGLES, Cmd  # noqa: E402
 from routes import pages  # noqa: E402
 
 
@@ -48,6 +49,15 @@ class PageTest(unittest.TestCase):
         self.assertEqual([s['value'] for s in config['styles']], list(STYLES))
         self.assertEqual(config['display_chars']['q'], '"')
         self.assertEqual(len(config['color_tiles']), 8)
+
+    def test_debug_page_offers_every_command(self):
+        letters = {value for name, value in vars(Cmd).items() if not name.startswith('_')}
+        offered = [command['cmd'] for command in DEBUG_COMMANDS if command['cmd']]
+        self.assertEqual(set(offered), letters)
+        self.assertEqual(len(offered), len(set(offered)), 'a command is offered twice')
+        for command in DEBUG_COMMANDS:
+            with self.subTest(command=command['key']):
+                self.assertIn(f'<option value="{command["key"]}">', self.html)
 
     def test_every_script_exists(self):
         scripts = re.findall(r'<script src="/(static/js/[^"]+)"', self.html)
