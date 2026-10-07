@@ -44,6 +44,7 @@
 /* ── MODULE GRID ── */
 .mod-matrix {
   display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
   gap: 3px;
   margin-bottom: 18px;
 }
@@ -222,10 +223,15 @@
 }
 
 @media (max-width: 600px) {
+  /* A full row is too narrow to tap on a phone, so the grid wraps to at
+     most 8 columns (a 16-wide display row takes two rows here). */
   .mod-matrix {
-    overflow-x: auto;
-    grid-auto-flow: column;
-    grid-auto-columns: 32px;
+    grid-template-columns: repeat(var(--phone-cols), 1fr);
+  }
+
+  /* The inspector's buttons wrap rather than run off the edge. */
+  .inspector-panel .button-row {
+    flex-wrap: wrap;
   }
 
   .adj-controls {

@@ -36,7 +36,9 @@ function moduleSettings(id = selectedModule) {
 
 function renderModuleGrid() {
   const grid = byId('modMatrix');
-  grid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
+  // Laid out like the display; phones get at most 8 columns (see tuning.css).
+  grid.style.setProperty('--cols', GRID_COLS);
+  grid.style.setProperty('--phone-cols', Math.min(GRID_COLS, 8));
   grid.replaceChildren(...Array.from({length: NUM_MODULES}, (_, i) => el('div', {
     class: `mod-cell${i === selectedModule ? ' active' : ''}${moduleSettings(i) ? '' : ' unprovisioned'}`,
     dataset: {onclick: 'selectModuleAction', id: i},
