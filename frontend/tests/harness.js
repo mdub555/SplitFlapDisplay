@@ -4,6 +4,13 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 
+// The real dump layout (module_protocol.dump_format()), so the debug panel is
+// tested against what the backend actually serves.
+const DUMP_FORMAT = JSON.parse(require('child_process').execFileSync('python3', ['-c',
+  'import json, sys; sys.path.insert(0, "."); ' +
+  'from display.module_protocol import dump_format; print(json.dumps(dump_format()))'],
+  { cwd: ROOT, encoding: 'utf8' }));
+
 // Strip Jinja url_for(...) calls AND the original <script src="..."> tags —
 // we'll inject equivalent inline <script> elements ourselves so jsdom
 // executes them as real Script elements (sharing top-level let/const across
@@ -12,6 +19,9 @@ const ROOT = path.join(__dirname, '..');
 let html = fs.readFileSync(path.join(ROOT, 'templates/index.html'), 'utf8');
 html = html.replace(/\{\{\s*url_for\([^}]*filename='([^']+)'\)\s*\}\}/g, '/static/$1');
 html = html.replace(/<script src="[^"]*"><\/script>\s*/g, '');
+// Loops filled in by Flask (the serial debug panel's quick commands) have no
+// data here; drop them rather than leave template syntax in the page.
+html = html.replace(/\{%\s*for[\s\S]*?\{%\s*endfor\s*%\}/g, '');
 
 const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'http://localhost/' });
 const { window } = dom;
@@ -98,10 +108,13 @@ window.fetch = async (url, options = {}) => {
     // (only module 0 is provisioned here).
     return ok({ timezone: 'US/Eastern', zip_code: '02118', auto_home: true,
       modules: { '0': { homeOffset: 2832, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false, drift: 3, revolutions: 12345,
-                       stepDelay: 1, homingStepDelay: 2, debounceMs: 100, rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 120 },
-                '2': { homeOffset: 480, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false } },
-      firmware: { stepDelay: 1, homingStepDelay: 2, debounceMs: 100, recalculateHome: true,
-                  rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 150 } });
+                       stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 120 },
+                '2': { homeOffset: 480, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false },
+                // Synced from firmware whose step delays were still in milliseconds.
+                '3': { homeOffset: 480, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false,
+                       stepDelay: 1, homingStepDelay: 2, debounceMs: 100, rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 150 } },
+      firmware: { stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, recalculateHome: true,
+                  rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 150 } });
   }
   if (url === '/playlists') {
     if (options.method === 'POST') return ok({ status: 'saved', name: 'Test' });
@@ -143,17 +156,20 @@ window.fetch = async (url, options = {}) => {
   if (url === '/toggle_autohome') {
     return ok({ status: 'Auto-home updated' });
   }
+  if (url === '/serial/dump_format') {
+    return ok(DUMP_FORMAT);
+  }
   if (url === '/firmware_config') {
     if (options.method === 'POST') return ok({ status: 'success', values: JSON.parse(options.body) });
     return ok({
-      values: { stepDelay: 1, homingStepDelay: 2, debounceMs: 100, recalculateHome: true,
-                rampStartDelay: 3, rampSteps: 0, settleMs: 0, staggerMs: 150 },
+      values: { stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, recalculateHome: true,
+                rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 150 },
       limits: {
-        stepDelay:       { type: 'int',  min: 1, max: 255 },
-        homingStepDelay: { type: 'int',  min: 1, max: 255 },
+        stepDelayUs:       { type: 'int',  min: 1, max: 65535 },
+        homingStepDelayUs: { type: 'int',  min: 1, max: 65535 },
         debounceMs:      { type: 'int',  min: 0, max: 65535 },
         recalculateHome: { type: 'bool', min: null, max: null },
-        rampStartDelay:  { type: 'int',  min: 1, max: 255 },
+        rampStartDelayUs:  { type: 'int',  min: 1, max: 65535 },
         rampSteps:       { type: 'int',  min: 0, max: 255 },
         settleMs:        { type: 'int',  min: 0, max: 255 },
         staggerMs:       { type: 'int',  min: 0, max: 255 },

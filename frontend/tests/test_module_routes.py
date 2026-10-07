@@ -104,13 +104,13 @@ class ModuleRoutesTest(unittest.TestCase):
         res = self.adjust(5, 5)
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.get_json(), {'new_offset': 485})
-        self.assertEqual(self.sent, ['m05o485'])
+        self.assertEqual(self.sent, ['m05O485'])
         self.assertEqual(self.settings['modules']['5']['homeOffset'], 485)
         self.assertEqual(self.saves, 1)
 
     def test_adjust_accepts_negative_deltas(self):
         self.assertEqual(self.adjust(5, -32).get_json(), {'new_offset': 448})
-        self.assertEqual(self.sent, ['m05o448'])
+        self.assertEqual(self.sent, ['m05O448'])
 
     def test_adjust_unprovisioned_module_is_a_404_not_a_fake_success(self):
         # This used to return 200 {"status": "failed"}, which the client
@@ -126,12 +126,12 @@ class ModuleRoutesTest(unittest.TestCase):
 
     def test_each_setting_sends_its_firmware_command(self):
         cases = [
-            ('autoHome', True, 'm05a1'),
-            ('autoHome', False, 'm05a0'),
-            ('motorClockwise', True, 'm05w1'),
-            ('motorClockwise', False, 'm05w0'),
-            ('motorRelease', True, 'm05r1'),
-            ('motorRelease', False, 'm05r0'),
+            ('autoHome', True, 'm05A1'),
+            ('autoHome', False, 'm05A0'),
+            ('motorClockwise', True, 'm05C1'),
+            ('motorClockwise', False, 'm05C0'),
+            ('motorRelease', True, 'm05F1'),
+            ('motorRelease', False, 'm05F0'),
         ]
         for setting, value, expected in cases:
             with self.subTest(setting=setting, value=value):
@@ -155,7 +155,7 @@ class ModuleRoutesTest(unittest.TestCase):
 
     def test_three_digit_module_id_is_not_zero_padded_wrongly(self):
         self.post(123, {'setting': 'motorRelease', 'value': False})
-        self.assertEqual(self.sent, ['m123r0'])
+        self.assertEqual(self.sent, ['m123F0'])
 
     # ---- rejected requests: nothing sent, nothing saved -------------------
 

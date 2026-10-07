@@ -106,10 +106,10 @@ function selectModule(id){
 // last sync (the dump), so you can check that what was sent actually took.
 // Values that differ from the saved shared settings are highlighted.
 const MODULE_TIMING_FIELDS = [
-  ['stepDelay', 'step', 'ms'],
-  ['homingStepDelay', 'homing', 'ms'],
+  ['stepDelayUs', 'step', 'µs'],
+  ['homingStepDelayUs', 'homing', 'µs'],
   ['debounceMs', 'debounce', 'ms'],
-  ['rampStartDelay', 'ramp start', 'ms'],
+  ['rampStartDelayUs', 'ramp start', 'µs'],
   ['rampSteps', 'ramp', 'steps'],
   ['settleMs', 'settle', 'ms'],
   ['staggerMs', 'stagger', 'ms'],
@@ -120,7 +120,9 @@ function refreshModuleTiming(){
   el.textContent = '';
   const mod = currentSettings && currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
   if (!mod) return;
-  if (mod.settleMs === undefined) {
+  // stepDelayUs is checked too: a module synced before the step delays moved
+  // to microseconds has only the old millisecond keys.
+  if (mod.settleMs === undefined || mod.stepDelayUs === undefined) {
     el.textContent = 'Sync this module to read its timing settings.';
     return;
   }

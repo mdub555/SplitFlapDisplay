@@ -81,3 +81,12 @@
 .debug-log-line.recv {
   color: #2196f3;
 }
+
+/* A parsed dump reply: keep each "name value unit" together when wrapping. */
+.debug-log-line.dump {
+  word-break: normal;
+}
+
+.debug-log-line .dump-field {
+  white-space: nowrap;
+}

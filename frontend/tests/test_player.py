@@ -1,5 +1,5 @@
 """Tests for display/player.py's send_to_display(): pages go out as one
-frame broadcast (m*F...) when the firmware supports it, or one message per
+frame broadcast (m*f...) when the firmware supports it, or one message per
 module otherwise.
 
 Run from frontend/:   python -m unittest tests.test_player
@@ -80,7 +80,7 @@ class SendToDisplayTest(unittest.TestCase):
     def test_frame_message_pairs_each_module_with_its_rank(self):
         msg = self.player.frame_message('ABC', [2, 0, 1], 21)
         # module 0 is second in the order (rank 1), module 1 third, module 2 first
-        self.assertEqual(msg, 'm*F21:A"B#C!\n')
+        self.assertEqual(msg, 'm*f21:A"B#C!\n')
 
     # ---- frame path -------------------------------------------------------
 
@@ -90,8 +90,8 @@ class SendToDisplayTest(unittest.TestCase):
         self.assertEqual(len(self.ser.written), 1)
         msg = self.ser.written[0]
         # 15 ms plus the ~6 ms one per-module message used to take on the bus
-        self.assertTrue(msg.startswith('m*F21:'))
-        pairs = msg[len('m*F21:'):-1]
+        self.assertTrue(msg.startswith('m*f21:'))
+        pairs = msg[len('m*f21:'):-1]
         self.assertEqual(len(pairs), 2 * NUM_MODULES)
         text = self.page('HELLO')
         for i in range(NUM_MODULES):

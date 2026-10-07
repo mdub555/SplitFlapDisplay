@@ -4,11 +4,21 @@
 #include <Arduino.h>
 
 // ==============================================================================
-// EepromStore — thin wrapper around EEPROM reads/writes.
+// EepromStore — the module's persistent settings.
+//
+// Settings are cached in RAM: getters read the cache, and savers update both
+// the cache and EEPROM.
 // ==============================================================================
 
 namespace EepromStore {
+  // The module ID of a module that hasn't been given one yet. It isn't
+  // addressable on its own, and doesn't answer broadcast dumps or frames.
+  const uint8_t UNPROVISIONED_ID = 255;
+
+  // Writes the defaults on first boot (with `hardcodedId` as the module ID),
+  // then loads the settings into RAM.
   void begin(uint8_t hardcodedId);
+
   // True once EEPROM has been written with the magic value.
   bool isInitialized();
 
@@ -25,13 +35,15 @@ namespace EepromStore {
   void saveModuleId(uint8_t id);
   uint8_t getModuleId();
 
-  void saveStepDelay(uint8_t delay);
-  uint8_t getStepDelay();
+  // Time (µs) between motor steps during normal moves.
+  void saveStepDelayUs(uint16_t delayUs);
+  uint16_t getStepDelayUs();
 
-  void saveHomingStepDelay(uint8_t delay);
-  uint8_t getHomingStepDelay();
+  // Time (µs) between motor steps while homing and calibrating.
+  void saveHomingStepDelayUs(uint16_t delayUs);
+  uint16_t getHomingStepDelayUs();
 
-  void saveDebounceMs(uint16_t millis);
+  void saveDebounceMs(uint16_t ms);
   uint16_t getDebounceMs();
 
   void saveAutoHome(bool enabled);
@@ -46,10 +58,10 @@ namespace EepromStore {
   void saveRecalculateHome(bool recalculate);
   bool recalculateHome();
 
-  // Step delay (ms) used at the start and end of a move. The delay ramps
+  // Step delay (µs) used at the start and end of a move. The delay ramps
   // between this and the step delay over rampSteps steps at each end.
-  void saveRampStartDelay(uint8_t delay);
-  uint8_t getRampStartDelay();
+  void saveRampStartDelayUs(uint16_t delayUs);
+  uint16_t getRampStartDelayUs();
 
   // Number of steps to ramp over at each end of a move. 0 disables the ramp.
   void saveRampSteps(uint8_t steps);

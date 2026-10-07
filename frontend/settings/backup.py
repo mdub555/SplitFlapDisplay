@@ -3,7 +3,7 @@ from datetime import datetime
 from config import NUM_MODULES
 from settings.store import settings, save_settings
 from display.serial_link import send_raw, is_connected
-from display.module_protocol import TOGGLE_COMMANDS, toggle_command
+from display.module_protocol import TOGGLE_COMMANDS, Cmd, message, toggle_command
 
 # Must match the firmware defaults (HOME_OFFSET / TOTAL_STEPS in eeprom_store.cpp).
 DEFAULT_HOME_OFFSET = 480
@@ -44,8 +44,8 @@ def restore_backup(data: dict) -> bool:
         s = str(i)
         # If no config, fall back to the firmware defaults
         mod = settings['modules'].get(s) or {}
-        send_raw(f"m{i:02d}o{int(mod.get('homeOffset', DEFAULT_HOME_OFFSET))}")
-        send_raw(f"m{i:02d}t{int(mod.get('totalSteps', DEFAULT_TOTAL_STEPS))}")
+        send_raw(message(i, Cmd.SET_OFFSET, int(mod.get('homeOffset', DEFAULT_HOME_OFFSET))))
+        send_raw(message(i, Cmd.SET_TOTAL_STEPS, int(mod.get('totalSteps', DEFAULT_TOTAL_STEPS))))
         # Toggles only go out if the backup actually has them (older backups and
         # modules with no saved config don't); never invent a value.
         for key in TOGGLE_COMMANDS:

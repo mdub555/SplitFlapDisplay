@@ -5,6 +5,7 @@ from config import NUM_MODULES, BAUD_RATE, FRAME_BROADCAST
 from display.state import state
 from display.charset import FLAP_CHARS, COLOR_MAP, QUOTE_CHAR, QUOTE_SUBSTITUTE
 from display.layout import get_animation_order
+from display.module_protocol import BROADCAST, Cmd, message
 from display.serial_link import ser, serial_lock
 from apps.base import Frame
 from apps.registry import registry
@@ -25,16 +26,16 @@ def _bus_ms(num_bytes):
 
 
 def frame_message(text, order, interval_ms):
-    """The frame broadcast for `text`: m*F<interval>:<pairs>, where pairs
+    """The frame broadcast for `text`: m*f<interval>:<pairs>, where pairs
     are each module's character and its rank in `order`, for modules 0, 1,
     2, ... in turn. A module starts moving rank x interval_ms after the
-    frame ends. See tranceiver.h in the firmware."""
+    frame ends. See transceiver.h in the firmware."""
     ranks = [0] * len(text)
     for rank, i in enumerate(order):
         if i < len(text):
             ranks[i] = rank
     pairs = ''.join(char + chr(ord('!') + rank) for char, rank in zip(text, ranks))
-    return f"m*F{interval_ms}:{pairs}\n"
+    return f"{message(BROADCAST, Cmd.FRAME, interval_ms)}:{pairs}\n"
 
 
 def send_to_display(text, order=None, raw=False, step_delay_ms=15):
@@ -75,7 +76,7 @@ def send_to_display(text, order=None, raw=False, step_delay_ms=15):
 
     # One message per module took its send time plus step_delay_ms each, so
     # a frame keeps the same spacing between modules.
-    interval_ms = round(step_delay_ms + _bus_ms(len("m00-A\n")))
+    interval_ms = round(step_delay_ms + _bus_ms(len(message(0, Cmd.DISPLAY_CHAR, 'A')) + 1))
     if FRAME_BROADCAST and NUM_MODULES <= FRAME_MAX_MODULES and interval_ms <= 255:
         # The modules cascade on their own; we only wait for the last one.
         cascade_s = (len(order) - 1) * interval_ms / 1000.0
@@ -90,7 +91,7 @@ def send_to_display(text, order=None, raw=False, step_delay_ms=15):
                 if i >= len(clean_text):
                     continue
                 if ser:
-                    ser.write(f"m{i:02d}-{clean_text[i]}\n".encode())
+                    ser.write(f"{message(i, Cmd.DISPLAY_CHAR, clean_text[i])}\n".encode())
                     ser.flush()
                     time.sleep(step_delay_ms / 1000.0)
 

@@ -4,6 +4,7 @@ import time
 from config import GRID_ROWS, GRID_COLS, NUM_MODULES
 from settings.store import settings, save_settings
 from settings.schema import GLOBAL_FIELDS
+from display.module_protocol import BROADCAST, UNPROVISIONED_ID, Cmd, message
 from display.serial_link import is_connected, parse_buffer, send_raw, ser, serial_lock
 
 bp = Blueprint('settings_routes', __name__)
@@ -51,7 +52,7 @@ def toggle_autohome():
         settings['modules'][mod_id]['autoHome'] = enabled
 
     save_settings(settings)
-    send_raw(f"m*a{1 if enabled else 0}")
+    send_raw(message(BROADCAST, Cmd.SET_AUTO_HOME, 1 if enabled else 0))
     return jsonify(status='Auto-home updated')
 
 
@@ -76,13 +77,13 @@ def provision_module():
     dump = None
     with serial_lock:
         ser.reset_input_buffer()
-        ser.write(b"m255d\n")
+        ser.write(f"{message(UNPROVISIONED_ID, Cmd.DUMP_STATE)}\n".encode())
         ser.flush()
         start, buffer = time.time(), ""
         while time.time() - start < 2.0:
             if ser.in_waiting:
                 buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
-                dump = parse_buffer(buffer, 255)
+                dump = parse_buffer(buffer, UNPROVISIONED_ID)
                 if dump is not None:
                     break
             time.sleep(0.05)
@@ -91,7 +92,7 @@ def provision_module():
         return jsonify(status="error", message="No unprovisioned module found on bus"), 404
 
     # 2. Assign it the target ID
-    send_raw(f"m255i{new_id}")
+    send_raw(message(UNPROVISIONED_ID, Cmd.SET_MODULE_ID, new_id))
     time.sleep(0.2)
 
     # 3. Use its current settings from hardware

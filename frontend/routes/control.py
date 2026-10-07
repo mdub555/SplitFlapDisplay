@@ -5,6 +5,7 @@ from flask import Blueprint, Response, request, jsonify, stream_with_context
 
 from config import NUM_MODULES
 from display.state import state
+from display.module_protocol import BROADCAST, Cmd, dump_format, message
 from display.serial_link import send_raw
 
 bp = Blueprint('control', __name__)
@@ -76,6 +77,13 @@ def serial_log_stream():
     )
 
 
+@bp.route('/serial/dump_format')
+def serial_dump_format():
+    """How a module's dump reply is laid out, so the debug panel can show
+    replies as labelled values."""
+    return jsonify(dump_format())
+
+
 @bp.route('/serial/send', methods=['POST'])
 def serial_send():
     """Accepts a command string and sends it over the serial link."""
@@ -113,6 +121,6 @@ def stop_app():
 
 @bp.route('/home_all')
 def home_all():
-    send_raw('m*h')
+    send_raw(message(BROADCAST, Cmd.HOME))
     state.set_display(' ' * NUM_MODULES, [0] * NUM_MODULES)
     return jsonify(status='Homing All')

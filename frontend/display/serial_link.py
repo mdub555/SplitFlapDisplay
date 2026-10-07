@@ -6,7 +6,8 @@ import time
 import serial
 
 from config import SERIAL_PORT, BAUD_RATE
-from display.module_protocol import DUMP_SLOT_S
+from display.module_protocol import (
+    BROADCAST, DUMP_SLOT_S, Cmd, dump_reply_pattern, message, parse_dump_fields)
 from display.state import state
 
 serial_lock = threading.Lock()
@@ -38,18 +39,17 @@ def send_raw(cmd: str):
 
 
 def read_dump(mod_id: int, timeout: float = 5.0):
-    """m<ID>d — request and parse an EEPROM dump (home offset + total steps).
-    Returns a dict or None on timeout/parse failure."""
-    # Sends: m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>:<homingStepDelay>
-    #              :<clockwise>:<autoHome>:<releaseMotor>:<recalculateHome>
-    #              [:<rampStartDelay>:<rampSteps>:<settleMs>:<staggerMs>[:<revolutions>]:<drift>]
+    """m<ID>? — request and parse a module's dump (its settings, revolution
+    count and drift; see DUMP_FIELDS in module_protocol). Returns a dict or
+    None on timeout/parse failure."""
     if not ser:
         return None
     with serial_lock:
         ser.reset_input_buffer()
-        ser.write(f"m{mod_id:02d}d\n".encode())
+        request = message(mod_id, Cmd.DUMP_STATE)
+        ser.write(f"{request}\n".encode())
         ser.flush()
-        state._broadcast_serial(f"SENT: m{mod_id:02d}d")
+        state._broadcast_serial(f"SENT: {request}")
         start = time.time()
         buffer = ""
         while time.time() - start < timeout:
@@ -69,7 +69,7 @@ def read_dump(mod_id: int, timeout: float = 5.0):
 
 
 def read_all_dumps(max_id: int, margin: float = 0.5):
-    """m*d — ask every module for its dump at once. Each provisioned module
+    """m*? — ask every module for its dump at once. Each provisioned module
     answers in its own slot (ID x DUMP_SLOT_S after the request), so this
     listens until module `max_id`'s slot has passed, plus `margin`. Returns
     {mod_id: dump} for every reply received; modules that were busy (they
@@ -78,9 +78,10 @@ def read_all_dumps(max_id: int, margin: float = 0.5):
         return {}
     with serial_lock:
         ser.reset_input_buffer()
-        ser.write(b"m*d\n")
+        request = message(BROADCAST, Cmd.DUMP_STATE)
+        ser.write(f"{request}\n".encode())
         ser.flush()
-        state._broadcast_serial("SENT: m*d")
+        state._broadcast_serial(f"SENT: {request}")
         deadline = time.time() + (max_id + 1) * DUMP_SLOT_S + margin
         buffer = ""
         while time.time() < deadline:
@@ -92,58 +93,16 @@ def read_all_dumps(max_id: int, margin: float = 0.5):
     return parse_all_dumps(buffer)
 
 
-# Fields newer firmware sends after the first nine, in this order, followed
-# by drift (steps the tracked position was off by at the last home edge;
-# positive = missed steps), which is always last. Each firmware version adds
-# fields before drift, so a dump has the first N of these plus drift.
-# Firmware from before any of them sends only the first nine fields.
-_EXTENDED_FIELDS = ('rampStartDelay', 'rampSteps', 'settleMs', 'staggerMs', 'revolutions')
-_MIN_EXTENDED = 4  # the ramp, settle and stagger settings came together
-
-
-def _parse_extended_fields(parts):
-    extra = parts[9:]
-    if len(extra) < _MIN_EXTENDED + 1:
-        return {}
-    fields = {key: int(value) for key, value in zip(_EXTENDED_FIELDS, extra[:-1])}
-    fields['drift'] = int(extra[-1])
-    return fields
-
-
-def _parse_dump_fields(text):
-    parts = [p.strip() for p in text.split(':')]
-    if len(parts) < 9:
-        return None
-    try:
-        # Same key names the rest of the app (settings.json, tuning.js,
-        # backup/restore, module routes) uses for a module's config.
-        return {
-            'homeOffset': int(parts[0]),
-            'totalSteps': int(parts[1]),
-            'debounceMs': int(parts[2]),
-            'stepDelay': int(parts[3]),
-            'homingStepDelay': int(parts[4]),
-            'motorClockwise': parts[5] == '1',
-            'autoHome': parts[6] == '1',
-            'motorRelease': parts[7] == '1',
-            'recalculateHome': parts[8] == '1',
-            **_parse_extended_fields(parts),
-        }
-    except ValueError:
-        return None
-
-
 def parse_buffer(buffer, mod_id=None):
-    """Find a complete `m<ID>d:<homeOffset>:<totalSteps>:<debounceMs>:<stepDelay>:
-    <homingStepDelay>:<clockwise>:<autoHome>:<releaseMotor>:<recalculateHome>`
-    line anywhere in `buffer` and parse it. Pass `mod_id` to only accept that
+    """Find a complete dump reply line (m<ID>? and its tab-separated fields)
+    anywhere in `buffer` and parse it. Pass `mod_id` to only accept that
     module's reply (any ID matches when omitted). Only newline-terminated lines
     count, so a half-received reply is ignored until the rest arrives; the
     firmware ends lines with \\r\\n (Serial.println), which is stripped here.
     Returns None when no complete, well-formed dump line is present."""
     id_pattern = r'\d+' if mod_id is None else f'{mod_id:02d}'
-    for match in re.finditer(rf'm{id_pattern}d:([^\r\n]*)\r?\n', buffer):
-        dump = _parse_dump_fields(match.group(1))
+    for match in re.finditer(dump_reply_pattern(id_pattern), buffer):
+        dump = parse_dump_fields(match.group(2))
         if dump is not None:
             return dump
     return None
@@ -152,8 +111,8 @@ def parse_buffer(buffer, mod_id=None):
 def parse_all_dumps(buffer):
     """Every complete, well-formed dump line in `buffer`, as {mod_id: dump}."""
     dumps = {}
-    for match in re.finditer(r'm(\d+)d:([^\r\n]*)\r?\n', buffer):
-        dump = _parse_dump_fields(match.group(2))
+    for match in re.finditer(dump_reply_pattern(), buffer):
+        dump = parse_dump_fields(match.group(2))
         if dump is not None:
             dumps[int(match.group(1))] = dump
     return dumps
@@ -163,7 +122,7 @@ def calibrate_module(mod_id: int, timeout: float = 45.0):
     """m<ID>c — spin one revolution, parse the measured step count, and push
     it back as the module's new total-steps value. Returns the step count,
     or None on timeout."""
-    send_raw(f"m{mod_id:02d}c\n")
+    send_raw(message(mod_id, Cmd.CALIBRATE))
     dump = read_dump(mod_id, timeout)
     if dump is None:
         return None

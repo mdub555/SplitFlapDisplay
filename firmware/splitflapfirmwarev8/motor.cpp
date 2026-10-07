@@ -6,7 +6,7 @@
 #include "pinout.h"
 
 namespace {
-  int  currentPhase  = 0;    // Index into halfStepSequence[8]
+  uint8_t currentPhase = 0;  // Index into HALF_STEP_SEQUENCE
 
   // The four coil pins are PB2-PB5, so a whole step is written to the port in
   // one go instead of four digitalWrite() calls. digitalWrite() has to look
@@ -21,7 +21,7 @@ namespace {
   // coils in the order needed to step forward; walking the table backward
   // (decrementing the index) steps the motor in the flap-advancing direction.
   // Bit 0 is coil A (MOTOR_IN1) up to bit 3 for coil D (MOTOR_IN4).
-  const uint8_t halfStepSequence[8] = {
+  const uint8_t HALF_STEP_SEQUENCE[8] = {
     0b0001,   // Phase 0: coil A only
     0b0011,   // Phase 1: coils A+B
     0b0010,   // Phase 2: coil B only
@@ -38,21 +38,16 @@ namespace {
   }
 }
 
-namespace Motor{
+namespace Motor {
   void begin() {
     VPORTB.DIR |= COIL_MASK;
   }
 
   void step() {
-    if (EepromStore::isMotorClockwise()) {
-      currentPhase--;
-    } else {
-      currentPhase++;
-    }
-    if (currentPhase < 0) currentPhase = 7;
-    if (currentPhase > 7) currentPhase = 0;
+    // The sequence has 8 entries, so the mask wraps the index either way.
+    currentPhase = (EepromStore::isMotorClockwise() ? currentPhase - 1 : currentPhase + 1) & 7;
 
-    applyCoils(halfStepSequence[currentPhase]);
+    applyCoils(HALF_STEP_SEQUENCE[currentPhase]);
   }
 
   void release() {
@@ -60,7 +55,7 @@ namespace Motor{
   }
 
   void tense() {
-    applyCoils(halfStepSequence[currentPhase]);
+    applyCoils(HALF_STEP_SEQUENCE[currentPhase]);
   }
 }
 

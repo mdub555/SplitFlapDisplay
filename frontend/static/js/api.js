@@ -117,6 +117,7 @@ const api = {
   provisionModule:    (id) => apiFetchJson('/provision_module', {
     method:'POST', headers: jsonHeaders, body: JSON.stringify({id})
   }, 'Could not provision module'),
+  dumpFormat:         () => apiFetchJson('/serial/dump_format', {}, 'Could not load the dump format'),
   serialSend:         (cmd) => apiFetchJson('/serial/send', {
     method:'POST', headers: jsonHeaders, body: JSON.stringify({cmd})
   }, 'Could not send serial command'),

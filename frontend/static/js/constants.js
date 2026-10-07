@@ -48,7 +48,7 @@ function setGridConfig(cfg){
 // the module grid, the inspector title, and any toast/confirm message that
 // names a module. This is purely cosmetic: every network request and the
 // wire protocol itself still use the plain decimal id (see api.js and
-// tranceiver.h) — only text the user reads goes through this.
+// transceiver.h) — only text the user reads goes through this.
 function formatModuleId(id){
   return id.toString(16).toUpperCase().padStart(2, '0');
 }

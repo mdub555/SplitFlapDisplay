@@ -74,7 +74,7 @@ class ManualControlRoutesTest(unittest.TestCase):
         res = self.post(5, 'total_steps', {'steps': 4100})
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.get_json(), {'status': 'success', 'steps': 4100})
-        self.assertEqual(self.sent, ['m05t4100'])
+        self.assertEqual(self.sent, ['m05T4100'])
         self.assertEqual(self.settings['modules']['5']['totalSteps'], 4100)
         self.assertEqual(self.saves, 1)
 
@@ -183,7 +183,7 @@ class ManualControlRoutesTest(unittest.TestCase):
     def test_exercise_sends_command(self):
         res = self.post(5, 'exercise', {'cycles': 3})
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(self.sent, ['m05v3'])
+        self.assertEqual(self.sent, ['m05e3'])
 
     def test_exercise_bounds(self):
         for good in (1, 255):
@@ -205,7 +205,7 @@ class ManualControlRoutesTest(unittest.TestCase):
 
     def test_reboot_sends_command(self):
         self.assertEqual(self.post(5, 'reboot', {}).status_code, 200)
-        self.assertEqual(self.sent, ['m05z'])
+        self.assertEqual(self.sent, ['m05r'])
         self.assertEqual(self.saves, 0)
 
     def test_reset_settings_sends_command_then_stores_the_dump(self):
@@ -215,7 +215,7 @@ class ManualControlRoutesTest(unittest.TestCase):
         self.routes.read_dump = lambda mod_id: dump if mod_id == 5 else None
         res = self.post(5, 'reset_settings', {})
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(self.sent, ['m05q'])
+        self.assertEqual(self.sent, ['m05!'])
         self.assertEqual(self.settings['modules']['5'], dump)
         self.assertEqual(self.saves, 1)
 
@@ -224,7 +224,7 @@ class ManualControlRoutesTest(unittest.TestCase):
         self.routes.read_dump = lambda mod_id: None
         res = self.post(5, 'reset_settings', {})
         self.assertEqual(res.status_code, 504)
-        self.assertEqual(self.sent, ['m05q'])
+        self.assertEqual(self.sent, ['m05!'])
         self.assertEqual(self.saves, 0)
 
     def test_reset_settings_unprovisioned_module(self):
@@ -235,13 +235,13 @@ class ManualControlRoutesTest(unittest.TestCase):
     def test_identify_sends_command(self):
         res = self.post(5, 'identify', {})
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(self.sent, ['m05f'])
+        self.assertEqual(self.sent, ['m05b'])
         self.assertEqual(self.saves, 0)
 
     def test_identify_works_for_unprovisioned_ids(self):
         # Finding a module is useful before it's provisioned, too.
         self.assertEqual(self.post(255, 'identify', {}).status_code, 200)
-        self.assertEqual(self.sent, ['m255f'])
+        self.assertEqual(self.sent, ['m255b'])
 
 
 if __name__ == '__main__':
