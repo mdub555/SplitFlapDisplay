@@ -198,6 +198,9 @@ async function main() {
   click(document.getElementById('tab-modules'));
   await sleep(30);
   check('modules tab loaded module grid', document.querySelectorAll('#modMatrix .mod-cell').length === 64);
+  const phoneColumns = globalVar('phoneColumns');
+  check('on a phone the module grid wraps at a whole fraction of the display width',
+    [[16, 8], [15, 5], [12, 6], [10, 5], [9, 9], [8, 8], [13, 8], [1, 1]].every(([cols, n]) => phoneColumns(cols) === n));
   check('inspector shows the selected module\'s drift', document.getElementById('inspectDrift').textContent === '3');
   check('inspector shows the revolution count', document.getElementById('inspectRevolutions').textContent === '12,345');
   const timing = document.getElementById('inspectTiming');

@@ -22,11 +22,20 @@ function moduleSettings(id = selectedModule) {
   return (currentSettings && currentSettings.modules && currentSettings.modules[id.toString()]) || null;
 }
 
+// How many columns the module grid gets on a phone: up to 9 fit. A wider
+// display wraps at a whole fraction of its width if it can (16 -> 8, 15 -> 5,
+// 12 -> 6), so each display row is a whole number of grid rows; otherwise 8.
+function phoneColumns(cols) {
+  if (cols <= 9) return cols;
+  for (let n = 9; n >= 5; n--) if (cols % n === 0) return n;
+  return 8;
+}
+
 function renderModuleGrid() {
   const grid = byId('modMatrix');
-  // Laid out like the display; phones get at most 8 columns (see modules.css).
+  // Laid out like the display; phones wrap it narrower (see modules.css).
   grid.style.setProperty('--cols', GRID_COLS);
-  grid.style.setProperty('--phone-cols', Math.min(GRID_COLS, 8));
+  grid.style.setProperty('--phone-cols', phoneColumns(GRID_COLS));
   grid.replaceChildren(...Array.from({length: NUM_MODULES}, (_, i) => el('div', {
     class: `mod-cell${i === selectedModule ? ' active' : ''}${moduleSettings(i) ? '' : ' unprovisioned'}`,
     dataset: {onclick: 'selectModuleAction', id: i},

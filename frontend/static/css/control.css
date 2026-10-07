@@ -1,9 +1,16 @@
 /* The Control page: the live display, composing a page, and playlists. */
 
 /* ── FLAP PREVIEW ── */
+/* A display box. Flaps grow with the page up to about 64px wide, so a small
+   display (say 1x8) stays display-sized and centred instead of stretching
+   across the page. */
 .preview-wrapper {
+  --box-pad: 12px;
+  max-width: calc(var(--grid-cols, 16) * 64px + (var(--grid-cols, 16) - 1) * 3px + 2 * var(--box-pad) + 4px);
+  margin-left: auto;
+  margin-right: auto;
+  padding: var(--box-pad);
   background: var(--inset);
-  padding: 12px;
   border-radius: 8px;
   border: 2px solid var(--border-strong);
   margin-bottom: 16px;
@@ -361,7 +368,7 @@
   }
 
   .preview-wrapper {
-    padding: 7px;
+    --box-pad: 7px;
   }
 
   .control-panel {

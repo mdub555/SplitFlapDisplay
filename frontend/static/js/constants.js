@@ -4,6 +4,8 @@
 const GRID_ROWS = CONFIG.grid_rows;
 const GRID_COLS = CONFIG.grid_cols;
 const NUM_MODULES = CONFIG.num_modules;
+// For the stylesheets, which size the display boxes from it (control.css).
+document.documentElement.style.setProperty('--grid-cols', GRID_COLS);
 
 // Every character the reels can show, in flap order (index 0 is blank).
 const CHAR_MAP = CONFIG.flap_chars;
