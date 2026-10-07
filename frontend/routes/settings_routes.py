@@ -1,6 +1,6 @@
 import time
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from config import GRID_ROWS, GRID_COLS, NUM_MODULES
 from settings.store import settings, save_settings

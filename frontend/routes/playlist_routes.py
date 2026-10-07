@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from settings.store import settings, save_settings
 from routes.common import error, json_body
