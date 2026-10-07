@@ -134,6 +134,16 @@
     <div class="apps-grid" id="appsGrid">
       <!-- Populated from /apps by apps.js -->
     </div>
+
+    <!-- Global Settings: shared by the apps -->
+    <div class="config-section global-settings">
+      <h3>Global Settings</h3>
+      <p class="note">Shared by the apps; each app's own settings are under its ⚙️.</p>
+      <div class="settings-grid" id="globalSettingsGrid">
+        <!-- Populated from /global_fields by apps.js -->
+      </div>
+      <button class="btn btn-secondary section-action" data-onclick="saveGlobal">Save Settings</button>
+    </div>
   </div>
 
   <!-- ══════════ TUNING PAGE ══════════ -->
@@ -223,15 +233,6 @@
         {% endfor %}
       </div>
       <button class="btn btn-secondary section-action" data-onclick="applyFirmwareConfig">Apply to All Modules</button>
-    </div>
-
-    <!-- Global Settings -->
-    <div class="config-section">
-      <h3>Global Settings</h3>
-      <div class="settings-grid" id="globalSettingsGrid">
-        <!-- Populated from /global_fields by tuning.js -->
-      </div>
-      <button class="btn btn-secondary section-action" data-onclick="saveGlobal">Save Settings</button>
     </div>
 
     <!-- Backup / Restore -->

@@ -1,6 +1,5 @@
 // The Tuning & Settings page: the hardware inspector for one module at a
-// time, the firmware settings shared by every module, global settings, and
-// backup/restore.
+// time, the firmware settings shared by every module, and backup/restore.
 
 let selectedModule = 0;
 let currentSettings = null;   // GET /settings, kept up to date as things change
@@ -8,20 +7,10 @@ let currentSettings = null;   // GET /settings, kept up to date as things change
 function loadTuningData() {
   byId('modMatrix').replaceChildren(el('div', {class: 'loading-note'}, 'Loading…'));
   loadFirmwareConfig(); // independent of the settings load below, so one failing doesn't block the other
-  Promise.all([api.getSettings(), api.globalFields()]).then(([settings, fields]) => {
-    if (!settings || !fields) return; // error toast already shown by the api layer
+  api.getSettings().then(settings => {
+    if (!settings) return; // error toast already shown by the api layer
     currentSettings = settings;
-    byId('globalSettingsGrid').replaceChildren(...fields.map(f => buildField(f, settings[f.key], 'gsf_')));
     selectModule(selectedModule);
-  });
-}
-
-function saveGlobal() {
-  api.globalFields().then(fields => {
-    if (!fields) return;
-    api.saveGlobalSettings(readFieldValues(fields, 'gsf_')).then(result => {
-      if (result) showToast('Settings saved');
-    });
   });
 }
 
@@ -402,5 +391,5 @@ registerActions({
   setTotalSteps, showChar, showIndex, gotoStep,
   applyFirmwareConfig,
   toggleModuleSetting,
-  saveGlobal, downloadBackup, triggerBackupFileInput, uploadBackup,
+  downloadBackup, triggerBackupFileInput, uploadBackup,
 });

@@ -63,6 +63,18 @@ async function main() {
   check('control tab becomes inactive', !document.getElementById('page-control').classList.contains('active'));
   check('apps grid rendered with 2 cards', document.querySelectorAll('#appsGrid .app-card').length === 2);
 
+  console.log('\n--- Global settings live on the Apps page ---');
+  const globalGrid = document.getElementById('globalSettingsGrid');
+  check('the global settings are on the Apps page, not Tuning',
+    !!globalGrid.closest('#page-apps') && !document.querySelector('#page-tuning #globalSettingsGrid'));
+  check('opening Apps fills them from /settings', document.getElementById('gsf_timezone').value === 'US/Eastern');
+  document.getElementById('gsf_timezone').value = 'UTC';
+  calls.length = 0;
+  click(document.querySelector('#page-apps [data-onclick="saveGlobal"]'));
+  await sleep(20);
+  const globalSave = calls.find(c => c.url === '/settings' && c.method === 'POST');
+  check('Save Settings posts the edited values', globalSave && JSON.parse(globalSave.body).timezone === 'UTC');
+
   const weatherCard = document.querySelector('#appsGrid .app-card[data-app="weather"]');
   check('weather card has a gear icon (has settings_fields)', !!weatherCard.querySelector('.app-gear'));
   const timeCard = document.querySelector('#appsGrid .app-card[data-app="time"]');

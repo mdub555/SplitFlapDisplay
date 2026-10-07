@@ -103,7 +103,7 @@ window.fetch = async (url, options = {}) => {
     if (options.method === 'POST') return ok({ status: 'Saved' });
     // Same shape the real backend returns: per-module config lives under `modules`
     // (only module 0 is provisioned here).
-    return ok({ timezone: 'US/Eastern', zip_code: '02118', auto_home: true,
+    return ok({ timezone: 'US/Eastern', zip_code: '02118',
       modules: { '0': { homeOffset: 2832, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false, drift: 3, revolutions: 12345,
                        stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 120 },
                 '2': { homeOffset: 480, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false },
@@ -133,7 +133,7 @@ window.fetch = async (url, options = {}) => {
     return ok({ status: 'success' });
   }
   if (url.match(/^\/modules\/\d+\/reset_settings$/)) {
-    return ok({ status: 'success', settings: { auto_home: true, modules: {
+    return ok({ status: 'success', settings: { modules: {
       '10': { homeOffset: 480, totalSteps: 4096, autoHome: false, motorClockwise: true, motorRelease: true } } } });
   }
   if (url.match(/^\/modules\/\d+\/identify$/)) {
