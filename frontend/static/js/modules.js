@@ -1,10 +1,10 @@
-// The Tuning & Settings page: the hardware inspector for one module at a
+// The Modules page: the hardware inspector for one module at a
 // time, the firmware settings shared by every module, and backup/restore.
 
 let selectedModule = 0;
 let currentSettings = null;   // GET /settings, kept up to date as things change
 
-function loadTuningData() {
+function loadModulesPage() {
   byId('modMatrix').replaceChildren(el('div', {class: 'loading-note'}, 'Loading…'));
   loadFirmwareConfig(); // independent of the settings load below, so one failing doesn't block the other
   api.getSettings().then(settings => {
@@ -24,7 +24,7 @@ function moduleSettings(id = selectedModule) {
 
 function renderModuleGrid() {
   const grid = byId('modMatrix');
-  // Laid out like the display; phones get at most 8 columns (see tuning.css).
+  // Laid out like the display; phones get at most 8 columns (see modules.css).
   grid.style.setProperty('--cols', GRID_COLS);
   grid.style.setProperty('--phone-cols', Math.min(GRID_COLS, 8));
   grid.replaceChildren(...Array.from({length: NUM_MODULES}, (_, i) => el('div', {
@@ -301,7 +301,7 @@ function provisionModule() {
   api.provisionModule(targetId).then(result => {
     if (!result) return;
     showToast(`Module assigned ID ${formatModuleId(result.assigned_id)}`);
-    loadTuningData();
+    loadModulesPage();
   });
 }
 
@@ -379,7 +379,7 @@ function uploadBackup(input) {
       status.textContent = result ? '✓ Done' : '✗ Error';
       if (!result) return;
       showToast('Restore complete');
-      loadTuningData();
+      loadModulesPage();
     });
   });
 }

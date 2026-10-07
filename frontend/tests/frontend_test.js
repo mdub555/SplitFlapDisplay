@@ -65,8 +65,8 @@ async function main() {
 
   console.log('\n--- Global settings live on the Apps page ---');
   const globalGrid = document.getElementById('globalSettingsGrid');
-  check('the global settings are on the Apps page, not Tuning',
-    !!globalGrid.closest('#page-apps') && !document.querySelector('#page-tuning #globalSettingsGrid'));
+  check('the global settings are on the Apps page, not Modules',
+    !!globalGrid.closest('#page-apps') && !document.querySelector('#page-modules #globalSettingsGrid'));
   check('opening Apps fills them from /settings', document.getElementById('gsf_timezone').value === 'US/Eastern');
   document.getElementById('gsf_timezone').value = 'UTC';
   calls.length = 0;
@@ -183,7 +183,7 @@ async function main() {
   let threw = false;
   try { source.emitRaw('not valid json'); } catch (e) { threw = true; }
   await sleep(10);
-  check('a malformed message does not throw / app still responsive', !threw && document.getElementById('tab-tuning') !== null);
+  check('a malformed message does not throw / app still responsive', !threw && document.getElementById('tab-modules') !== null);
 
   console.log('\n--- Stream disconnect shows the status banner; reconnect clears it ---');
   const streamStatus = document.getElementById('streamStatus');
@@ -195,9 +195,9 @@ async function main() {
   await sleep(10);
   check('status banner hides again once the stream reconnects', !streamStatus.classList.contains('visible'));
 
-  click(document.getElementById('tab-tuning'));
+  click(document.getElementById('tab-modules'));
   await sleep(30);
-  check('tuning tab loaded module grid', document.querySelectorAll('#modMatrix .mod-cell').length === 64);
+  check('modules tab loaded module grid', document.querySelectorAll('#modMatrix .mod-cell').length === 64);
   check('inspector shows the selected module\'s drift', document.getElementById('inspectDrift').textContent === '3');
   check('inspector shows the revolution count', document.getElementById('inspectRevolutions').textContent === '12,345');
   const timing = document.getElementById('inspectTiming');

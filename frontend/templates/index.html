@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Split-Flap OS</title>
-{% for sheet in ['base', 'control', 'apps', 'tuning', 'modals', 'debug'] %}
+{% for sheet in ['base', 'control', 'apps', 'modules', 'modals', 'debug'] %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/' + sheet + '.css') }}">
 {% endfor %}
 </head>
@@ -62,7 +62,7 @@
     {% for tab, full, short, action in [
          ('control', 'CONTROL', 'CTRL', 'switchTab'),
          ('apps', 'APPS', 'APPS', 'switchTab'),
-         ('tuning', 'TUNING &amp; SETTINGS', 'TUNE', 'switchTab'),
+         ('modules', 'MODULES', 'MODS', 'switchTab'),
          ('debug', 'DEBUG', 'DBG', 'switchTab')] %}
     <button id="tab-{{ tab }}" class="tab-btn{% if loop.first %} active{% endif %}"
             data-onclick="{{ action }}" data-tab="{{ tab }}">
@@ -146,8 +146,8 @@
     </div>
   </div>
 
-  <!-- ══════════ TUNING PAGE ══════════ -->
-  <div id="page-tuning" class="page">
+  <!-- ══════════ MODULES PAGE ══════════ -->
+  <div id="page-modules" class="page">
 
     <!-- Hardware Inspector -->
     <div class="config-section">
@@ -249,7 +249,7 @@
       </div>
     </div>
 
-  </div><!-- /page-tuning -->
+  </div><!-- /page-modules -->
 
   <!-- ══════════ DEBUG PAGE ══════════ -->
   <div id="page-debug" class="page">
@@ -327,7 +327,7 @@
 
 <script>const CONFIG = {{ config | tojson }};</script>
 {% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control',
-                  'apps', 'app-settings-modal', 'tuning', 'debug', 'main'] %}
+                  'apps', 'app-settings-modal', 'modules', 'debug', 'main'] %}
 <script src="{{ url_for('static', filename='js/' + script + '.js') }}"></script>
 {% endfor %}
 </body>
