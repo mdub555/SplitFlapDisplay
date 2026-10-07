@@ -43,25 +43,20 @@ def serial_send():
 @bp.route('/update_playlist', methods=['POST'])
 def update_playlist():
     data = json_body()
-    state.current_playlist = data.get('pages', [])
-    state.loop_delay = data.get('delay', 5)
-    state.last_sent_page = None
-    state.set_active_app(None)
-    state.request_stop()
+    state.run_playlist(data.get('pages', []), data.get('delay'))
     return jsonify(status='success')
 
 
 @bp.route('/run_app', methods=['POST'])
 def run_app():
-    state.set_active_app(json_body().get('app'))
-    state.request_stop()
+    state.run_app(json_body().get('app'))
     return jsonify(status=f"App {state.active_app} started")
 
 
 @bp.route('/stop_app', methods=['POST'])
 def stop_app():
-    state.set_active_app(None)
-    state.request_stop()
+    """Stops whatever's running, an app or a playlist."""
+    state.stop()
     return jsonify(status='stopped')
 
 

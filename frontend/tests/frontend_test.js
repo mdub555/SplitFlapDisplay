@@ -1,4 +1,4 @@
-const { dom, window, calls, MockEventSource } = require('./harness');
+const { dom, window, calls, MockEventSource, savedPlaylists } = require('./harness');
 
 const document = window.document;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -170,7 +170,7 @@ async function main() {
     document.getElementById('homingOverlay').style.display === 'flex');
   check('a pushed snapshot updates the active-app banner',
     document.getElementById('live-banner').classList.contains('visible') &&
-    document.getElementById('live-app-name').textContent === 'Weather');
+    document.getElementById('liveBannerText').textContent === '▶ Weather is running');
 
   source.emit({ is_homed: true, state: 'X'.repeat(64), active_app: null });
   await sleep(10);
@@ -551,6 +551,147 @@ async function main() {
   click(document.querySelector('#preview .flap-unit[data-cell="32"]'));
   document.querySelectorAll('#colorPalette .symbol-btn').forEach(click);
   check('the degree and heart buttons type their flaps at the cursor', rowN(2) === '°♥              ');
+
+  console.log('\n--- The banner shows a playing playlist, with STOP ---');
+  const banner = document.getElementById('live-banner');
+  const bannerText = () => document.getElementById('liveBannerText').textContent;
+  const live = MockEventSource.instances.find(s => s.url === '/current_state/stream');
+  const snapshot = extra => ({ is_homed: true, state: ' '.repeat(64), active_app: null, playlist: null,
+                               scheduled: false, hardware_connected: true, ...extra });
+  live.emit(snapshot({ playlist: { name: null, page: 1, pages: 3 } }));
+  check('an unsaved playlist shows its page', banner.classList.contains('visible') && bannerText() === '▶ Playlist · page 2 of 3');
+  live.emit(snapshot({ playlist: { name: 'Morning', page: 0, pages: 2 }, scheduled: true }));
+  check('a saved playlist shows its name, and that it was scheduled',
+    bannerText() === '▶ Playlist "Morning" · page 1 of 2 (scheduled)');
+  live.emit(snapshot({ playlist: { name: null, page: 0, pages: 1 } }));
+  check('a single pushed page gets no banner (nothing is cycling)', !banner.classList.contains('visible'));
+  live.emit(snapshot({ playlist: { name: 'Morning', page: 0, pages: 2 } }));
+  calls.length = 0;
+  click(banner.querySelector('[data-onclick="stopApp"]'));
+  await sleep(20);
+  check('STOP on a playlist posts /stop_app', calls.some(c => c.url === '/stop_app' && c.method === 'POST'));
+
+  console.log('\n--- Simulation badge ---');
+  const simBadge = document.getElementById('simBadge');
+  check('no badge while the hardware is connected', simBadge.hidden);
+  live.emit(snapshot({ hardware_connected: false }));
+  check('the badge shows when the serial port is not open', !simBadge.hidden);
+  live.emit(snapshot({}));
+  check('and hides again once it is', simBadge.hidden);
+
+  console.log('\n--- Saved playlists: edit in place ---');
+  window.confirm = () => { throw new Error('unexpected confirm'); };
+  const plName = document.getElementById('savePlaylistName');
+  plName.value = 'Morning';
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="saveCurrentPlaylist"]'));
+  await sleep(50);
+  check('a new name saves without asking', 'Morning' in savedPlaylists);
+  check('the name stays in the box and the playlist is now the one being edited',
+    plName.value === 'Morning' && !document.getElementById('loadedPlaylistNote').hidden &&
+    document.querySelector('.saved-pl-item[data-name="Morning"]').classList.contains('loaded'));
+  const pagesBefore = savedPlaylists.Morning.pages.length;
+  click(document.querySelector('[data-onclick="clearDisplay"]'));   // stop editing a page...
+  click(document.getElementById('saveMsgBtn'));                       // ...so this adds one
+  click(document.querySelector('[data-onclick="saveCurrentPlaylist"]'));
+  await sleep(50);
+  check('saving again updates it without asking', savedPlaylists.Morning.pages.length === pagesBefore + 1);
+
+  savedPlaylists.Evening = { pages: [{ text: 'EVE' }], delay: 5 };
+  plName.value = 'Evening';
+  let asked = null;
+  window.confirm = msg => { asked = msg; return false; };
+  click(document.querySelector('[data-onclick="saveCurrentPlaylist"]'));
+  await sleep(50);
+  check('saving over a different saved playlist asks first', asked === 'Replace the saved playlist "Evening"?');
+  check('and declining leaves it alone', savedPlaylists.Evening.pages.length === 1);
+  window.loadSavedPlaylists();   // as the page would after any change, to show Evening
+  await sleep(50);
+
+  calls.length = 0;
+  click(document.querySelector('.saved-pl-item[data-name="Morning"] [data-onclick="runSavedPlaylist"]'));
+  await sleep(50);
+  check('Run plays the playlist by name', calls.some(c => c.url === '/playlists/Morning/run' && c.method === 'POST'));
+  live.emit(snapshot({ playlist: { name: 'Morning', page: 0, pages: 2 } }));
+  check('the playing saved playlist is highlighted',
+    document.querySelector('.saved-pl-item[data-name="Morning"]').classList.contains('running') &&
+    !document.querySelector('.saved-pl-item[data-name="Evening"]').classList.contains('running'));
+
+  window.confirm = () => true;
+  click(document.querySelector('.saved-pl-item[data-name="Evening"] [data-onclick="loadSavedPlaylist"]'));
+  await sleep(50);
+  check('Edit loads the playlist, its name and its pages',
+    plName.value === 'Evening' && globalVar('loadedPlaylist') === 'Evening' &&
+    document.querySelectorAll('#playlistList .playlist-item').length === 1 &&
+    globalVar('editingIndex') === null);
+  click(document.querySelector('.saved-pl-item[data-name="Evening"] [data-onclick="deleteSavedPlaylist"]'));
+  await sleep(50);
+  check('deleting the playlist being edited stops editing it',
+    globalVar('loadedPlaylist') === null && document.getElementById('loadedPlaylistNote').hidden);
+
+  console.log('\n--- The draft survives a reload ---');
+  const draft = () => JSON.parse(window.localStorage.getItem('splitflap.controlDraft'));
+  check('the playlist being built is kept in localStorage',
+    draft().playlist.length === 1 && draft().multi === true && draft().name === 'Evening');
+  document.getElementById('delayInput').value = '7.5';
+  change(document.getElementById('delayInput'));
+  check('changing a default updates the draft', draft().delay === '7.5');
+  window.localStorage.setItem('splitflap.controlDraft', JSON.stringify({
+    text: 'SAVED', playlist: [{ text: 'ONE' }, 'TWO', 42, null], multi: true, editing: 1,
+    loaded: 'Morning', name: 'Morning', delay: '3', style: 'no-such-style', speed: '25' }));
+  window.restoreDraft();
+  check('restoring puts the grid back', row0() === 'SAVED           ');
+  check('and the playlist, skipping anything that is not a page',
+    globalVar('playlist').length === 2 && globalVar('playlist')[1].text === 'TWO' &&
+    document.querySelectorAll('#playlistList .playlist-item').length === 2);
+  check('and the page being edited and the saved playlist it came from',
+    document.getElementById('saveMsgBtn').textContent === 'Save Changes to Page 2' &&
+    globalVar('loadedPlaylist') === 'Morning');
+  check('and the defaults, ignoring a style that no longer exists',
+    document.getElementById('delayInput').value === '3' && document.getElementById('speedInput').value === '25' &&
+    document.getElementById('styleInput').value !== '');
+  window.localStorage.setItem('splitflap.controlDraft', '{not json');
+  let restoreThrew = false;
+  try { window.restoreDraft(); } catch (e) { restoreThrew = true; }
+  check('an unreadable draft is ignored', !restoreThrew);
+
+  console.log('\n--- Schedule ---');
+  calls.length = 0;
+  click(document.getElementById('tab-apps'));
+  await sleep(30);
+  check('opening Apps loads the schedule', calls.some(c => c.url === '/schedule' && c.method === 'GET'));
+  const slots = () => document.querySelectorAll('#scheduleEntries .schedule-entry');
+  check('each time slot is drawn, with its days', slots().length === 1 &&
+    [...slots()[0].querySelectorAll('[data-day]')].map(b => b.checked).join() === 'true,true,true,true,true,false,false');
+  const slotTarget = slots()[0].querySelector('[data-target]');
+  check('a slot showing a deleted playlist keeps it, marked missing',
+    slotTarget.value === 'playlist:Gone' && slotTarget.selectedOptions[0].textContent.includes('(missing)'));
+  check('saved playlists are offered as targets', !!slotTarget.querySelector('option[value="playlist:Morning"]'));
+  check('the default is chosen', document.getElementById('scheduleDefault').value === 'app:time');
+  check('the status line names the display clock and what is scheduled now',
+    document.getElementById('scheduleStatus').textContent === 'Display clock: Tue 14:05. Scheduled now: Time.');
+
+  click(document.querySelector('[data-onclick="addScheduleEntry"]'));
+  check('Add Time Slot adds a weekday slot', slots().length === 2);
+  click(slots()[1].querySelector('[data-onclick="moveScheduleEntry"][data-dir="-1"]'));
+  check('a slot can be moved up', slots()[0].querySelector('[data-target]').value === '');
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="saveSchedule"]'));
+  await sleep(20);
+  check('a slot with nothing to show is refused, with the reason',
+    [...document.querySelectorAll('.toast.error')].some(t => t.textContent.includes('needs something to show')));
+  slots()[0].querySelector('[data-target]').value = 'app:weather';
+  slots()[0].querySelector('[data-time="start"]').value = '22:00';
+  slots()[0].querySelector('[data-time="end"]').value = '06:00';
+  slots()[0].querySelector('[data-day="5"]').checked = true;
+  click(slots()[1].querySelector('[data-onclick="removeScheduleEntry"]'));
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="saveSchedule"]'));
+  await sleep(20);
+  const savedSchedule = calls.find(c => c.url === '/schedule' && c.method === 'POST');
+  check('Save Schedule posts the form', savedSchedule && JSON.stringify(JSON.parse(savedSchedule.body)) === JSON.stringify({
+    enabled: true, default: 'app:time',
+    entries: [{ days: [0, 1, 2, 3, 4, 5], start: '22:00', end: '06:00', target: 'app:weather' }] }));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

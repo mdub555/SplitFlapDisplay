@@ -135,9 +135,11 @@ def playlist_loop():
             time.sleep(1)
             continue
 
-        for frame in frames:
+        for index, frame in enumerate(frames):
             if state.stop_event.is_set():
                 break
+            if not app:
+                state.set_playlist_page(index)
 
             order = get_animation_order(frame.style)
             if frame.raw or frame.text != state.last_sent_page:

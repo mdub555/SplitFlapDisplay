@@ -45,13 +45,17 @@
   </div>
 
   <!-- LIVE DISPLAY: above the tabs, so it shows on every page -->
+  <!-- What's playing (an app or a playlist), with a way to stop it. -->
   <div id="live-banner" class="active-app-banner">
     <div class="pulse-dot"></div>
-    <span class="aab-label">▶ <span id="live-app-name">APP</span> is running</span>
+    <span class="aab-label" id="liveBannerText"></span>
     <button class="aab-stop" data-onclick="stopApp">⏹ STOP</button>
   </div>
 
-  <div class="section-label">LIVE DISPLAY</div>
+  <div class="section-label">LIVE DISPLAY
+    <span id="simBadge" class="sim-badge" hidden
+          title="The serial port didn't open, so nothing on the display physically moves. Check the USB-RS485 adapter and SPLITFLAP_SERIAL_PORT, then restart.">SIMULATION · NO HARDWARE</span>
+  </div>
   <div class="preview-wrapper live-wrapper">
     <div class="preview-grid" id="liveGrid"></div>
     <div class="homing-overlay" id="homingOverlay">HOMING REQUIRED</div>
@@ -122,6 +126,7 @@
           <button class="btn btn-success btn-sm" data-onclick="saveCurrentPlaylist">Save</button>
         </div>
       </div>
+      <p class="note" id="loadedPlaylistNote" hidden></p>
       <div id="savedPlaylistList"><div class="empty-note">No saved playlists yet.</div></div>
     </div>
   </div>
@@ -133,6 +138,22 @@
 
     <div class="apps-grid" id="appsGrid">
       <!-- Populated from /apps by apps.js -->
+    </div>
+
+    <!-- Schedule: which app or playlist runs when (see display/scheduler.py) -->
+    <div class="config-section schedule-section">
+      <h3>Schedule</h3>
+      {{ toggle_row('scheduleEnabled', 'Follow the schedule',
+                    'Starting or stopping something by hand overrides it until the next scheduled change.') }}
+      <p class="note schedule-status" id="scheduleStatus"></p>
+      <div id="scheduleEntries" class="schedule-entries"></div>
+      <button class="btn btn-secondary btn-sm" data-onclick="addScheduleEntry">+ Add Time Slot</button>
+      <div class="schedule-default">
+        <label class="field-label" for="scheduleDefault">At all other times</label>
+        <select class="input" id="scheduleDefault"></select>
+      </div>
+      <span class="hint">Time slots are checked from the top; the first that covers the current time wins. A slot that ends before it starts runs past midnight; one that starts and ends at the same time runs all day.</span>
+      <button class="btn btn-secondary section-action" data-onclick="saveSchedule">Save Schedule</button>
     </div>
 
     <!-- Global Settings: shared by the apps -->
@@ -327,7 +348,7 @@
 
 <script>const CONFIG = {{ config | tojson }};</script>
 {% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control',
-                  'apps', 'app-settings-modal', 'modules', 'debug', 'main'] %}
+                  'apps', 'schedule', 'app-settings-modal', 'modules', 'debug', 'main'] %}
 <script src="{{ url_for('static', filename='js/' + script + '.js') }}"></script>
 {% endfor %}
 </body>

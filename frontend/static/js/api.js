@@ -52,7 +52,7 @@ const api = {
   apps:               () => apiGet('/apps', 'Could not load app list'),
   saveAppSettings:    (key, data) => apiPost(`/apps/${key}/settings`, data, 'Could not save app settings'),
   runApp:             (key) => apiPost('/run_app', {app: key}, 'Could not start app'),
-  stopApp:            () => apiPost('/stop_app', undefined, 'Could not stop app'),
+  stopApp:            () => apiPost('/stop_app', undefined, 'Could not stop'),
 
   globalFields:       () => apiGet('/global_fields', 'Could not load settings fields'),
   getSettings:        () => apiGet('/settings', 'Could not load settings'),
@@ -63,6 +63,11 @@ const api = {
   savePlaylist:       (name, pages, delay) => apiPost('/playlists', {name, pages, delay}, 'Could not save playlist'),
   deletePlaylist:     (name) => apiFetchJson(`/playlists/${encodeURIComponent(name)}`, {method: 'DELETE'},
                                              'Could not delete playlist'),
+  runPlaylist:        (name) => apiPost(`/playlists/${encodeURIComponent(name)}/run`, undefined,
+                                        'Could not run playlist'),
+
+  schedule:           () => apiGet('/schedule', 'Could not load the schedule'),
+  saveSchedule:       (data) => apiPost('/schedule', data, 'Could not save the schedule'),
 
   adjustOffset:       (modId, delta) => apiPost(`/modules/${modId}/adjust`, {delta}, 'Could not adjust offset'),
   homeModule:         (modId) => apiPost(`/modules/${modId}/home`, undefined, 'Could not home module'),

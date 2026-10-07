@@ -252,6 +252,20 @@ h3 {
   --dot: var(--green);
 }
 
+/* Next to LIVE DISPLAY when the serial port isn't open. */
+.sim-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: #2a2210;
+  border: 1px solid var(--orange);
+  color: var(--orange);
+  font-size: .7rem;
+  letter-spacing: .5px;
+  cursor: help;
+}
+
 .pulse-dot {
   width: 10px;
   height: 10px;

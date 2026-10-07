@@ -4,6 +4,16 @@ import threading
 from config import NUM_MODULES
 
 
+def _seconds(value, default):
+    """`value` as a positive number of seconds, or `default`. The page sends
+    the delay as typed, so it can be a string, blank or nonsense."""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return default
+    return seconds if seconds > 0 else default
+
+
 class _Subscribers:
     """The queues of every open SSE stream for one kind of message.
 
@@ -72,6 +82,17 @@ class DisplayState:
         self.active_app = None       # key into the app registry, or None
         self.current_playlist = []   # manual pages when active_app is None
         self.loop_delay = 5          # default seconds/page for the manual playlist
+        self.playlist_name = None    # the saved playlist being played, if it is one
+        self.playlist_page = 0       # index of the playlist page on the display
+
+        # Whether the serial port opened (display/serial_link.py sets it). When
+        # it didn't, nothing physically moves and the page says so.
+        self.hardware_connected = False
+
+        # What the scheduler (display/scheduler.py) last started, as a target
+        # string ('app:<key>' or 'playlist:<name>'), so the page can say a
+        # running thing is scheduled. Set by the scheduler only.
+        self.scheduled_target = None
 
         self.last_sent_page = None
 
@@ -94,15 +115,86 @@ class DisplayState:
         """Read-only dict shared by the plain GET /current_state endpoint
         and every value pushed over the SSE stream."""
         with self.lock:
+            playing = None
+            if self.active_app is None and self.current_playlist:
+                playing = {
+                    'name': self.playlist_name,
+                    'page': self.playlist_page,
+                    'pages': len(self.current_playlist),
+                }
+            target = self._current_target()
             return {
                 'is_homed': self.is_homed,
                 'state': self.current_display_string,
                 'active_app': self.active_app,
+                'playlist': playing,
+                'scheduled': target is not None and target == self.scheduled_target,
+                'hardware_connected': self.hardware_connected,
             }
+
+    def _current_target(self):
+        """What's running as a scheduler target string, or None for nothing
+        (or an unsaved playlist). Call with the lock held."""
+        if self.active_app:
+            return f'app:{self.active_app}'
+        if self.current_playlist and self.playlist_name:
+            return f'playlist:{self.playlist_name}'
+        return None
+
+    def current_target(self):
+        with self.lock:
+            return self._current_target()
 
     def set_active_app(self, app_key):
         with self.lock:
             self.active_app = app_key
+        self._broadcast()
+
+    # --- What runs: an app, a playlist, or nothing ----------------------
+    #
+    # Each of these makes the playlist loop (display/player.py) drop what
+    # it's doing and pick up the new state straight away.
+
+    def run_app(self, app_key):
+        with self.lock:
+            self.active_app = app_key
+            self.current_playlist = []
+            self.playlist_name = None
+        self.request_stop()
+        self._broadcast()
+
+    def run_playlist(self, pages, delay=5, name=None):
+        """Play `pages` in a loop, `delay` seconds each unless a page sets
+        its own. `name` is the saved playlist they came from, if any."""
+        with self.lock:
+            self.active_app = None
+            self.current_playlist = list(pages or [])
+            self.loop_delay = _seconds(delay, 5)
+            self.playlist_name = name
+            self.playlist_page = 0
+            self.last_sent_page = None
+        self.request_stop()
+        self._broadcast()
+
+    def stop(self):
+        """Stop whatever's running; the display keeps its last page."""
+        with self.lock:
+            self.active_app = None
+            self.current_playlist = []
+            self.playlist_name = None
+        self.request_stop()
+        self._broadcast()
+
+    def set_playlist_page(self, index):
+        with self.lock:
+            if self.playlist_page == index:
+                return
+            self.playlist_page = index
+        self._broadcast()
+
+    def set_scheduled_target(self, target):
+        with self.lock:
+            self.scheduled_target = target
         self._broadcast()
 
     def mark_module_char(self, module_id, char):

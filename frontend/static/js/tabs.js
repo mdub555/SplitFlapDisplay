@@ -4,7 +4,7 @@ function switchTab(button) {
   document.querySelectorAll('.tab-btn').forEach(tab => tab.classList.toggle('active', tab === button));
   document.querySelectorAll('.page').forEach(page => page.classList.toggle('active', page.id === `page-${name}`));
   if (name === 'modules') loadModulesPage();
-  if (name === 'apps') { buildAppsGrid(); loadGlobalSettings(); }
+  if (name === 'apps') { buildAppsGrid(); loadSchedule(); loadGlobalSettings(); }
 }
 
 registerActions({ switchTab });

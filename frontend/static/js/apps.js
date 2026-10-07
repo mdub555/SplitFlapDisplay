@@ -2,7 +2,7 @@
 // settings if it has any; and the global settings the apps share.
 
 window.appsByKey = {};
-let appsLoaded = false;
+let appsRequest = null;   // the /apps request, once it's made (and hasn't failed)
 
 function buildAppCard(app) {
   return el('div', {class: 'app-card', dataset: {app: app.key, onclick: 'runApp'}},
@@ -16,14 +16,19 @@ function buildAppCard(app) {
     el('span', {class: 'app-desc'}, app.desc));
 }
 
+// Fills the grid (and appsByKey) once; resolves when that's done. After a
+// failure the next call tries again.
 function buildAppsGrid() {
-  if (appsLoaded) return;
-  api.apps().then(list => {
-    if (!list) return;
-    list.forEach(app => { window.appsByKey[app.key] = app; });
-    byId('appsGrid').replaceChildren(...list.map(buildAppCard));
-    appsLoaded = true;
-  });
+  if (!appsRequest) {
+    appsRequest = api.apps().then(list => {
+      if (!list) { appsRequest = null; return; }
+      list.forEach(app => { window.appsByKey[app.key] = app; });
+      byId('appsGrid').replaceChildren(...list.map(buildAppCard));
+      renderBanner();   // a running app's name, if the banner went up first
+      markRunning();
+    });
+  }
+  return appsRequest;
 }
 
 function appName(key) {

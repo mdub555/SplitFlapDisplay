@@ -18,6 +18,8 @@ from flask import Flask
 FRONTEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, FRONTEND)
 
+from display.state import DisplayState  # noqa: E402
+
 
 def _module(name, **attrs):
     mod = types.ModuleType(name)
@@ -29,6 +31,7 @@ class SettingsRoutesTest(unittest.TestCase):
     def setUp(self):
         self.sent = []
         self.saves = 0
+        self.state = DisplayState()
         self.settings = {'modules': {'1': {'autoHome': False}}, 'timezone': 'US/Eastern',
                          'saved_playlists': {}}
 
@@ -39,6 +42,7 @@ class SettingsRoutesTest(unittest.TestCase):
             'settings.store': _module('settings.store', settings=self.settings, save_settings=save_settings),
             'display.serial_link': _module('display.serial_link', send_raw=self.sent.append,
                                            is_connected=lambda: False, read_dump=None),
+            'display.state': _module('display.state', state=self.state),
         }
         patcher = mock.patch.dict(sys.modules, fakes)
         patcher.start()
@@ -73,6 +77,30 @@ class SettingsRoutesTest(unittest.TestCase):
         self.assertEqual(self.client.get('/playlists').get_json(), {'Morning': {'pages': ['HI'], 'delay': 3}})
         self.client.delete('/playlists/Morning')
         self.assertEqual(self.client.get('/playlists').get_json(), {})
+
+    def test_running_a_saved_playlist_plays_it_by_name(self):
+        self.client.post('/playlists', json={'name': 'Morning', 'pages': ['HI', 'YO'], 'delay': '3'})
+        res = self.client.post('/playlists/Morning/run')
+        self.assertEqual(res.get_json(), {'status': 'running', 'name': 'Morning'})
+        self.assertEqual(self.state.snapshot()['playlist'], {'name': 'Morning', 'page': 0, 'pages': 2})
+        self.assertEqual(self.state.loop_delay, 3.0)
+
+    def test_a_name_with_a_slash_runs_too(self):
+        self.client.post('/playlists', json={'name': 'A/B', 'pages': ['HI']})
+        self.assertEqual(self.client.post('/playlists/A/B/run').status_code, 200)
+        self.assertEqual(self.state.playlist_name, 'A/B')
+
+    def test_running_a_missing_playlist_is_a_404(self):
+        self.assertEqual(self.client.post('/playlists/Nope/run').status_code, 404)
+
+    def test_saving_the_playing_playlist_updates_the_display(self):
+        self.client.post('/playlists', json={'name': 'Morning', 'pages': ['HI']})
+        self.client.post('/playlists/Morning/run')
+        self.client.post('/playlists', json={'name': 'Morning', 'pages': ['HI', 'THERE']})
+        self.assertEqual(self.state.current_playlist, ['HI', 'THERE'])
+        # Saving another one leaves the display alone.
+        self.client.post('/playlists', json={'name': 'Other', 'pages': ['X']})
+        self.assertEqual(self.state.playlist_name, 'Morning')
 
     def test_a_playlist_needs_a_name(self):
         res = self.client.post('/playlists', json={'name': '  '})

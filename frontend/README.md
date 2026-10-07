@@ -28,9 +28,9 @@ grid rendering) derives from those two numbers. Defaults are 4x16. The UI is
 laid out for displays up to 4x16; bigger ones work but may not look as good.
 
 If `SPLITFLAP_SERIAL_PORT` can't be opened, the app logs a warning and runs
-in simulation mode — the UI works, but nothing physically moves. `/config`
-reports `hardware_connected` if you want to surface that in a future UI
-tweak.
+in simulation mode — the UI works, but nothing physically moves. The page
+says so with a SIMULATION badge next to LIVE DISPLAY (from
+`hardware_connected` in the live state; `/config` reports it too).
 
 The page gets everything the backend already knows (grid size, character
 set, animation styles, the firmware settings and module toggles with their
@@ -74,6 +74,30 @@ field's default. `apps/builtin/_shared.py` has helpers for the common parts
 (`center_page`, `row_frames`, `clock`, `split_list`). A colour animation can
 subclass `AnimationApp` (`apps/builtin/animations/base.py`) and only
 implement `frames()`; the update-order and speed settings are built for it.
+
+## Playlists, the schedule and the draft
+
+- **What's playing** is in every live-state snapshot: `active_app`, or
+  `playlist` (`{name, page, pages}`, `name` being null for one that was
+  pushed rather than saved), plus `scheduled` when the schedule started it.
+  The banner above the tabs shows it with a STOP button; `POST /stop_app`
+  stops an app or a playlist alike. `POST /playlists/<name>/run` plays a
+  saved playlist under its name, and saving the playlist that's playing
+  updates the display straight away.
+- **Saved playlists are edited in place**: Edit loads one and keeps its name
+  in the box, so Save updates it. Saving under a name that's already taken
+  by a different playlist asks first.
+- **The schedule** (Apps page; `display/scheduler.py`, `GET/POST /schedule`,
+  stored as `settings['schedule']`) picks an app or saved playlist by time
+  of day and weekday, in the timezone from the global settings. Time slots
+  are checked in order and the first that covers the time wins; outside
+  them the default runs, or nothing changes. The scheduler only acts when
+  what the schedule calls for changes (checked every 20 s, and straight
+  away on startup or when the schedule is saved), so starting or stopping
+  something by hand lasts until the next scheduled change.
+- **The Control page's draft** (the grid, the playlist being built, its
+  defaults and name) is kept in the browser's localStorage, so a reload
+  doesn't lose it. It's per browser and best-effort; nothing depends on it.
 
 ## Frontend architecture notes
 

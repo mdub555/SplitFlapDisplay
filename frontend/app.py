@@ -5,19 +5,21 @@ from flask import Flask
 
 from routes import (
     apps_routes, backup_routes, control, firmware_routes, module_routes, pages, playlist_routes,
-    settings_routes,
+    schedule_routes, settings_routes,
 )
 from display.player import playlist_loop
+from display.scheduler import get_scheduler
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 app = Flask(__name__)
 for routes in (pages, control, settings_routes, apps_routes, module_routes, backup_routes,
-               playlist_routes, firmware_routes):
+               playlist_routes, firmware_routes, schedule_routes):
     app.register_blueprint(routes.bp)
 
 
 threading.Thread(target=playlist_loop, daemon=True).start()
+threading.Thread(target=get_scheduler().run_forever, daemon=True).start()
 
 if __name__ == '__main__':
     logging.info('Web UI running on 0.0.0.0:80')

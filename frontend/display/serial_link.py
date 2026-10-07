@@ -18,6 +18,7 @@ try:
 except Exception as e:
     ser = None
     logging.error(f"Serial failed. Simulation Mode. Reason: {e}")
+state.hardware_connected = ser is not None
 
 
 def is_connected() -> bool:

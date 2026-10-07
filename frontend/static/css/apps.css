@@ -11,9 +11,90 @@
   margin-top: 16px;
 }
 
-/* The global settings, below the app cards. */
+/* The schedule and the global settings, below the app cards. */
+.schedule-section,
 .global-settings {
   margin-top: 28px;
+}
+
+.schedule-section h3 {
+  margin-top: 0;
+}
+
+.schedule-status {
+  margin: 10px 0 12px;
+}
+
+.schedule-entries {
+  margin-bottom: 10px;
+}
+
+.schedule-entries:empty::before {
+  content: 'No time slots yet.';
+  color: #666;
+  font-style: italic;
+  font-size: .85rem;
+}
+
+/* One time slot: its days, its times, what it shows, and its buttons. */
+.schedule-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  background: var(--surface-dark);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.schedule-entry select {
+  flex: 1;
+  min-width: 160px;
+}
+
+.schedule-days {
+  display: flex;
+  gap: 3px;
+}
+
+.day-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.day-chip span {
+  display: inline-block;
+  min-width: 34px;
+  padding: 4px 0;
+  text-align: center;
+  border: 1px solid var(--border-input);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: .75rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.day-chip input:checked + span {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day-chip input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.schedule-default {
+  margin-top: 14px;
+}
+
+.schedule-default .input {
+  width: 100%;
 }
 
 .app-card {
@@ -87,6 +168,16 @@
 }
 
 @media (max-width: 600px) {
+  .schedule-days {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .day-chip span {
+    min-width: 0;
+    width: 38px;
+  }
+
   .apps-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;

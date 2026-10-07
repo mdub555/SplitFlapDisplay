@@ -350,6 +350,16 @@
   gap: 10px;
 }
 
+/* The saved playlist that's in the editor, and the one that's playing. */
+.saved-pl-item.loaded {
+  border-color: var(--accent);
+}
+
+.saved-pl-item.running {
+  border-color: var(--green);
+  background: #1a2a1a;
+}
+
 .saved-pl-name {
   flex: 1;
   font-weight: bold;
