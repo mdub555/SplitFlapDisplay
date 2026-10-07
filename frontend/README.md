@@ -108,6 +108,12 @@ implement `frames()`; the update-order and speed settings are built for it.
   module data when another device (or a sync or restore) changes it, and the
   saved playlist list refreshes. Shared firmware settings someone is
   part-way through editing aren't overwritten.
+- **Sync progress**: Sync All reports each module's result over the live
+  state as it arrives (`sync` in the snapshot), so the module grid flashes a
+  module green when it answers and turns it orange if it doesn't (after one
+  individual retry). A failed module stays orange, and its inspector says
+  "Sync failed", until it next syncs; a single module's Sync EEPROM counts
+  too. The status is kept by the server, so every open page shows it.
 - **Phone install**: the page has a web app manifest
   (`/manifest.webmanifest`) and icons (`static/icons/`, drawn by
   `tools/make_icons.py`), so Add to Home Screen gives it an icon and opens

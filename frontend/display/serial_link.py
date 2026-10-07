@@ -69,12 +69,13 @@ def read_dump(mod_id: int, timeout: float = 5.0):
     return None
 
 
-def read_all_dumps(max_id: int, margin: float = 0.5):
+def read_all_dumps(max_id: int, margin: float = 0.5, on_reply=None):
     """m*? — ask every module for its dump at once. Each provisioned module
     answers in its own slot (ID x DUMP_SLOT_S after the request), so this
     listens until module `max_id`'s slot has passed, plus `margin`. Returns
     {mod_id: dump} for every reply received; modules that were busy (they
-    answer after finishing) or didn't answer are missing."""
+    answer after finishing) or didn't answer are missing. `on_reply(mod_id,
+    dump)`, if given, is called for each reply as soon as it arrives."""
     if not ser:
         return {}
     with serial_lock:
@@ -85,9 +86,15 @@ def read_all_dumps(max_id: int, margin: float = 0.5):
         state.log_serial(f"SENT: {request}")
         deadline = time.time() + (max_id + 1) * DUMP_SLOT_S + margin
         buffer = ""
+        reported = set()
         while time.time() < deadline:
             if ser.in_waiting > 0:
                 buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+                if on_reply:
+                    for mod_id, dump in parse_all_dumps(buffer).items():
+                        if mod_id not in reported:
+                            reported.add(mod_id)
+                            on_reply(mod_id, dump)
             time.sleep(0.02)
     if buffer:
         state.log_serial(f"RECV: {buffer}")

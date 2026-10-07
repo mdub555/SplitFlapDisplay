@@ -802,6 +802,43 @@ async function main() {
   await sleep(400);
   check('with the Modules page closed, nothing of it is reloaded', !calls.some(c => c.url === '/settings'));
 
+  console.log('\n--- Sync progress on the module grid ---');
+  click(document.getElementById('tab-modules'));
+  await sleep(30);
+  const cell = id => document.querySelector(`#modMatrix .mod-cell[data-id="${id}"]`);
+  const syncSnap = sync => snapshot({ settings_version: 9, sync });
+  live.emit(syncSnap({ running: false, ok: { '2': 1 }, failed: [] }));
+  check('a success from before the page loaded does not flash', !cell(2).classList.contains('sync-flash'));
+  live.emit(syncSnap({ running: true, ok: { '2': 1 }, failed: [] }));
+  const syncBtn = document.getElementById('syncAllBtn');
+  check('while a sync runs its button says so and is disabled', syncBtn.disabled && syncBtn.textContent === 'SYNCING…');
+  live.emit(syncSnap({ running: true, ok: { '2': 1, '0': 2 }, failed: [] }));
+  check('a module that syncs flashes green', cell(0).classList.contains('sync-flash') && !cell(2).classList.contains('sync-flash'));
+  live.emit(syncSnap({ running: true, ok: { '2': 1, '0': 2 }, failed: [3] }));
+  check('a module that fails turns orange', cell(3).classList.contains('sync-failed') && !cell(0).classList.contains('sync-failed'));
+  await sleep(200);
+  window.renderModuleGrid();
+  check('a redrawn cell carries on its flash from where it was',
+    cell(0).classList.contains('sync-flash') && parseFloat(cell(0).style.animationDelay) <= -150);
+  live.emit(syncSnap({ running: false, ok: { '2': 1, '0': 2 }, failed: [3] }));
+  check('the button comes back when the sync ends', !syncBtn.disabled && syncBtn.textContent === 'SYNC ALL (EEPROM)');
+  click(cell(3));
+  check('the failed module\'s inspector says Sync failed', !document.getElementById('inspectSyncFailed').hidden &&
+    document.getElementById('inspectSyncFailed').textContent.includes('Sync failed'));
+  click(cell(0));
+  check('a module that synced does not', document.getElementById('inspectSyncFailed').hidden);
+  await sleep(1100);
+  live.emit(syncSnap({ running: false, ok: { '2': 1, '0': 2 }, failed: [3] }));
+  check('the flash ends; the failure stays orange', !cell(0).classList.contains('sync-flash') && cell(3).classList.contains('sync-failed'));
+  live.emit(syncSnap({ running: false, ok: { '2': 1, '0': 2, '3': 3 }, failed: [] }));
+  check('a failed module that syncs again flashes green and is no longer orange',
+    cell(3).classList.contains('sync-flash') && !cell(3).classList.contains('sync-failed'));
+  window.confirm = () => true;
+  click(syncBtn);
+  await sleep(30);
+  check('Sync All ends with a summary naming the failures',
+    [...document.querySelectorAll('.toast.warn')].some(t => t.textContent === '1 synced; sync failed for 03'));
+
   console.log('\n--- Install as an app ---');
   const installBtn = document.getElementById('installBtn');
   check('no Install button until the browser offers it', installBtn.hidden);

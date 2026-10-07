@@ -8,6 +8,9 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from unittest import mock  # noqa: E402
+
+from display import serial_link  # noqa: E402
 from display.serial_link import parse_buffer, parse_all_dumps  # noqa: E402
 
 # Every field, in the order the firmware sends them.
@@ -107,6 +110,43 @@ class ParseAllDumpsTest(unittest.TestCase):
 
     def test_empty_buffer(self):
         self.assertEqual(parse_all_dumps(""), {})
+
+
+class FakeSerial:
+    """Hands out `chunks` one read at a time, as replies trickle in."""
+
+    def __init__(self, chunks):
+        self.chunks = [c.encode() for c in chunks]
+
+    @property
+    def in_waiting(self):
+        return len(self.chunks[0]) if self.chunks else 0
+
+    def read(self, n):
+        return self.chunks.pop(0)
+
+    def reset_input_buffer(self):
+        pass
+
+    def write(self, data):
+        pass
+
+    def flush(self):
+        pass
+
+
+class ReadAllDumpsTest(unittest.TestCase):
+    def test_each_reply_is_reported_as_it_arrives(self):
+        first = reply('00')
+        chunks = [first[:20], first[20:] + reply('01')[:10], reply('01')[10:]]
+        seen = []
+        fake = FakeSerial(chunks)
+        with mock.patch.object(serial_link, 'ser', fake):
+            dumps = serial_link.read_all_dumps(
+                1, margin=0.05, on_reply=lambda mod_id, dump: seen.append((mod_id, len(fake.chunks))))
+        self.assertEqual(sorted(dumps), [0, 1])
+        # Module 0 was reported once its line was complete, before module 1's arrived.
+        self.assertEqual(seen, [(0, 1), (1, 0)])
 
 
 if __name__ == '__main__':

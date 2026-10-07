@@ -195,6 +195,10 @@ window.fetch = async (url, options = {}) => {
       },
     });
   }
+  if (url === '/modules/sync_all') {
+    return ok({ status: 'success', synced: [0], failed: [3],
+      settings: { modules: { '0': { homeOffset: 2832, totalSteps: 4096 }, '3': { homeOffset: 480, totalSteps: 4096 } } } });
+  }
   if (url === '/home_all') {
     return ok({ status: 'Homing All' });
   }

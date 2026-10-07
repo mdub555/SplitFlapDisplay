@@ -74,6 +74,7 @@ def reboot(mod_id):
 def sync_one(mod_id):
     """Read the module's dump and store it as its settings."""
     dump = read_dump(mod_id)
+    state.sync_result(mod_id, bool(dump))
     if not dump:
         return error('The module did not report back', 504)
     _store_dump(mod_id, dump)
@@ -84,18 +85,34 @@ def sync_one(mod_id):
 def sync_all():
     """Read every module's dump with one broadcast (each module answers in
     its own time slot), then ask any provisioned module that didn't answer
-    on its own, e.g. because it was still moving."""
-    dumps = {i: d for i, d in read_all_dumps(NUM_MODULES - 1).items() if i < NUM_MODULES}
-    for mod_id_str in list(settings['modules']):
-        i = int(mod_id_str)
-        if i not in dumps and i < NUM_MODULES:
-            dump = read_dump(i)
-            if dump:
-                dumps[i] = dump
-    for i, dump in dumps.items():
-        settings['modules'][str(i)] = dump
-    save_settings(settings)
-    return jsonify(status='success', settings=settings)
+    on its own, e.g. because it was still moving. Each module's result goes
+    out over the live state as it comes in (see DisplayState.sync_result), so
+    the Modules page can show the sync's progress. A provisioned module that
+    never answers has failed; its stored settings are kept."""
+    def answered(mod_id, dump):
+        if mod_id < NUM_MODULES:
+            state.sync_result(mod_id, True)
+
+    state.start_sync()
+    try:
+        dumps = {i: d for i, d in read_all_dumps(NUM_MODULES - 1, on_reply=answered).items()
+                 if i < NUM_MODULES}
+        failed = []
+        for mod_id_str in list(settings['modules']):
+            i = int(mod_id_str)
+            if i not in dumps and i < NUM_MODULES:
+                dump = read_dump(i)
+                state.sync_result(i, bool(dump))
+                if dump:
+                    dumps[i] = dump
+                else:
+                    failed.append(i)
+        for i, dump in dumps.items():
+            settings['modules'][str(i)] = dump
+        save_settings(settings)
+    finally:
+        state.finish_sync()
+    return jsonify(status='success', settings=settings, synced=sorted(dumps), failed=sorted(failed))
 
 
 # --- Commands for a provisioned module --------------------------------------

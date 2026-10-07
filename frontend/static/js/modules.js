@@ -52,6 +52,63 @@ function renderModuleGrid() {
     class: `mod-cell${i === selectedModule ? ' active' : ''}${moduleSettings(i) ? '' : ' unprovisioned'}`,
     dataset: {onclick: 'selectModuleAction', id: i},
   }, formatModuleId(i))));
+  grid.querySelectorAll('.mod-cell').forEach(cell =>
+    cell.addEventListener('animationend', () => cell.classList.remove('sync-flash')));
+  paintSyncState();
+}
+
+// --- Sync progress ----------------------------------------------------------
+//
+// The live state reports every module's sync results (DisplayState.sync_* in
+// display/state.py), whether this page or another device started the sync:
+// each success flashes the module's cell green, and a module whose last sync
+// failed stays orange until it next syncs.
+
+const SYNC_FLASH_MS = 1200;   // as long as the sync-flash animation in modules.css
+let syncState = {running: false, ok: {}, failed: []};
+let seenSyncOk = null;        // module id -> the success it was last flashed for
+const syncFlashes = {};       // module id -> when its flash started
+
+function noticeSyncState(sync) {
+  if (!sync) return;
+  // The first report is history (from before this page loaded): nothing to flash.
+  if (seenSyncOk !== null) {
+    for (const [id, n] of Object.entries(sync.ok)) {
+      if (seenSyncOk[id] !== n) syncFlashes[id] = performance.now();
+    }
+  }
+  seenSyncOk = {...sync.ok};
+  syncState = sync;
+  const button = byId('syncAllBtn');
+  button.disabled = sync.running;
+  button.textContent = sync.running ? 'SYNCING…' : 'SYNC ALL (EEPROM)';
+  paintSyncState();
+  refreshSyncNote();
+}
+
+const syncFailed = id => syncState.failed.includes(id);
+
+function paintSyncState() {
+  const now = performance.now();
+  byId('modMatrix').querySelectorAll('.mod-cell').forEach(cell => {
+    const id = Number(cell.dataset.id);
+    cell.classList.toggle('sync-failed', syncFailed(id));
+    const started = syncFlashes[id];
+    cell.classList.remove('sync-flash');
+    if (started === undefined || now - started >= SYNC_FLASH_MS) {
+      delete syncFlashes[id];
+      return;
+    }
+    // (Re)start the flash part-way through, as far as it had got: a cell
+    // that's just been redrawn carries on rather than starting over.
+    void cell.offsetWidth;   // so the browser sees the animation start again
+    cell.style.animationDelay = `${started - now}ms`;
+    cell.classList.add('sync-flash');
+  });
+}
+
+function refreshSyncNote() {
+  byId('inspectSyncFailed').hidden = !syncFailed(selectedModule);
 }
 
 // A number from the module's stored settings for the stats row, or ---.
@@ -73,6 +130,7 @@ function selectModule(id) {
   refreshModuleTiming();
   refreshModuleToggles();
   refreshManualControls();
+  refreshSyncNote();
 }
 
 function selectModuleAction(cell) {
@@ -308,12 +366,16 @@ function syncOneFromHardware() {
 
 function syncAllFromHardware() {
   if (!confirm(`Poll all ${NUM_MODULES} modules to rebuild settings.json?`)) return;
-  document.body.style.cursor = 'wait';
+  // The module grid shows the progress (see noticeSyncState).
   api.syncAllModules().then(result => {
-    document.body.style.cursor = '';
     if (!result) return;
     useSettings(null, result);
-    showToast('All modules synced');
+    const failed = result.failed || [];
+    if (failed.length) {
+      showToast(`${result.synced.length} synced; sync failed for ${failed.map(formatModuleId).join(', ')}`, 'warn');
+    } else {
+      showToast(`All ${result.synced.length} modules synced`);
+    }
   });
 }
 

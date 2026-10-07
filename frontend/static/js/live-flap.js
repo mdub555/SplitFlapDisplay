@@ -100,6 +100,7 @@ function applyLiveState(data) {
   renderBanner();
   markRunning();
   noticeSettingsVersion(data.settings_version);
+  noticeSyncState(data.sync);
 }
 
 // The settings were saved (here or on another device) since this page last

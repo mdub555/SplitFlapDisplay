@@ -20,6 +20,8 @@ from flask import Flask
 FRONTEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, FRONTEND)
 
+from display.state import DisplayState  # noqa: E402
+
 
 def _module(name, **attrs):
     mod = types.ModuleType(name)
@@ -29,6 +31,7 @@ def _module(name, **attrs):
 
 class ModuleRoutesTest(unittest.TestCase):
     def setUp(self):
+        self.state = DisplayState()
         self.sent = []       # every command the route wrote to the bus
         self.saves = 0       # times settings were persisted
         self.settings = {'modules': {
@@ -46,7 +49,7 @@ class ModuleRoutesTest(unittest.TestCase):
                                       save_settings=save_settings),
             'display.serial_link': _module('display.serial_link', send_raw=self.sent.append,
                                            read_dump=None, read_all_dumps=None, calibrate_module=None),
-            'display.state': _module('display.state', state=None),
+            'display.state': _module('display.state', state=self.state),
         }
         patcher = mock.patch.dict(sys.modules, fakes)
         patcher.start()
@@ -67,21 +70,35 @@ class ModuleRoutesTest(unittest.TestCase):
 
     # ---- /modules/sync_all ------------------------------------------------
 
+    def broadcast(self, dumps):
+        """A read_all_dumps that answers with `dumps`, reporting each reply
+        as it goes, and records what it was asked."""
+        def read_all_dumps(max_id, on_reply=None):
+            self.asked_max = max_id
+            self.running_during = self.state.sync_running
+            for mod_id, dump in dumps.items():
+                if on_reply:
+                    on_reply(mod_id, dump)
+            return dumps
+        self.routes.read_all_dumps = read_all_dumps
+
+    def sync(self):
+        return self.state.snapshot()['sync']
+
     def test_sync_all_uses_one_broadcast_and_stores_every_reply(self):
         self.settings['modules'] = {}
-        dumps = {0: {'homeOffset': 1}, 7: {'homeOffset': 2}}
-        asked = []
-        self.routes.read_all_dumps = lambda max_id: asked.append(max_id) or dumps
+        self.broadcast({0: {'homeOffset': 1}, 7: {'homeOffset': 2}})
         self.routes.read_dump = lambda mod_id: self.fail('no individual reads needed')
         res = self.client.post('/modules/sync_all')
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(asked, [self.routes.NUM_MODULES - 1])
+        self.assertEqual(self.asked_max, self.routes.NUM_MODULES - 1)
         self.assertEqual(self.settings['modules'], {'0': {'homeOffset': 1}, '7': {'homeOffset': 2}})
         self.assertEqual(self.saves, 1)
+        self.assertEqual((res.get_json()['synced'], res.get_json()['failed']), ([0, 7], []))
 
     def test_sync_all_asks_provisioned_modules_that_missed_their_slot(self):
         self.settings['modules'] = {'3': {'homeOffset': 9}, '4': {'homeOffset': 9}}
-        self.routes.read_all_dumps = lambda max_id: {4: {'homeOffset': 40}}
+        self.broadcast({4: {'homeOffset': 40}})
         asked = []
         self.routes.read_dump = lambda mod_id: asked.append(mod_id) or {'homeOffset': 30}
         self.client.post('/modules/sync_all')
@@ -90,10 +107,50 @@ class ModuleRoutesTest(unittest.TestCase):
 
     def test_sync_all_keeps_a_module_that_never_answers(self):
         self.settings['modules'] = {'3': {'homeOffset': 9}}
-        self.routes.read_all_dumps = lambda max_id: {}
+        self.broadcast({})
+        self.routes.read_dump = lambda mod_id: None
+        res = self.client.post('/modules/sync_all')
+        self.assertEqual(self.settings['modules'], {'3': {'homeOffset': 9}})
+        self.assertEqual(res.get_json()['failed'], [3])
+
+    def test_sync_all_reports_progress_in_the_live_state(self):
+        self.settings['modules'] = {'1': {}, '2': {}, '3': {}}
+        self.broadcast({1: {'homeOffset': 1}})
+        q = self.state.subscribe()
+        q.get_nowait()
+        self.routes.read_dump = lambda mod_id: {'homeOffset': 2} if mod_id == 2 else None
+        self.client.post('/modules/sync_all')
+        self.assertTrue(self.running_during)
+        sync = self.sync()
+        self.assertFalse(sync['running'])
+        self.assertEqual(sorted(sync['ok']), ['1', '2'])
+        self.assertEqual(sync['failed'], [3])
+        self.assertFalse(q.empty(), 'progress was pushed to subscribers')
+
+    def test_a_failed_module_stays_failed_until_it_syncs(self):
+        self.settings['modules'] = {'3': {}}
+        self.broadcast({})
         self.routes.read_dump = lambda mod_id: None
         self.client.post('/modules/sync_all')
-        self.assertEqual(self.settings['modules'], {'3': {'homeOffset': 9}})
+        self.assertEqual(self.client.post('/modules/3/sync').status_code, 504)
+        self.assertEqual(self.sync()['failed'], [3])
+        self.routes.read_dump = lambda mod_id: {'homeOffset': 5}
+        self.assertEqual(self.client.post('/modules/3/sync').status_code, 200)
+        self.assertEqual((self.sync()['failed'], list(self.sync()['ok'])), ([], ['3']))
+
+    def test_every_success_counts_anew_so_it_flashes_again(self):
+        self.routes.read_dump = lambda mod_id: {'homeOffset': 5}
+        self.client.post('/modules/5/sync')
+        first = self.sync()['ok']['5']
+        self.client.post('/modules/5/sync')
+        self.assertGreater(self.sync()['ok']['5'], first)
+
+    def test_sync_all_finishes_even_if_reading_fails(self):
+        def broken(max_id, on_reply=None):
+            raise OSError('unplugged')
+        self.routes.read_all_dumps = broken
+        self.assertEqual(self.client.post('/modules/sync_all').status_code, 500)
+        self.assertFalse(self.sync()['running'])
 
     # ---- /adjust ----------------------------------------------------------
 

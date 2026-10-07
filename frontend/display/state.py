@@ -99,6 +99,16 @@ class DisplayState:
         # them, and can reload what it shows.
         self.settings_version = 0
 
+        # Syncing modules (reading back their settings), for the Modules page:
+        # whether a Sync All is under way, each module's latest success (by
+        # a number that goes up with every one, so the page can flash the
+        # module each time), and the modules whose last sync failed, until
+        # they next sync.
+        self.sync_running = False
+        self.sync_count = 0
+        self.sync_ok = {}        # module id -> sync_count at its latest success
+        self.sync_failed = set()
+
         self.last_sent_page = None
 
         # Cooperative-cancellation flag: routes set this after changing
@@ -136,6 +146,11 @@ class DisplayState:
                 'scheduled': target is not None and target == self.scheduled_target,
                 'hardware_connected': self.hardware_connected,
                 'settings_version': self.settings_version,
+                'sync': {
+                    'running': self.sync_running,
+                    'ok': {str(i): n for i, n in self.sync_ok.items()},
+                    'failed': sorted(self.sync_failed),
+                },
             }
 
     def _current_target(self):
@@ -196,6 +211,27 @@ class DisplayState:
             if self.playlist_page == index:
                 return
             self.playlist_page = index
+        self._broadcast()
+
+    def start_sync(self):
+        with self.lock:
+            self.sync_running = True
+        self._broadcast()
+
+    def sync_result(self, mod_id, ok):
+        """Module `mod_id` answered a sync (`ok`) or didn't."""
+        with self.lock:
+            if ok:
+                self.sync_count += 1
+                self.sync_ok[mod_id] = self.sync_count
+                self.sync_failed.discard(mod_id)
+            else:
+                self.sync_failed.add(mod_id)
+        self._broadcast()
+
+    def finish_sync(self):
+        with self.lock:
+            self.sync_running = False
         self._broadcast()
 
     def settings_changed(self):
