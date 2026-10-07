@@ -243,8 +243,15 @@
     font-size: .8rem;
   }
 
+  /* The four stats go 2x2, so labels and values each fit on one line. */
   .inspector-stats {
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 8px;
+  }
+
+  .stat-val {
+    white-space: nowrap;
   }
 
   .settings-grid {
