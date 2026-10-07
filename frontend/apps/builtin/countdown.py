@@ -19,8 +19,8 @@ class CountdownApp(App):
     ]
 
     def get_pages(self, settings, cache):
-        event = settings.get('countdown_event', 'NEW YEAR').upper()[:16]
-        target_str = settings.get('countdown_target', '2027-01-01T00:00:00')
+        event = self.setting(settings, 'countdown_event').upper()[:16]
+        target_str = self.setting(settings, 'countdown_target')
         tz = get_tz(settings)
         try:
             try:

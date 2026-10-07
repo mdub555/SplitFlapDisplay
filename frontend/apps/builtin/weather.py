@@ -3,12 +3,11 @@ from datetime import datetime
 import requests
 
 from apps.base import App, Frame, SettingField
-from apps.builtin._shared import get_tz, center_page, cache_get_or_fetch
+from apps.builtin._shared import cache_get_or_fetch, center_page, clock, get_tz
 
 
 def fetch_weather(settings):
-    """Exposed at module level (not just as a method) so DashboardApp can
-    reuse it without duplicating the OpenWeatherMap call."""
+    """The current conditions from OpenWeatherMap, or None."""
     api_key = settings.get('weather_api_key', '').strip()
     zip_code = settings.get('zip_code', '02118').strip()
     if not api_key:
@@ -30,8 +29,10 @@ def fetch_weather(settings):
 
 
 def weather_page(settings, cache):
+    """The weather page: city and time, temperature, and the day's range.
+    Shared with DashboardApp."""
     w = cache_get_or_fetch(cache, 'weather', 300, lambda: fetch_weather(settings))
-    now_t = datetime.now(get_tz(settings)).strftime('%I:%M%p').lstrip('0')
+    now_t = clock(datetime.now(get_tz(settings)), spaced=False)
     if not w:
         return center_page('NO WEATHER DATA', now_t, 'CHECK API KEY')
     mcl = max(1, 14 - len(now_t))

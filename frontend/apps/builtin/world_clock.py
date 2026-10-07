@@ -3,7 +3,7 @@ from datetime import datetime
 import pytz
 
 from apps.base import App, Frame, SettingField
-from apps.builtin._shared import center_page
+from apps.builtin._shared import center_page, clock, split_list
 
 LABELS = {
     'US/Eastern': 'EST', 'US/Pacific': 'PST', 'US/Central': 'CST',
@@ -27,20 +27,14 @@ class WorldClockApp(App):
     ]
 
     def get_pages(self, settings, cache):
-        zones_str = settings.get('world_clock_zones', 'US/Eastern,US/Pacific,Europe/London')
-        zones = [z.strip() for z in zones_str.split(',') if z.strip()][:3]
-        while len(zones) < 3:
-            zones.append('UTC')
+        zones = split_list(self.setting(settings, 'world_clock_zones'), limit=3)
+        zones += ['UTC'] * (3 - len(zones))
         rows = []
         for zone in zones:
             try:
-                now = datetime.now(pytz.timezone(zone))
-                tstr = now.strftime('%I:%M%p').lstrip('0')
                 label = LABELS.get(zone, zone.split('/')[-1][:4].upper())
-                rows.append(f"{label:<4} {tstr}")
+                rows.append(f"{label:<4} {clock(datetime.now(pytz.timezone(zone)), spaced=False)}")
             except Exception:
                 rows.append('ERR')
-        # One zone per row (rather than the old 3-zones-crammed-into-one-row
-        # layout, which only worked because it happened to match a 15-col
-        # grid) — this generalizes cleanly to any GRID_COLS/GRID_ROWS.
+        # One zone per row.
         return [Frame(text=center_page(*rows), delay=1)]

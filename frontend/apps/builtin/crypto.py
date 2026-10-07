@@ -2,13 +2,11 @@ import logging
 
 import requests
 
-from apps.base import App, Frame, SettingField
-from apps.builtin._shared import cache_get_or_fetch, center_page
+from apps.base import App, SettingField
+from apps.builtin._shared import cache_get_or_fetch, row_frames, split_list
 
 
-def _fetch(settings):
-    coins = [c.strip().lower() for c in
-             settings.get('crypto_list', 'bitcoin,ethereum,solana').split(',') if c.strip()][:6]
+def _fetch(coins):
     url = (f"https://api.coingecko.com/api/v3/simple/price"
            f"?ids={','.join(coins)}&vs_currencies=usd&include_24hr_change=true")
     try:
@@ -50,5 +48,5 @@ class CryptoApp(App):
     ]
 
     def get_pages(self, settings, cache):
-        rows_pages = cache_get_or_fetch(cache, 'crypto', 60, lambda: _fetch(settings))
-        return [Frame(text=center_page(*rows), delay=8) for rows in rows_pages]
+        coins = split_list(self.setting(settings, 'crypto_list').lower(), limit=6)
+        return row_frames(cache_get_or_fetch(cache, 'crypto', 60, lambda: _fetch(coins)), delay=8)
