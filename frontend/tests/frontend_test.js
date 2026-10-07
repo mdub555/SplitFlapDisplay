@@ -39,7 +39,7 @@ async function main() {
   console.log('\n--- Boot ---');
   check('GRID_COLS picked up from /config (16)', globalVar('GRID_COLS') === 16);
   check('NUM_MODULES picked up from /config (64)', globalVar('NUM_MODULES') === 64);
-  check('line inputs built for 4 rows', document.querySelectorAll('#lineInputs .line-input').length === 4);
+  check('compose grid built with a flap per module', document.querySelectorAll('#preview .flap-unit').length === 64);
   check('color palette built', document.querySelectorAll('#colorPalette .color-btn').length === 8);
   check('live flap grid built', document.querySelectorAll('#liveGrid .live-flap').length === 64);
   check('the live display sits above the tabs, outside every page',
@@ -96,12 +96,15 @@ async function main() {
   click(document.getElementById('tab-control'));
   await sleep(20);
 
-  // Type something with HTML-special characters into line 1 and add it to the playlist —
-  // this is exactly the case that would have been dangerous with old-style innerHTML +
-  // string-interpolated onclick if it ever touched something less constrained than flap text.
-  const l0 = document.getElementById('L0');
-  l0.value = '<b>hi</b>';
-  l0.dispatchEvent(new window.Event('input', { bubbles: true }));
+  // Type something with HTML-special characters into the grid and add it to the
+  // playlist: exactly the case that would be dangerous with innerHTML.
+  const composeInput = document.getElementById('composeInput');
+  const flapText = () => [...document.querySelectorAll('#preview .flap-unit')].map(f => f.textContent || ' ').join('');
+  const typeKeys = text => {
+    composeInput.value = '_' + text;
+    composeInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+  };
+  typeKeys('(hi) & #1');
   click(document.getElementById('saveMsgBtn'));
   await sleep(20);
 
@@ -110,7 +113,7 @@ async function main() {
   check('row carries data-idx for delegation', row && row.dataset.idx === '0');
   check('no live <b> element was injected into the preview (textContent, not innerHTML)',
     row && row.querySelectorAll('b').length === 0);
-  check('the literal text (uppercased) is present as text', row && row.textContent.includes('<B>HI</B>'));
+  check('the typed text (uppercased) is present as text', row && row.textContent.replace(/\u00a0/g, ' ').includes('(HI) & #1'));
 
   console.log('\n--- Playlist row buttons dispatch via delegation, not per-row listeners ---');
   calls.length = 0;
@@ -486,6 +489,58 @@ async function main() {
     debugSelect.value === 'show_char' && preview() === 'm10-C');
   click(document.querySelector('[data-onclick="clearDebugLog"]'));
   check('the log can be cleared', logLines().length === 0);
+
+  console.log('\n--- Typing straight into the compose grid ---');
+  click(document.getElementById('tab-control'));
+  click(document.querySelector('[data-onclick="clearDisplay"]'));
+  const key = k => composeInput.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+  const rowN = n => Array.from(flapText()).slice(n * 16, (n + 1) * 16).join('');   // a colour tile is one flap
+  const row0 = () => rowN(0);
+  const cursorAt = () => [...document.querySelectorAll('#preview .flap-unit')].findIndex(f => f.classList.contains('cursor'));
+  typeKeys('hello');
+  check('typed letters fill flaps from the cursor, uppercased', row0() === 'HELLO           ' && cursorAt() === 5);
+  typeKeys('~');
+  check('a character no flap shows is skipped', row0() === 'HELLO           ' && cursorAt() === 5);
+  composeInput.value = '';   // a phone keyboard's Backspace deletes the sentinel
+  composeInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+  check('backspace clears the flap before the cursor', row0() === 'HELL            ' && cursorAt() === 4);
+  check('the hidden textarea is reset after each keystroke', composeInput.value === '_');
+  key('Enter');
+  typeKeys('“ok”');
+  check('Enter starts the next line; curly quotes become the quote flap', rowN(1) === '"OK"            ');
+  click(document.querySelector('#preview .flap-unit[data-cell="2"]'));
+  typeKeys('x');
+  check('clicking a flap moves the cursor there; typing overwrites', row0() === 'HEXL            ');
+  key('ArrowDown'); key('ArrowLeft');
+  check('arrow keys move the cursor', cursorAt() === 18);
+  key('Delete');
+  check('Delete clears the flap under the cursor', rowN(1) === '"O "            ' && cursorAt() === 18);
+  click(document.querySelector('#colorPalette .color-btn'));
+  check('a colour tile goes in at the cursor', rowN(1) === '"O🟥"            ');
+  const paste = new window.Event('paste', { bubbles: true, cancelable: true });
+  paste.clipboardData = { getData: () => 'AB\nCD' };
+  click(document.querySelector('#preview .flap-unit[data-cell="48"]'));
+  composeInput.dispatchEvent(paste);
+  check('pasted lines go on successive rows', rowN(3) === 'AB              ' && rowN(4) === '');
+  click(document.querySelector('[data-onclick="centerLines"]'));
+  check('Center Lines centers each line in its row', row0() === '      HEXL      ' &&
+    rowN(1) === '      "O🟥"      ' && rowN(2).trim() === '' && rowN(3) === '       AB       ');
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="sync"]'));
+  await sleep(20);
+  const pushed = calls.find(c => c.url === '/update_playlist');
+  check('PUSH sends the grid as one page of 64 flaps',
+    pushed && Array.from(JSON.parse(pushed.body).pages[0].text).length === 64 &&
+    JSON.parse(pushed.body).pages[0].text.startsWith('      HEXL      '));
+
+  console.log('\n--- Editing a playlist page puts it back in the grid ---');
+  document.getElementById('modeToggle').checked = true;
+  change(document.getElementById('modeToggle'));
+  click(document.getElementById('saveMsgBtn'));
+  click(document.querySelector('[data-onclick="clearDisplay"]'));
+  check('the grid clears', flapText().trim() === '');
+  click(document.querySelector('#playlistList .playlist-item:last-child [data-onclick="editPlaylist"]'));
+  check('EDIT restores the page into the grid', row0() === '      HEXL      ' && rowN(1) === '      "O🟥"      ');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

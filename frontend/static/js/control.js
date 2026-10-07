@@ -6,69 +6,194 @@ const PAGE_DEFAULTS = {delay: 5, style: 'ltr', speed: 15};
 const ADD_PAGE_LABEL = '+ Add to Playlist';
 
 let editingIndex = null;   // the playlist page being edited, if any
-let playlist = [];         // [{text, raw, centered, delay, style, speed}]
-let lastFocusedInput = null;
-let lastCursorPos = 0;
+let playlist = [];         // [{text, delay, style, speed}]
 
-function lineInputIds() {
-  return Array.from({length: GRID_ROWS}, (_, i) => `L${i}`);
+// --- Composing a page: typing straight into the grid -------------------------
+//
+// The page is one character per flap, row after row, as it's shown (letters
+// uppercased, colours as their emoji). Typing overwrites the flap under the
+// cursor and moves on, like the display itself. Keys arrive through a hidden
+// textarea, which also brings up a phone's keyboard; it always holds just
+// COMPOSE_SENTINEL, so even a phone keyboard's Backspace (which sends no
+// usable key code) shows up as the sentinel being deleted.
+
+const COMPOSE_SENTINEL = '_';
+const composeCells = () => GRID_ROWS * GRID_COLS;
+let composed = [];         // one character per flap
+let composeCursor = 0;     // 0..composeCells(); composeCells() is past the end
+let composeFlaps = [];     // the grid's cell elements
+let composing = false;     // in the middle of an IME composition
+
+// Every character a flap shows, as it's shown on screen.
+const COMPOSE_CHARS = new Set(Array.from(CHAR_MAP, ch => displayChar(ch) || ' '));
+
+// Characters phone keyboards type in place of one a flap shows.
+const COMPOSE_SUBSTITUTES = {'\u201c': '"', '\u201d': '"', '\u201e': '"', '\u2764': '\u2665'};
+
+// `ch` as it goes in a flap, or null if no flap shows it.
+function composeChar(ch) {
+  ch = COMPOSE_SUBSTITUTES[ch] || ch;
+  const upper = ch.toUpperCase();
+  return COMPOSE_CHARS.has(upper) ? upper : COMPOSE_CHARS.has(ch) ? ch : null;
 }
 
-function buildLineInputs() {
-  const inputs = lineInputIds().map((id, i) => {
-    const input = el('input', {type: 'text', id, class: 'line-input', placeholder: `LINE ${i + 1}`});
-    input.addEventListener('input', updatePreview);
-    // Remember where to insert a colour tile from the palette.
-    ['focus', 'keyup', 'click'].forEach(ev => input.addEventListener(ev, e => {
-      lastFocusedInput = e.target;
-      lastCursorPos = e.target.selectionStart || 0;
-    }));
-    return input;
+function buildComposer() {
+  composed = Array(composeCells()).fill(' ');
+  const grid = byId('preview');
+  grid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
+  composeFlaps = composed.map((_, i) => el('div', {class: 'flap-unit', dataset: {cell: i}}));
+  grid.replaceChildren(...composeFlaps);
+
+  const input = byId('composeInput');
+  const wrapper = byId('composeWrapper');
+  // A click on a flap puts the cursor there; anywhere else in the grid keeps it.
+  wrapper.addEventListener('mousedown', e => e.preventDefault());   // keep focus in the textarea
+  wrapper.addEventListener('click', e => {
+    const cell = e.target.closest('[data-cell]');
+    if (cell) moveComposeCursor(Number(cell.dataset.cell));
+    focusComposer();
   });
-  byId('lineInputs').replaceChildren(...inputs);
+  input.addEventListener('focus', () => wrapper.classList.add('focused'));
+  input.addEventListener('blur', () => wrapper.classList.remove('focused'));
+  input.addEventListener('keydown', composeKeydown);
+  input.addEventListener('compositionstart', () => { composing = true; });
+  input.addEventListener('compositionend', () => { composing = false; composeTextareaInput(); });
+  input.addEventListener('input', () => { if (!composing) composeTextareaInput(); });
+  input.addEventListener('paste', e => {
+    e.preventDefault();
+    typeText(e.clipboardData.getData('text'));
+  });
+  resetComposeTextarea();
+  renderComposer();
+}
+
+function focusComposer() {
+  const input = byId('composeInput');
+  if (document.activeElement !== input) input.focus({preventScroll: true});
+}
+
+function resetComposeTextarea() {
+  const input = byId('composeInput');
+  input.value = COMPOSE_SENTINEL;
+  input.setSelectionRange(COMPOSE_SENTINEL.length, COMPOSE_SENTINEL.length);
+}
+
+// Whatever the textarea gained or lost since it was reset.
+function composeTextareaInput() {
+  const value = byId('composeInput').value;
+  if (value.startsWith(COMPOSE_SENTINEL)) typeText(value.slice(COMPOSE_SENTINEL.length));
+  else composeBackspace();   // the sentinel was deleted
+  resetComposeTextarea();
+}
+
+function composeKeydown(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey || composing) return;
+  const row = Math.floor(composeCursor / GRID_COLS);
+  const actions = {
+    ArrowLeft: () => moveComposeCursor(composeCursor - 1),
+    ArrowRight: () => moveComposeCursor(composeCursor + 1),
+    ArrowUp: () => moveComposeCursor(composeCursor - GRID_COLS),
+    ArrowDown: () => moveComposeCursor(composeCursor + GRID_COLS),
+    Home: () => moveComposeCursor(row * GRID_COLS),
+    End: () => moveComposeCursor(lineEnd(row)),
+    Enter: () => moveComposeCursor((row + 1) * GRID_COLS),
+    Backspace: composeBackspace,
+    Delete: () => setComposeCell(composeCursor, ' '),
+    Escape: () => byId('composeInput').blur(),
+  };
+  if (!actions[e.key]) return;
+  e.preventDefault();
+  actions[e.key]();
+}
+
+// The cell after the last non-blank one in `row`.
+function lineEnd(row) {
+  const start = row * GRID_COLS;
+  let end = start + GRID_COLS;
+  while (end > start && composed[end - 1] === ' ') end--;
+  return Math.min(end, start + GRID_COLS - 1);
+}
+
+function moveComposeCursor(to) {
+  // Up from the first row or down from the last stays put.
+  if (to < 0 || to > composeCells()) return;
+  composeCursor = to;
+  renderComposer();
+}
+
+function setComposeCell(i, ch) {
+  if (i < 0 || i >= composeCells()) return;
+  composed[i] = ch;
+  renderComposer();
+}
+
+// Types `text` at the cursor: each character overwrites a flap and moves on,
+// a newline moves to the start of the next line, and characters no flap shows
+// are skipped.
+function typeText(text) {
+  for (const ch of Array.from(text.replace(/\r\n?/g, '\n'))) {
+    if (ch === '\n') {
+      composeCursor = Math.min(composeCells(), (Math.floor(composeCursor / GRID_COLS) + 1) * GRID_COLS);
+      continue;
+    }
+    const flap = composeChar(ch);
+    if (flap === null || composeCursor >= composeCells()) continue;
+    composed[composeCursor++] = flap;
+  }
+  renderComposer();
+}
+
+function composeBackspace() {
+  if (composeCursor === 0) return;
+  composed[--composeCursor] = ' ';
+  renderComposer();
+}
+
+function renderComposer() {
+  composeFlaps.forEach((flap, i) => {
+    flap.textContent = composed[i] === ' ' ? '' : composed[i];
+    flap.classList.toggle('cursor', i === Math.min(composeCursor, composeCells() - 1));
+  });
+}
+
+// The composed page as one string of GRID_ROWS x GRID_COLS characters.
+function composedText() {
+  return composed.join('');
+}
+
+// Puts `text` (a page as stored: possibly with flap codes) in the grid.
+function setComposedText(text) {
+  const chars = Array.from(text || '');
+  composed = Array.from({length: composeCells()}, (_, i) => {
+    const ch = chars[i] || ' ';
+    return CONFIG.display_chars[ch] || ch.toUpperCase();
+  });
+  composeCursor = 0;
+  renderComposer();
+}
+
+// Centers each line's text within its row.
+function centerLines() {
+  for (let row = 0; row < GRID_ROWS; row++) {
+    const start = row * GRID_COLS;
+    const line = composed.slice(start, start + GRID_COLS);
+    const first = line.findIndex(ch => ch !== ' ');
+    if (first < 0) continue;
+    const text = line.slice(first, GRID_COLS - [...line].reverse().findIndex(ch => ch !== ' '));
+    const pad = Math.floor((GRID_COLS - text.length) / 2);
+    line.fill(' ').splice(pad, text.length, ...text);
+    composed.splice(start, GRID_COLS, ...line);
+  }
+  renderComposer();
 }
 
 function buildColorPalette() {
   byId('colorPalette').replaceChildren(...CONFIG.color_tiles.map(tile => {
     const btn = el('button', {class: 'color-btn', title: tile.name}, tile.emoji);
-    btn.addEventListener('click', () => insertColor(tile.emoji));
+    btn.addEventListener('mousedown', e => e.preventDefault());   // keep the grid focused
+    btn.addEventListener('click', () => { typeText(tile.emoji); focusComposer(); });
     return btn;
   }));
-}
-
-// Draws the composed page in the preview grid and returns it as one string
-// of GRID_ROWS x GRID_COLS characters.
-function updatePreview() {
-  const centered = byId('centerToggle').checked;
-  let full = '';
-  lineInputIds().forEach(id => {
-    const input = byId(id);
-    let chars = Array.from(input.value);   // so a colour tile is one character
-    if (chars.length > GRID_COLS) {
-      const cursor = input.selectionStart;
-      chars = chars.slice(0, GRID_COLS);
-      input.value = chars.join('');
-      input.setSelectionRange(cursor, cursor);
-    }
-    const cells = chars.map(c => c.toUpperCase());
-    if (centered) cells.unshift(...Array(Math.floor((GRID_COLS - cells.length) / 2)).fill(' '));
-    while (cells.length < GRID_COLS) cells.push(' ');
-    full += cells.join('');
-  });
-  const grid = byId('preview');
-  grid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
-  grid.replaceChildren(...Array.from(full).map(ch => el('div', {class: 'flap-unit'}, ch === ' ' ? '' : ch)));
-  return full;
-}
-
-function insertColor(emoji) {
-  const target = lastFocusedInput || byId('L0');
-  if (Array.from(target.value).length >= GRID_COLS) return;
-  target.value = target.value.substring(0, lastCursorPos) + emoji + target.value.substring(lastCursorPos);
-  lastCursorPos += emoji.length;
-  target.focus();
-  target.setSelectionRange(lastCursorPos, lastCursorPos);
-  updatePreview();
 }
 
 function stopEditing() {
@@ -77,9 +202,8 @@ function stopEditing() {
 }
 
 function clearDisplay() {
-  lineInputIds().forEach(id => { byId(id).value = ''; });
+  setComposedText('');
   if (editingIndex !== null) stopEditing();
-  updatePreview();
 }
 
 function toggleMultiMode() {
@@ -111,15 +235,13 @@ function pageForDisplay(page) {
 // page being composed.
 function currentPages() {
   if (byId('modeToggle').checked) return playlist.map(pageForDisplay);
-  return [{text: updatePreview(), ...defaultTiming()}];
+  return [{text: composedText(), ...defaultTiming()}];
 }
 
 // --- The playlist being built ----------------------------------------------
 
 function saveMessage() {
-  const raw = {};
-  lineInputIds().forEach((id, i) => { raw[`raw${i}`] = byId(id).value; });
-  const item = {text: updatePreview(), raw, centered: byId('centerToggle').checked, ...defaultTiming()};
+  const item = {text: composedText(), ...defaultTiming()};
   if (editingIndex !== null) {
     playlist[editingIndex] = item;
     stopEditing();
@@ -192,13 +314,11 @@ function editPlaylist(button) {
   const idx = rowIndex(button);
   const item = playlist[idx];
   editingIndex = idx;
-  lineInputIds().forEach((id, i) => { byId(id).value = (item.raw && item.raw[`raw${i}`]) || ''; });
-  byId('centerToggle').checked = item.centered;
+  setComposedText(item.text);
   byId('delayInput').value = item.delay || PAGE_DEFAULTS.delay;
   byId('styleInput').value = item.style || PAGE_DEFAULTS.style;
   byId('speedInput').value = item.speed || PAGE_DEFAULTS.speed;
   byId('saveMsgBtn').textContent = `Save Changes to Page ${idx + 1}`;
-  updatePreview();
 }
 
 function movePlaylist(button) {
@@ -278,14 +398,7 @@ function withSavedPlaylist(button, use) {
 
 function loadSavedPlaylist(button) {
   withSavedPlaylist(button, (name, item) => {
-    playlist = item.pages.map(page => {
-      const shown = pageForDisplay(page);
-      const raw = {};
-      lineInputIds().forEach((id, i) => {
-        raw[`raw${i}`] = shown.text.slice(i * GRID_COLS, (i + 1) * GRID_COLS).trim();
-      });
-      return {...shown, raw, centered: false};
-    });
+    playlist = item.pages.map(pageForDisplay);
     byId('delayInput').value = item.delay;
     byId('modeToggle').checked = true;
     toggleMultiMode();
@@ -313,16 +426,15 @@ function deleteSavedPlaylist(button) {
 }
 
 function initControlPage() {
-  buildLineInputs();
+  buildComposer();
   buildColorPalette();
   byId('styleInput').replaceChildren(...styleOptions(PAGE_DEFAULTS.style));
-  updatePreview();
   loadSavedPlaylists();
 }
 
 registerActions({
   clearDisplay, saveMessage, sync, saveCurrentPlaylist, stopApp,
-  toggleMultiMode, updatePreview, updatePlaylistItemFromInput,
+  toggleMultiMode, centerLines, updatePlaylistItemFromInput,
   movePlaylist, editPlaylist, removeFromPlaylist,
   loadSavedPlaylist, runSavedPlaylist, deleteSavedPlaylist,
 });

@@ -183,23 +183,55 @@
   transform: scale(1.2);
 }
 
-/* One line of the page being composed, in the display's style. */
-.line-input {
-  width: 100%;
-  font-size: 1.3rem;
-  background: var(--terminal);
-  color: var(--display-green);
-  border: 1px solid var(--border);
-  margin: 5px 0;
-  padding: 10px 12px;
-  font-family: var(--mono);
-  text-transform: uppercase;
-  border-radius: 6px;
+/* ── COMPOSE: the grid you type into ── */
+.compose-wrapper {
+  position: relative;
+  cursor: text;
 }
 
-.line-input:focus {
-  outline: none;
-  border-color: var(--accent);
+.compose-wrapper .flap-unit.cursor {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* The cursor only shows while the grid has focus, and blinks. */
+.compose-wrapper:not(.focused) .flap-unit.cursor {
+  outline-color: transparent;
+}
+
+.compose-wrapper.focused .flap-unit.cursor {
+  animation: compose-blink 1s steps(1) infinite;
+}
+
+@keyframes compose-blink {
+  50% { outline-color: transparent; }
+}
+
+.compose-wrapper.focused {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Invisible, but focusable and on screen so the page doesn't jump and a
+   phone shows its keyboard. 16px stops iOS zooming in on focus. */
+.compose-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  resize: none;
+  overflow: hidden;
+  font-size: 16px;
+  pointer-events: none;
+}
+
+.compose-hint {
+  text-align: center;
+  margin: 6px 0 12px;
+  font-size: .8rem;
 }
 
 /* ── PLAYLIST ── */
@@ -306,11 +338,6 @@
 
   .control-panel {
     gap: 8px;
-  }
-
-  .line-input {
-    font-size: 1.05rem;
-    padding: 8px;
   }
 
   .saved-pl-item {
