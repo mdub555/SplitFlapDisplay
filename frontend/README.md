@@ -9,8 +9,8 @@ config.py              Grid size (GRID_ROWS/GRID_COLS), serial port, settings pa
 display/                Serial transport, layout math, shared DisplayState, playlist loop
 apps/                   One file per app, all implementing the same App interface
 settings/               Global settings schema, load/save, backup/restore
-routes/                 Flask blueprints, one per concern
-templates/index.html    Markup only
+routes/                 Flask blueprints, one per concern (routes/pages.py serves the page)
+templates/index.html    Markup, with Jinja macros for the repeated blocks
 static/css/*.css        Styles, split by page/concern
 static/js/*.js          Frontend logic, split by page/concern
 ```
@@ -30,6 +30,11 @@ If `SPLITFLAP_SERIAL_PORT` can't be opened, the app logs a warning and runs
 in simulation mode — the UI works, but nothing physically moves. `/config`
 reports `hardware_connected` if you want to surface that in a future UI
 tweak.
+
+The page gets everything the backend already knows (grid size, character
+set, animation styles, the firmware settings and module toggles with their
+labels) when it's rendered, as `CONFIG` (see `routes/pages.py`), so the
+frontend never keeps its own copy of those tables.
 
 ## Adding a new app
 
@@ -62,6 +67,12 @@ needed anywhere else.
 more content; apps that hit the network should use the `cache` dict (persists
 for as long as the app stays active) with `apps.builtin._shared.cache_get_or_fetch`
 to avoid re-fetching every call.
+
+Read a setting with `self.setting(settings, key)`, which falls back to the
+field's default. `apps/builtin/_shared.py` has helpers for the common parts
+(`center_page`, `row_frames`, `clock`, `split_list`). A colour animation can
+subclass `AnimationApp` (`apps/builtin/animations/base.py`) and only
+implement `frames()`; the update-order and speed settings are built for it.
 
 ## Frontend architecture notes
 
@@ -125,9 +136,9 @@ A few things that come with that:
 
 ## Testing
 
-`tests/` contains a headless DOM test (via jsdom) that loads the real
-`templates/index.html` and `static/js/*.js` files — the same way a browser
-would — with `fetch` **and `EventSource`** mocked, then exercises the actual
+`tests/` contains a headless DOM test (via jsdom) that loads the page as
+Flask renders it and the `static/js/*.js` files it lists — the same way a
+browser would — with `fetch` **and `EventSource`** mocked, then exercises the actual
 click/change event pipeline: tab switching, running an app, opening/saving
 app settings, playlist add/edit/delete, the live SSE stream driving the flap
 grid and banners, a malformed-payload guard, the reconnect status banner,
@@ -142,10 +153,10 @@ npm test
 
 
 
-- **Charset**: `display/charset.py`'s `FLAP_CHARS` and `static/js/constants.js`'s
-  `CHAR_MAP` must both match `firmware/splitflapfirmwarev8/splitflap.cpp`'s
-  `FLAP_CHARS` exactly (same characters, same order). They currently do; change
-  all three together. Characters with no flap (e.g. `;` and `'`) are sent as a
+- **Charset**: `display/charset.py`'s `FLAP_CHARS` must match
+  `firmware/splitflapfirmwarev8/splitflap.cpp`'s `FLAP_CHARS` exactly (same
+  characters, same order); change both together. The page gets it from the
+  backend. Characters with no flap (e.g. `;` and `'`) are sent as a
   blank. On the v8 reels `d` and `h` are the degree sign and heart, which the
   compose UI accepts as `°` and `♥`.
 - Per-character EEPROM fine-tuning (`w<idx>:<pos>`, the old Auto Fine-Tune
@@ -154,9 +165,10 @@ npm test
   steps/revolution remain configurable. If any modules DO need per-character
   correction later, that functionality no longer exists and would need to be
   rebuilt.
-- Backend tests are minimal: `tests/test_serial_link.py` covers the module
-  dump parser, `tests/test_module_routes.py` the module adjust/setting
-  endpoints, and `tests/test_backup.py` backup restore (run
-  `python -m unittest tests.test_serial_link tests.test_module_routes tests.test_backup`
-  from `frontend/`; the route tests need Flask). Anything else touching the
-  serial port would still need `display/serial_link.py` mocked.
+- Backend tests: run `python -m unittest discover -s tests` from `frontend/`
+  (the route tests need Flask). They cover the dump parser and protocol
+  (checked against the firmware source), the module, settings, playlist and
+  firmware routes, backup restore, the page and its configuration, the
+  animation orders, the SSE subscriber queues and the app base classes. The
+  route tests load each route file with the settings store and serial link
+  faked, so nothing touches a serial port or settings.json.

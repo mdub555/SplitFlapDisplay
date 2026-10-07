@@ -122,15 +122,21 @@ def dump_format():
     }
 
 
-# Settings key (as stored under settings['modules'][id]) -> firmware command:
-#   m<ID>A<0|1>  auto-home on boot
-#   m<ID>C<0|1>  motor direction (1 = clockwise)
-#   m<ID>F<0|1>  free (release) the motor coils when idle
-TOGGLE_COMMANDS = {
-    'autoHome': Cmd.SET_AUTO_HOME,
-    'motorClockwise': Cmd.SET_MOTOR_CW,
-    'motorRelease': Cmd.SET_MOTOR_RELEASE,
+# A module's on/off settings, shown as toggles in the inspector: the settings
+# key (as stored under settings['modules'][id]) -> the command that sets it
+# (m<ID><cmd><0|1>), and how the inspector describes it.
+Toggle = namedtuple('Toggle', 'cmd label hint')
+
+MODULE_TOGGLES = {
+    'autoHome': Toggle(Cmd.SET_AUTO_HOME, 'Auto-home on boot',
+                       'Find the home flap whenever this module powers up'),
+    'motorClockwise': Toggle(Cmd.SET_MOTOR_CW, 'Motor clockwise',
+                             'Off = counter-clockwise. Only change this if the reel turns the wrong way'),
+    'motorRelease': Toggle(Cmd.SET_MOTOR_RELEASE, 'Release motor when idle',
+                           'Cut coil power after each move so the motor runs cooler'),
 }
+
+TOGGLE_COMMANDS = {key: toggle.cmd for key, toggle in MODULE_TOGGLES.items()}
 
 
 def toggle_command(mod_id: int, key: str, value: bool) -> str:
@@ -140,28 +146,50 @@ def toggle_command(mod_id: int, key: str, value: bool) -> str:
 
 # Settings that are identical on every module. They live once in
 # settings['firmware'] and are applied with a broadcast (m*<cmd><value>)
-# rather than per module. Key -> firmware command and accepted range:
-#   m*S<us>   delay between motor steps during normal moves
-#   m*H<us>   delay between motor steps while homing / calibrating
-#   m*D<ms>   home-sensor debounce
-#   m*E<0|1>  recalculate position every time the home sensor edge is passed
-#   m*R<us>   step delay at the start and end of a move (moves ramp between
-#             this and the step delay)
-#   m*L<n>    steps the ramp takes at each end of a move (0 = no ramp)
-#   m*W<ms>   wait, holding the coils, this long after a move before releasing
-#   m*P<ms>   power-on stagger: auto-home waits this long per module ID
+# rather than per module. Each has its command, accepted range and default,
+# and how the settings form shows it (label, unit and hint).
 # The step delays are in microseconds and stored by the firmware as a uint16,
 # so 65535 is their ceiling; the ramp steps, settle time and stagger are stored
 # as a uint8, so 255 is theirs.
 GLOBAL_SETTINGS = {
-    'stepDelayUs':       {'cmd': Cmd.SET_STEP_DELAY,         'type': 'int',  'min': 1, 'max': 65535, 'default': 1000},
-    'homingStepDelayUs': {'cmd': Cmd.SET_HOMING_STEP_DELAY,  'type': 'int',  'min': 1, 'max': 65535, 'default': 1000},
-    'debounceMs':        {'cmd': Cmd.SET_DEBOUNCE_MS,        'type': 'int',  'min': 0, 'max': 65535, 'default': 50},
-    'recalculateHome':   {'cmd': Cmd.SET_RECALCULATE_HOME,   'type': 'bool', 'default': True},
-    'rampStartDelayUs':  {'cmd': Cmd.SET_RAMP_START_DELAY,   'type': 'int',  'min': 1, 'max': 65535, 'default': 3000},
-    'rampSteps':         {'cmd': Cmd.SET_RAMP_STEPS,         'type': 'int',  'min': 0, 'max': 255, 'default': 0},
-    'settleMs':          {'cmd': Cmd.SET_SETTLE_MS,          'type': 'int',  'min': 0, 'max': 255, 'default': 0},
-    'staggerMs':         {'cmd': Cmd.SET_STAGGER_MS,         'type': 'int',  'min': 0, 'max': 255, 'default': 150},
+    'stepDelayUs': {
+        'cmd': Cmd.SET_STEP_DELAY, 'type': 'int', 'min': 1, 'max': 65535, 'default': 1000,
+        'label': 'Step delay', 'unit': 'µs',
+        'hint': 'Pause between motor steps during normal moves, in microseconds (1000 µs = 1 ms). '
+                'Lower is faster; too low and the motor skips steps.'},
+    'homingStepDelayUs': {
+        'cmd': Cmd.SET_HOMING_STEP_DELAY, 'type': 'int', 'min': 1, 'max': 65535, 'default': 1000,
+        'label': 'Homing step delay', 'unit': 'µs',
+        'hint': 'Pause between steps while homing and calibrating, in microseconds.'},
+    'debounceMs': {
+        'cmd': Cmd.SET_DEBOUNCE_MS, 'type': 'int', 'min': 0, 'max': 65535, 'default': 50,
+        'label': 'Home sensor debounce', 'unit': 'ms',
+        'hint': 'Ignore repeat home-sensor triggers within this time. Raise it if home is detected '
+                'more than once per rotation.'},
+    'recalculateHome': {
+        'cmd': Cmd.SET_RECALCULATE_HOME, 'type': 'bool', 'default': True,
+        'label': 'Recalculate home each rotation',
+        'hint': "On: every pass over the home sensor re-syncs the module's position. "
+                'Off: position is only set while homing.'},
+    'rampStartDelayUs': {
+        'cmd': Cmd.SET_RAMP_START_DELAY, 'type': 'int', 'min': 1, 'max': 65535, 'default': 3000,
+        'label': 'Ramp start delay', 'unit': 'µs',
+        'hint': 'Step delay at the start and end of a move, in microseconds. Moves speed up from '
+                'this to the step delay, and slow back down at the end.'},
+    'rampSteps': {
+        'cmd': Cmd.SET_RAMP_STEPS, 'type': 'int', 'min': 0, 'max': 255, 'default': 0,
+        'label': 'Ramp length', 'unit': 'steps',
+        'hint': 'Steps spent speeding up and slowing down at each end of a move. 0 turns the ramp off.'},
+    'settleMs': {
+        'cmd': Cmd.SET_SETTLE_MS, 'type': 'int', 'min': 0, 'max': 255, 'default': 0,
+        'label': 'Settle time', 'unit': 'ms',
+        'hint': 'Keep the coils powered this long after a move so the flap stops swinging. '
+                'Only applies when the motor is released when idle.'},
+    'staggerMs': {
+        'cmd': Cmd.SET_STAGGER_MS, 'type': 'int', 'min': 0, 'max': 255, 'default': 150,
+        'label': 'Startup stagger', 'unit': 'ms per module',
+        'hint': "After power-on, each module waits this long times its ID before auto-homing, so "
+                "the motors don't all start at once. Takes effect at the next power-on."},
 }
 
 

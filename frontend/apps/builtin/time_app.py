@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from apps.base import App, Frame
-from apps.builtin._shared import get_tz, center_page
+from apps.builtin._shared import clock, get_tz, center_page
 
 
 class TimeApp(App):
@@ -11,6 +11,4 @@ class TimeApp(App):
     desc = 'Live clock'
 
     def get_pages(self, settings, cache):
-        tz = get_tz(settings)
-        text = center_page(datetime.now(tz).strftime('%I:%M %p').lstrip('0'))
-        return [Frame(text=text, delay=1)]
+        return [Frame(text=center_page(clock(datetime.now(get_tz(settings)))), delay=1)]

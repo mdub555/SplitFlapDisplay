@@ -1,11 +1,10 @@
 import requests
 
-from apps.base import App, Frame, SettingField
-from apps.builtin._shared import cache_get_or_fetch, center_page
+from apps.base import App, SettingField
+from apps.builtin._shared import cache_get_or_fetch, row_frames, split_list
 
 
-def _fetch(settings):
-    teams = [t.strip() for t in settings.get('nhl_teams', 'BOS,DAL').split(',') if t.strip()]
+def _fetch(teams):
     try:
         games = requests.get('https://api-web.nhle.com/v1/score/now', timeout=5).json().get('games', [])
         pages = []
@@ -37,5 +36,5 @@ class SportsApp(App):
     ]
 
     def get_pages(self, settings, cache):
-        rows_pages = cache_get_or_fetch(cache, 'sports', 60, lambda: _fetch(settings))
-        return [Frame(text=center_page(*rows), delay=5) for rows in rows_pages]
+        teams = split_list(self.setting(settings, 'nhl_teams'))
+        return row_frames(cache_get_or_fetch(cache, 'sports', 60, lambda: _fetch(teams)), delay=5)

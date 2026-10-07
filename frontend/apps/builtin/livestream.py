@@ -4,7 +4,7 @@ from datetime import datetime
 import requests
 
 from apps.base import App, Frame, SettingField
-from apps.builtin._shared import get_tz, cache_get_or_fetch, center_page
+from apps.builtin._shared import cache_get_or_fetch, center_page, clock, get_tz
 
 
 def _fetch_viewers(settings):
@@ -61,8 +61,7 @@ class LivestreamApp(App):
         from apps.builtin.youtube import fetch_youtube
 
         frames = []
-        tz = get_tz(settings)
-        time_str = datetime.now(tz).strftime('%I:%M %p').lstrip('0')
+        time_str = clock(datetime.now(get_tz(settings)))
 
         yt = cache_get_or_fetch(cache, 'youtube', 60, lambda: fetch_youtube(settings))
         if yt:
@@ -76,7 +75,7 @@ class LivestreamApp(App):
         for i, rows in enumerate(_parse_comments(settings)):
             frames.append(Frame(text=center_page(*rows), style=varied_styles[i % len(varied_styles)]))
 
-        interval = max(5.0, float(settings.get('livestream_interval', 25) or 25))
+        interval = max(5.0, float(self.setting(settings, 'livestream_interval') or 25))
         for f in frames:
             f.delay = interval
         return frames

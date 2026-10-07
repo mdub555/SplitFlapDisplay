@@ -10,9 +10,7 @@
 //
 // Pass `errorMessage: null` to suppress the toast for a call that's expected
 // to fail transiently and retry on its own — the failure is still logged to
-// console either way. (No current caller needs this, but the option's kept
-// since live state used to be one before it moved to the SSE stream below.)
-//
+// console either way.
 async function apiFetchJson(url, options, errorMessage) {
   let res;
   try {
@@ -41,84 +39,55 @@ async function apiFetchJson(url, options, errorMessage) {
   return data;
 }
 
-const jsonHeaders = {'Content-Type': 'application/json'};
+// A GET, or a POST with an optional JSON body. `errorMessage` starts the
+// toast shown if the call fails.
+const apiGet = (url, errorMessage) => apiFetchJson(url, {}, errorMessage);
+const apiPost = (url, body, errorMessage) => apiFetchJson(url, body === undefined ? {method: 'POST'} : {
+  method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+}, errorMessage);
 
 const api = {
-  config:             () => apiFetchJson('/config', {}, 'Could not load configuration'),
-  // Live state now arrives over /current_state/stream (see live-flap.js's
-  // startLiveUpdates) instead of being polled — no api.currentState() wrapper
-  // needed here anymore.
+  // Live state arrives over /current_state/stream (see startLiveUpdates in
+  // live-flap.js) rather than through a call here.
+  apps:               () => apiGet('/apps', 'Could not load app list'),
+  saveAppSettings:    (key, data) => apiPost(`/apps/${key}/settings`, data, 'Could not save app settings'),
+  runApp:             (key) => apiPost('/run_app', {app: key}, 'Could not start app'),
+  stopApp:            () => apiPost('/stop_app', undefined, 'Could not stop app'),
 
-  apps:               () => apiFetchJson('/apps', {}, 'Could not load app list'),
-  saveAppSettings:    (key, data) => apiFetchJson(`/apps/${key}/settings`, {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify(data)
-  }, 'Could not save app settings'),
-  runApp:             (key) => apiFetchJson('/run_app', {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({app:key})
-  }, 'Could not start app'),
-  stopApp:            () => apiFetchJson('/stop_app', {method:'POST'}, 'Could not stop app'),
+  globalFields:       () => apiGet('/global_fields', 'Could not load settings fields'),
+  getSettings:        () => apiGet('/settings', 'Could not load settings'),
+  saveGlobalSettings: (data) => apiPost('/settings', data, 'Could not save settings'),
+  toggleAutoHome:     (enabled) => apiPost('/toggle_autohome', {enabled}, 'Could not update auto-home'),
 
-  globalFields:       () => apiFetchJson('/global_fields', {}, 'Could not load settings fields'),
-  getSettings:        () => apiFetchJson('/settings', {}, 'Could not load settings'),
-  saveGlobalSettings: (data) => apiFetchJson('/settings', {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify(data)
-  }, 'Could not save settings'),
-  toggleAutoHome:     (enabled) => apiFetchJson('/toggle_autohome', {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({enabled})
-  }, 'Could not update auto-home'),
+  updatePlaylist:     (pages, delay) => apiPost('/update_playlist', {pages, delay}, 'Could not push to display'),
+  playlists:          () => apiGet('/playlists', 'Could not load saved playlists'),
+  savePlaylist:       (name, pages, delay) => apiPost('/playlists', {name, pages, delay}, 'Could not save playlist'),
+  deletePlaylist:     (name) => apiFetchJson(`/playlists/${encodeURIComponent(name)}`, {method: 'DELETE'},
+                                             'Could not delete playlist'),
 
-  updatePlaylist:     (pages, delay) => apiFetchJson('/update_playlist', {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({pages, delay})
-  }, 'Could not push to display'),
+  adjustOffset:       (modId, delta) => apiPost(`/modules/${modId}/adjust`, {delta}, 'Could not adjust offset'),
+  homeModule:         (modId) => apiPost(`/modules/${modId}/home`, undefined, 'Could not home module'),
+  identifyModule:     (modId) => apiPost(`/modules/${modId}/identify`, undefined, 'Could not identify module'),
+  exerciseModule:     (modId, cycles) => apiPost(`/modules/${modId}/exercise`, {cycles}, 'Could not start exercise'),
+  stopModule:         (modId) => apiPost(`/modules/${modId}/stop`, undefined, 'Could not stop module'),
+  rebootModule:       (modId) => apiPost(`/modules/${modId}/reboot`, undefined, 'Could not reboot module'),
+  resetModuleSettings:(modId) => apiPost(`/modules/${modId}/reset_settings`, undefined, 'Could not reset module settings'),
+  calibrateModule:    (modId) => apiPost(`/modules/${modId}/calibrate`, undefined, 'Calibration failed'),
+  syncModule:         (modId) => apiPost(`/modules/${modId}/sync`, undefined, 'Sync failed'),
+  syncAllModules:     () => apiPost('/modules/sync_all', undefined, 'Sync failed'),
+  setModuleSetting:   (modId, setting, value) => apiPost(`/modules/${modId}/setting`, {setting, value},
+                                                      'Could not update module setting'),
+  setTotalSteps:      (modId, steps) => apiPost(`/modules/${modId}/total_steps`, {steps}, 'Could not set total steps'),
+  showOnModule:       (modId, payload) => apiPost(`/modules/${modId}/display`, payload, 'Could not update module display'),
+  gotoStep:           (modId, step) => apiPost(`/modules/${modId}/goto_step`, {step}, 'Could not move module'),
+  homeAll:            () => apiGet('/home_all', 'Could not home all modules'),
+  provisionModule:    (id) => apiPost('/provision_module', {id}, 'Could not provision module'),
 
-  playlists:          () => apiFetchJson('/playlists', {}, 'Could not load saved playlists'),
-  savePlaylist:       (name, pages, delay) => apiFetchJson('/playlists', {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({name, pages, delay})
-  }, 'Could not save playlist'),
-  deletePlaylist:     (name) => apiFetchJson(`/playlists/${encodeURIComponent(name)}`, {method:'DELETE'}, 'Could not delete playlist'),
+  firmwareConfig:     () => apiGet('/firmware_config', 'Could not load firmware settings'),
+  saveFirmwareConfig: (values) => apiPost('/firmware_config', values, 'Could not apply firmware settings'),
 
-  adjustOffset:       (modId, delta) => apiFetchJson(`/modules/${modId}/adjust`, {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({delta})
-  }, 'Could not adjust offset'),
-  homeModule:         (modId) => apiFetchJson(`/modules/${modId}/home`, {method:'POST'}, 'Could not home module'),
-  identifyModule:     (modId) => apiFetchJson(`/modules/${modId}/identify`, {method:'POST'}, 'Could not identify module'),
-  exerciseModule:     (modId, cycles) => apiFetchJson(`/modules/${modId}/exercise`, {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({cycles})
-  }, 'Could not start exercise'),
-  stopModule:         (modId) => apiFetchJson(`/modules/${modId}/stop`, {method:'POST'}, 'Could not stop module'),
-  rebootModule:       (modId) => apiFetchJson(`/modules/${modId}/reboot`, {method:'POST'}, 'Could not reboot module'),
-  resetModuleSettings:(modId) => apiFetchJson(`/modules/${modId}/reset_settings`, {method:'POST'}, 'Could not reset module settings'),
-  calibrateModule:    (modId) => apiFetchJson(`/modules/${modId}/calibrate`, {method:'POST'}, 'Calibration failed'),
-  syncModule:         (modId) => apiFetchJson(`/modules/${modId}/sync`, {method:'POST'}, 'Sync failed'),
-  syncAllModules:     () => apiFetchJson('/modules/sync_all', {method:'POST'}, 'Sync failed'),
-  setModuleSetting:   (modId, setting, value) => apiFetchJson(`/modules/${modId}/setting`, {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({setting, value})
-  }, 'Could not update module setting'),
-  setTotalSteps:      (modId, steps) => apiFetchJson(`/modules/${modId}/total_steps`, {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({steps})
-  }, 'Could not set total steps'),
-  showOnModule:       (modId, payload) => apiFetchJson(`/modules/${modId}/display`, {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify(payload)
-  }, 'Could not update module display'),
-  gotoStep:           (modId, step) => apiFetchJson(`/modules/${modId}/goto_step`, {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({step})
-  }, 'Could not move module'),
-  homeAll:            () => apiFetchJson('/home_all', {}, 'Could not home all modules'),
+  backupSettings:     () => apiGet('/backup_settings', 'Could not generate backup'),
+  restoreSettings:    (data) => apiPost('/restore_settings', data, 'Restore failed'),
 
-  firmwareConfig:     () => apiFetchJson('/firmware_config', {}, 'Could not load firmware settings'),
-  saveFirmwareConfig: (values) => apiFetchJson('/firmware_config', {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify(values)
-  }, 'Could not apply firmware settings'),
-
-  backupSettings:     () => apiFetchJson('/backup_settings', {}, 'Could not generate backup'),
-  restoreSettings:    (data) => apiFetchJson('/restore_settings', {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify(data)
-  }, 'Restore failed'),
-  provisionModule:    (id) => apiFetchJson('/provision_module', {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({id})
-  }, 'Could not provision module'),
-  dumpFormat:         () => apiFetchJson('/serial/dump_format', {}, 'Could not load the dump format'),
-  serialSend:         (cmd) => apiFetchJson('/serial/send', {
-    method:'POST', headers: jsonHeaders, body: JSON.stringify({cmd})
-  }, 'Could not send serial command'),
+  serialSend:         (cmd) => apiPost('/serial/send', {cmd}, 'Could not send serial command'),
 };

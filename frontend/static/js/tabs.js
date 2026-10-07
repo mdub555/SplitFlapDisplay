@@ -1,15 +1,8 @@
-/**
- * tabs.js
- *
- * Handles the top-level tab switching functionality.
- */
-
-function switchTab(el) {
-  const name = el.dataset.tab;
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  document.getElementById('page-' + name).classList.add('active');
+// Switching between the pages with the tab bar.
+function switchTab(button) {
+  const name = button.dataset.tab;
+  document.querySelectorAll('.tab-btn').forEach(tab => tab.classList.toggle('active', tab === button));
+  document.querySelectorAll('.page').forEach(page => page.classList.toggle('active', page.id === `page-${name}`));
   if (name === 'tuning') loadTuningData();
   if (name === 'apps') buildAppsGrid();
 }

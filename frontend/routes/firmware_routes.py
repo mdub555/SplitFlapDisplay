@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify
 from settings.store import settings, save_settings
 from display.serial_link import send_raw
 from display.module_protocol import GLOBAL_SETTINGS, global_command
+from routes.common import error, is_int
 
 bp = Blueprint('firmware_routes', __name__)
 
@@ -29,8 +30,7 @@ def _validate(key, value):
     if spec['type'] == 'bool':
         # Strict: bool("false") is True, so stringly-typed values must not slip through.
         return None if isinstance(value, bool) else f'{key} must be true or false'
-    # bool is a subclass of int; true/false must not pass as 1/0.
-    if not isinstance(value, int) or isinstance(value, bool) or not spec['min'] <= value <= spec['max']:
+    if not is_int(value) or not spec['min'] <= value <= spec['max']:
         return f"{key} must be an integer from {spec['min']} to {spec['max']}"
     return None
 
@@ -45,11 +45,11 @@ def firmware_config():
 
     data = request.json
     if not isinstance(data, dict) or not data:
-        return jsonify(status='error', message='No settings provided'), 400
+        return error('No settings provided', 400)
     for key, value in data.items():
-        error = _validate(key, value)
-        if error:
-            return jsonify(status='error', message=error), 400
+        problem = _validate(key, value)
+        if problem:
+            return error(problem, 400)
 
     settings['firmware'] = {**_current_values(), **data}
     save_settings(settings)

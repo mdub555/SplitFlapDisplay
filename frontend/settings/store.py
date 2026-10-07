@@ -2,7 +2,7 @@ import json
 import logging
 import os
 
-from config import CONFIG_PATH, NUM_MODULES
+from config import CONFIG_PATH
 from display.module_protocol import GLOBAL_SETTINGS
 from settings.schema import GLOBAL_FIELDS
 

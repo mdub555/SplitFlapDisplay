@@ -1,8 +1,39 @@
-.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.82);display:none;align-items:center;justify-content:center;z-index:200;padding:16px}
-.modal-content{background:var(--panel);padding:24px;border-radius:12px;border:2px solid var(--accent);width:100%;max-width:380px;max-height:90vh;overflow-y:auto}
-.modal-content input,.modal-content select{width:100%;background:#111;color:#fff;border:1px solid #555;border-radius:6px;padding:8px 10px;font-size:.95rem;margin-bottom:4px}
-.modal-content textarea{width:100%;background:#111;color:#0f0;border:1px solid #555;border-radius:6px;padding:8px 10px;font-size:.85rem;margin-bottom:4px;font-family:'Courier New',monospace;resize:vertical;min-height:140px;line-height:1.4}
-.modal-content textarea:focus{outline:none;border-color:var(--accent)}
-.modal-content select option{background:#222}
-.modal-field{margin-bottom:14px}
-.modal-field label{display:block;color:#aaa;font-size:.83rem;margin-bottom:5px}
+/* The app settings modal. */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, .82);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+
+.modal-content {
+  background: var(--panel);
+  padding: 24px;
+  border-radius: 12px;
+  border: 2px solid var(--accent);
+  width: 100%;
+  max-width: 380px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-title {
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+.modal-field {
+  margin-bottom: 14px;
+}
+
+.modal-content .button-row {
+  margin-top: 16px;
+}

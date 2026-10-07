@@ -183,7 +183,8 @@ async function main() {
   check('inspector shows the revolution count', document.getElementById('inspectRevolutions').textContent === '12,345');
   const timing = document.getElementById('inspectTiming');
   check('inspector shows the timing the module reported',
-    timing.textContent.startsWith('From last sync: step 1000 µs · homing 1800 µs · debounce 100 ms · ramp start 3000 µs · ramp 0 steps · settle 0 ms · stagger 120 ms'));
+    timing.textContent.startsWith('From last sync: step delay 1000 µs · homing step delay 1800 µs · debounce 100 ms · ' +
+      'ramp start delay 3000 µs · ramp length 0 steps · settle 0 ms · stagger 120 ms'));
   const flagged = [...timing.querySelectorAll('.mismatch')].map(s => s.dataset.key);
   check('only values that differ from the shared settings are highlighted',
     flagged.length === 1 && flagged[0] === 'staggerMs');

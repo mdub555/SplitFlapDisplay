@@ -3,13 +3,11 @@ from datetime import datetime
 import pytz
 import requests
 
-from apps.base import App, Frame, SettingField
-from apps.builtin._shared import cache_get_or_fetch, center_page
+from apps.base import App, SettingField
+from apps.builtin._shared import cache_get_or_fetch, row_frames
 
 
-def _fetch(settings):
-    stop = settings.get('mbta_stop', 'place-bbsta')
-    route = settings.get('mbta_route', 'Orange')
+def _fetch(stop, route):
     url = (f"https://api-v3.mbta.com/predictions"
            f"?filter[stop]={stop}&filter[route]={route}&page[limit]=20&sort=departure_time")
     try:
@@ -44,10 +42,11 @@ class MetroApp(App):
     icon = '🚇'
     desc = 'MBTA arrivals'
     settings_fields = [
-        SettingField('mbta_stop', 'Stop ID (e.g. place-NSTAT)', placeholder='place-NSTAT'),
-        SettingField('mbta_route', 'Route (e.g. Orange)', placeholder='Orange'),
+        SettingField('mbta_stop', 'Stop ID (e.g. place-NSTAT)', default='place-bbsta', placeholder='place-NSTAT'),
+        SettingField('mbta_route', 'Route (e.g. Orange)', default='Orange', placeholder='Orange'),
     ]
 
     def get_pages(self, settings, cache):
-        rows = cache_get_or_fetch(cache, 'metro', 30, lambda: _fetch(settings))
-        return [Frame(text=center_page(*rows), delay=5)]
+        stop = self.setting(settings, 'mbta_stop')
+        route = self.setting(settings, 'mbta_route')
+        return row_frames([cache_get_or_fetch(cache, 'metro', 30, lambda: _fetch(stop, route))], delay=5)

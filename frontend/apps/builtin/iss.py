@@ -2,8 +2,8 @@ import logging
 
 import requests
 
-from apps.base import App, Frame
-from apps.builtin._shared import cache_get_or_fetch, center_page
+from apps.base import App
+from apps.builtin._shared import cache_get_or_fetch, row_frames
 
 
 def _fetch(settings):
@@ -33,5 +33,4 @@ class IssApp(App):
     desc = 'Space station'
 
     def get_pages(self, settings, cache):
-        rows = cache_get_or_fetch(cache, 'iss', 5, lambda: _fetch(settings))
-        return [Frame(text=center_page(*rows), delay=5)]
+        return row_frames([cache_get_or_fetch(cache, 'iss', 5, lambda: _fetch(settings))], delay=5)

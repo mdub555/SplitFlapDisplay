@@ -4,24 +4,24 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 
-// The real dump layout (module_protocol.dump_format()), so the debug panel is
-// tested against what the backend actually serves.
-const DUMP_FORMAT = JSON.parse(require('child_process').execFileSync('python3', ['-c',
-  'import json, sys; sys.path.insert(0, "."); ' +
-  'from display.module_protocol import dump_format; print(json.dumps(dump_format()))'],
-  { cwd: ROOT, encoding: 'utf8' }));
+// The page exactly as Flask renders it (routes/pages.py), including the
+// CONFIG it carries.
+let html = require('child_process').execFileSync('python3', ['-c', `
+import sys
+sys.path.insert(0, '.')
+from flask import Flask
+from routes import pages
+app = Flask('harness', template_folder='templates', static_folder='static')
+app.register_blueprint(pages.bp)
+with app.test_request_context():
+    sys.stdout.write(pages.index())
+`], { cwd: ROOT, encoding: 'utf8' });
 
-// Strip Jinja url_for(...) calls AND the original <script src="..."> tags —
-// we'll inject equivalent inline <script> elements ourselves so jsdom
-// executes them as real Script elements (sharing top-level let/const across
-// files, exactly like a browser), rather than needing a network/file resource
-// loader for the src= URLs.
-let html = fs.readFileSync(path.join(ROOT, 'templates/index.html'), 'utf8');
-html = html.replace(/\{\{\s*url_for\([^}]*filename='([^']+)'\)\s*\}\}/g, '/static/$1');
+// The page's own <script src> tags are swapped for inline <script> elements
+// below, so jsdom runs them as real scripts (sharing top-level let/const
+// across files, exactly like a browser) without needing a resource loader.
+const scriptFiles = [...html.matchAll(/<script src="\/(static\/js\/[^"]+)"><\/script>/g)].map(m => m[1]);
 html = html.replace(/<script src="[^"]*"><\/script>\s*/g, '');
-// Loops filled in by Flask (the serial debug panel's quick commands) have no
-// data here; drop them rather than leave template syntax in the page.
-html = html.replace(/\{%\s*for[\s\S]*?\{%\s*endfor\s*%\}/g, '');
 
 const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'http://localhost/' });
 const { window } = dom;
@@ -83,9 +83,6 @@ window.fetch = async (url, options = {}) => {
     json: async () => data,
   });
 
-  if (url === '/config') {
-    return ok({ grid_rows: 4, grid_cols: 16, num_modules: 64, hardware_connected: false });
-  }
   if (url === '/apps') {
     return ok([
       { key: 'weather', name: 'Weather', icon: '🌤️', desc: 'Current conditions',
@@ -156,9 +153,6 @@ window.fetch = async (url, options = {}) => {
   if (url === '/toggle_autohome') {
     return ok({ status: 'Auto-home updated' });
   }
-  if (url === '/serial/dump_format') {
-    return ok(DUMP_FORMAT);
-  }
   if (url === '/firmware_config') {
     if (options.method === 'POST') return ok({ status: 'success', values: JSON.parse(options.body) });
     return ok({
@@ -186,17 +180,8 @@ window.fetch = async (url, options = {}) => {
   throw new Error(`Unmocked fetch: ${url}`);
 };
 
-// Load every JS file as a real <script> element, in the same order as
-// index.html, so top-level const/let declarations are shared across files
-// exactly the way real browser <script> tags share one global lexical
-// environment (unlike window.eval(), which scopes let/const per call).
-const files = [
-  'static/js/actions.js', 'static/js/constants.js', 'static/js/toast.js',
-  'static/js/api.js', 'static/js/live-flap.js', 'static/js/tabs.js',
-  'static/js/control.js', 'static/js/apps.js', 'static/js/app-settings-modal.js',
-  'static/js/tuning.js', 'static/js/main.js', 'static/js/debug.js',
-];
-for (const f of files) {
+// Load the page's scripts in its order.
+for (const f of scriptFiles) {
   const scriptEl = window.document.createElement('script');
   scriptEl.textContent = fs.readFileSync(path.join(ROOT, f), 'utf8');
   window.document.head.appendChild(scriptEl);

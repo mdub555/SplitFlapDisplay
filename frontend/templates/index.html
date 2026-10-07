@@ -4,41 +4,76 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Split-Flap OS</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/control.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/apps.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/tuning.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modals.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/debug.css') }}">
+{% for sheet in ['base', 'control', 'apps', 'tuning', 'modals', 'debug'] %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/' + sheet + '.css') }}">
+{% endfor %}
 </head>
 <body>
+
+{# ── Macros for the blocks the page repeats ── #}
+
+{# The running-app banner and the live display, shown on the Control and Apps pages. #}
+{% macro live_display(page) %}
+  <div id="{{ page }}-banner" class="active-app-banner">
+    <div class="pulse-dot"></div>
+    <span class="aab-label">▶ <span id="{{ page }}-app-name">APP</span> is running</span>
+    <button class="aab-stop" data-onclick="stopApp">⏹ STOP</button>
+  </div>
+
+  <div class="section-label">LIVE DISPLAY</div>
+  <div class="preview-wrapper live-wrapper">
+    <div class="preview-grid live-grid-{{ page }}"></div>
+    <div class="homing-overlay" id="homing-{{ page }}">HOMING REQUIRED</div>
+  </div>
+{% endmacro %}
+
+{# A labelled on/off switch. #}
+{% macro toggle_row(input_id, name, hint='', attrs={}) %}
+  <div class="toggle-row">
+    <div>
+      <span class="toggle-name">{{ name }}</span>
+      {% if hint %}<span class="hint">{{ hint }}</span>{% endif %}
+    </div>
+    <label class="switch"><input type="checkbox" id="{{ input_id }}"{{ attrs | xmlattr }}><span class="slider"></span></label>
+  </div>
+{% endmacro %}
+
+{# A manual-control row in the inspector: label, number/text input and buttons. #}
+{% macro manual_row(input_id, label, buttons, type='number', attrs={}) %}
+  <div class="manual-row">
+    <label class="manual-label" for="{{ input_id }}">{{ label }}</label>
+    <input type="{{ type }}" class="input" id="{{ input_id }}"{{ attrs | xmlattr }}>
+    {% for text, action in buttons %}
+    <button class="btn btn-secondary btn-sm" data-onclick="{{ action }}">{{ text }}</button>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
 <div class="container">
 
   <!-- TAB BAR -->
   <div class="tab-bar">
-    <button id="tab-control" class="tab-btn active" data-onclick="switchTab" data-tab="control">
-      <span class="tab-label-full">CONTROL</span><span class="tab-label-short">CTRL</span>
+    {% for tab, full, short, action in [
+         ('control', 'CONTROL', 'CTRL', 'switchTab'),
+         ('apps', 'APPS', 'APPS', 'switchTab'),
+         ('tuning', 'TUNING &amp; SETTINGS', 'TUNE', 'switchTab'),
+         ('debug', 'SERIAL DEBUG', 'DBG', 'toggleDebug')] %}
+    <button id="tab-{{ tab }}" class="tab-btn{% if loop.first %} active{% endif %}"
+            data-onclick="{{ action }}" data-tab="{{ tab }}">
+      <span class="tab-label-full">{{ full | safe }}</span><span class="tab-label-short">{{ short }}</span>
     </button>
-    <button id="tab-apps" class="tab-btn" data-onclick="switchTab" data-tab="apps">
-      <span class="tab-label-full">APPS</span><span class="tab-label-short">APPS</span>
-    </button>
-    <button id="tab-tuning" class="tab-btn" data-onclick="switchTab" data-tab="tuning">
-      <span class="tab-label-full">TUNING &amp; SETTINGS</span><span class="tab-label-short">TUNE</span>
-    </button>
-    <button id="tab-debug" class="tab-btn" data-onclick="toggleDebug">
-      <span class="tab-label-full">SERIAL DEBUG</span><span class="tab-label-short">DBG</span>
-    </button>
+    {% endfor %}
   </div>
 
   <!-- ══════════ DEBUG PANEL ══════════ -->
   <div id="debug-panel" class="debug-panel">
     <div class="debug-panel-header">
-      <h3 style="margin:0; font-size: 0.9rem;">SERIAL DEBUG</h3>
-      <button class="btn btn-sm" data-onclick="toggleDebug">CLOSE</button>
+      <h3 class="debug-title">SERIAL DEBUG</h3>
+      <button class="btn btn-secondary btn-sm" data-onclick="toggleDebug">CLOSE</button>
     </div>
     <div class="debug-panel-content">
       <div class="debug-command-row">
-        <select class="debug-cmd-select">
+        <select class="input debug-cmd-select">
           <option value="">-- Quick Command --</option>
           {% for cmd, label in debug_commands %}
           <option value="{{ cmd }}">{{ label }} ({{ cmd }})</option>
@@ -46,80 +81,66 @@
         </select>
       </div>
       <div class="debug-command-row">
-        <input type="text" class="debug-cmd-input" placeholder="Arbitrary command...">
+        <input type="text" class="input debug-cmd-input" placeholder="Arbitrary command...">
         <button class="btn btn-primary btn-sm debug-cmd-send">SEND</button>
       </div>
       <div class="debug-log"></div>
     </div>
   </div>
 
-
   <!-- Shown only while the live-state stream (SSE) is disconnected — the
        browser retries automatically, this is just so a dropped connection
        is visibly different from "genuinely nothing is happening." -->
   <div id="streamStatus" class="stream-status">
-    <div class="stream-status-dot"></div>
+    <div class="pulse-dot"></div>
     <span>Reconnecting to display…</span>
   </div>
 
   <!-- ══════════ CONTROL PAGE ══════════ -->
   <div id="page-control" class="page active">
-    <div id="control-banner" class="active-app-banner">
-      <div class="aab-dot"></div>
-      <span class="aab-label">▶ <span id="control-app-name">APP</span> is running</span>
-      <button class="aab-stop" data-onclick="stopApp">⏹ STOP</button>
-    </div>
-
-    <div class="section-label">LIVE DISPLAY</div>
-    <div class="preview-wrapper" style="position:relative;margin-bottom:18px">
-      <div class="preview-grid live-grid-control"></div>
-      <div class="homing-overlay" id="homing-control">HOMING REQUIRED</div>
-    </div>
+    {{ live_display('control') }}
 
     <div class="section-label">COMPOSE</div>
     <div class="preview-wrapper"><div class="preview-grid" id="preview"></div></div>
 
     <div class="control-panel">
-      <label style="cursor:pointer"><input type="checkbox" id="modeToggle" data-onchange="toggleMultiMode"> <strong>Multi-Page Playlist</strong></label>
-      <label style="cursor:pointer"><input type="checkbox" id="centerToggle" data-onchange="updatePreview"> Center Text</label>
-      <button class="btn btn-secondary btn-sm" style="margin-left:auto" data-onclick="clearDisplay">Clear</button>
+      <label class="check-label"><input type="checkbox" id="modeToggle" data-onchange="toggleMultiMode"> <strong>Multi-Page Playlist</strong></label>
+      <label class="check-label"><input type="checkbox" id="centerToggle" data-onchange="updatePreview"> Center Text</label>
+      <button class="btn btn-secondary btn-sm push-right" data-onclick="clearDisplay">Clear</button>
     </div>
 
     <div class="color-palette" id="colorPalette"></div>
 
     <div id="lineInputs"></div>
 
-    <div id="multiControls" style="display:none" class="playlist-area">
-      <button class="btn btn-success" id="saveMsgBtn" style="width:100%" data-onclick="saveMessage">+ Add to Playlist</button>
-      <div id="playlistList" style="margin-top:12px"></div>
-      <div style="margin-top:12px;padding-top:10px;border-top:1px solid #444;display:flex;flex-wrap:wrap;gap:14px;align-items:center">
-        <label style="font-size:.85rem;color:#aaa;display:flex;align-items:center;gap:6px">
+    <div id="multiControls" class="panel" hidden>
+      <button class="btn btn-success btn-block" id="saveMsgBtn" data-onclick="saveMessage">+ Add to Playlist</button>
+      <div id="playlistList" class="playlist-list"></div>
+      <div class="playlist-defaults">
+        <label class="inline-field">
           Default delay
-          <input type="number" id="delayInput" value="5" min="0.5" max="60" step="0.5"
-            style="width:56px;padding:5px;background:#111;color:#fff;border:1px solid #555;border-radius:4px;text-align:center">
+          <input type="number" class="input input-num" id="delayInput" value="5" min="0.5" max="60" step="0.5">
           s
         </label>
-        <label style="font-size:.85rem;color:#aaa;display:flex;align-items:center;gap:6px">
+        <label class="inline-field">
           Default transition
-          <select id="styleInput" style="background:#111;color:#fff;border:1px solid #555;border-radius:4px;padding:5px 6px;font-size:.82rem"></select>
+          <select class="input" id="styleInput"></select>
         </label>
-        <label style="font-size:.85rem;color:#aaa;display:flex;align-items:center;gap:6px">
+        <label class="inline-field">
           Default speed
-          <input type="number" id="speedInput" value="15" min="0" max="500" step="5"
-            style="width:56px;padding:5px;background:#111;color:#fff;border:1px solid #555;border-radius:4px;text-align:center">
+          <input type="number" class="input input-num" id="speedInput" value="15" min="0" max="500" step="5">
           ms/module
         </label>
       </div>
     </div>
 
-    <button class="btn btn-primary" data-onclick="sync">PUSH TO DISPLAY</button>
+    <button class="btn btn-primary btn-push" data-onclick="sync">PUSH TO DISPLAY</button>
 
-    <!-- Saved Playlists -->
-    <div class="playlist-area" style="margin-top:18px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-        <h3 style="margin:0;font-size:.95rem">📂 Saved Playlists</h3>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="text" id="savePlaylistName" placeholder="Playlist name…" style="background:#111;color:#fff;border:1px solid #555;padding:6px 10px;border-radius:4px;width:150px;font-size:.85rem">
+    <div class="panel saved-playlists">
+      <div class="section-head">
+        <h3>📂 Saved Playlists</h3>
+        <div class="row">
+          <input type="text" class="input" id="savePlaylistName" placeholder="Playlist name…">
           <button class="btn btn-success btn-sm" data-onclick="saveCurrentPlaylist">Save</button>
         </div>
       </div>
@@ -129,20 +150,10 @@
 
   <!-- ══════════ APPS PAGE ══════════ -->
   <div id="page-apps" class="page">
-    <div id="apps-banner" class="active-app-banner">
-      <div class="aab-dot"></div>
-      <span class="aab-label">▶ <span id="apps-app-name">APP</span> is running</span>
-      <button class="aab-stop" data-onclick="stopApp">⏹ STOP</button>
-    </div>
+    {{ live_display('apps') }}
 
-    <div class="section-label">LIVE DISPLAY</div>
-    <div class="preview-wrapper" style="position:relative;margin-bottom:18px">
-      <div class="preview-grid live-grid-apps"></div>
-      <div class="homing-overlay" id="homing-apps">HOMING REQUIRED</div>
-    </div>
-
-    <h3 style="margin-bottom:4px">Available Apps</h3>
-    <p style="color:#888;margin-top:0;font-size:.85rem">Tap to launch · ⚙️ to configure</p>
+    <h3 class="apps-title">Available Apps</h3>
+    <p class="note">Tap to launch · ⚙️ to configure</p>
 
     <div class="apps-grid" id="appsGrid">
       <!-- Populated from /apps by apps.js -->
@@ -153,104 +164,67 @@
   <div id="page-tuning" class="page">
 
     <!-- Hardware Inspector -->
-    <div class="config-section" style="border-left:5px solid var(--accent)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-        <h3 style="margin:0">Hardware Inspector</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="config-section config-section-main">
+      <div class="section-head">
+        <h3>Hardware Inspector</h3>
+        <div class="row">
           <button class="btn btn-success btn-sm" data-onclick="provisionModule">+ ADD MODULE</button>
           <button class="btn btn-success btn-sm" data-onclick="syncAllFromHardware">SYNC ALL (EEPROM)</button>
           <button class="btn btn-warning btn-sm" data-onclick="homeAll">HOME ALL</button>
         </div>
       </div>
 
-      <div id="modMatrixWrap">
-        <div class="mod-matrix" id="modMatrix"></div>
-      </div>
+      <div class="mod-matrix" id="modMatrix"></div>
 
-      <div class="inspector-panel" id="inspectorPanel" style="display:none">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <h3 style="margin:0;color:#fff" id="inspectTitle">MODULE 00</h3>
+      <div class="inspector-panel" id="inspectorPanel" hidden>
+        <div class="section-head">
+          <h3 id="inspectTitle">MODULE 00</h3>
           <button class="btn btn-secondary btn-sm" data-onclick="syncOneFromHardware">Sync EEPROM</button>
         </div>
         <div class="inspector-stats">
-          <div class="stat-box"><span class="stat-label">Home Offset</span><span class="stat-val" id="inspectOffset">2832</span></div>
-          <div class="stat-box"><span class="stat-label">Total Steps</span><span class="stat-val" id="inspectCalib" style="color:var(--orange)">4096</span></div>
+          <div class="stat-box"><span class="stat-label">Home Offset</span><span class="stat-val" id="inspectOffset">---</span></div>
+          <div class="stat-box"><span class="stat-label">Total Steps</span><span class="stat-val stat-val-alt" id="inspectCalib">---</span></div>
           <div class="stat-box" title="Lifetime reel revolutions, from the last sync. Saved every 16 revolutions, so up to 15 can be lost at power-off."><span class="stat-label">Revolutions</span><span class="stat-val" id="inspectRevolutions">---</span></div>
           <div class="stat-box" title="Steps the module's position was off by at the last pass over the home sensor, from the last sync. Positive means missed steps: try a longer step delay or a ramp."><span class="stat-label">Drift</span><span class="stat-val" id="inspectDrift">---</span></div>
         </div>
         <div class="module-timing" id="inspectTiming"></div>
         <div class="adj-controls">
-          <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="-32">-32</button>
-          <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="-16">-16</button>
-          <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="-4">-4</button>
-          <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="-1">-1</button>
-          <span style="color:#888;display:flex;align-items:center;padding:0 8px;font-size:.85rem">OFFSET</span>
-          <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="1">+1</button>
-          <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="4">+4</button>
-          <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="16">+16</button>
-          <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="32">+32</button>
+          {% for delta in [-32, -16, -4, -1] %}
+          <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="{{ delta }}">{{ delta }}</button>
+          {% endfor %}
+          <span class="adj-label">OFFSET</span>
+          {% for delta in [1, 4, 16, 32] %}
+          <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="{{ delta }}">+{{ delta }}</button>
+          {% endfor %}
         </div>
-        <div style="text-align:center;color:#666;font-size:.75rem;margin-top:-6px">(Saves instantly; press Home to verify)</div>
-        <div class="module-toggles" id="moduleToggles">
-          <div class="toggle-row">
-            <div>
-              <span class="toggle-name">Auto-home on boot</span>
-              <span class="toggle-hint">Find the home flap whenever this module powers up</span>
-            </div>
-            <label class="switch"><input type="checkbox" id="modToggle-autoHome" data-onchange="toggleModuleSetting" data-setting="autoHome"><span class="slider"></span></label>
-          </div>
-          <div class="toggle-row">
-            <div>
-              <span class="toggle-name">Motor clockwise</span>
-              <span class="toggle-hint">Off = counter-clockwise. Only change this if the reel turns the wrong way</span>
-            </div>
-            <label class="switch"><input type="checkbox" id="modToggle-motorClockwise" data-onchange="toggleModuleSetting" data-setting="motorClockwise"><span class="slider"></span></label>
-          </div>
-          <div class="toggle-row">
-            <div>
-              <span class="toggle-name">Release motor when idle</span>
-              <span class="toggle-hint">Cut coil power after each move so the motor runs cooler</span>
-            </div>
-            <label class="switch"><input type="checkbox" id="modToggle-motorRelease" data-onchange="toggleModuleSetting" data-setting="motorRelease"><span class="slider"></span></label>
-          </div>
+        <div class="adj-hint">(Saves instantly; press Home to verify)</div>
+        <div class="inset-box" id="moduleToggles">
+          {% for key, toggle in module_toggles.items() %}
+          {{ toggle_row('modToggle-' + key, toggle.label, toggle.hint,
+                        {'data-onchange': 'toggleModuleSetting', 'data-setting': key}) }}
+          {% endfor %}
         </div>
-        <div class="manual-controls" id="manualControls">
-          <div class="manual-row">
-            <label class="manual-label" for="totalStepsInput">Total steps per revolution</label>
-            <input type="number" id="totalStepsInput" min="1" max="32767" step="1">
-            <button class="btn btn-secondary btn-sm" data-onclick="setTotalSteps">SET</button>
-          </div>
-          <div class="manual-row">
-            <label class="manual-label" for="showCharInput">Show character</label>
-            <input type="text" id="showCharInput" placeholder="A, 7, 🟥…" autocomplete="off">
-            <button class="btn btn-secondary btn-sm" data-onclick="showChar">SHOW</button>
-          </div>
-          <div class="manual-row">
-            <label class="manual-label" for="showIndexInput">Show flap index (0–63)</label>
-            <input type="number" id="showIndexInput" min="0" max="63" step="1">
-            <button class="btn btn-secondary btn-sm" data-onclick="showIndex">SHOW</button>
-          </div>
-          <div class="manual-row">
-            <label class="manual-label" for="gotoStepInput">Go to step</label>
-            <input type="number" id="gotoStepInput" min="0" step="1">
-            <button class="btn btn-secondary btn-sm" data-onclick="gotoStep">GO</button>
-          </div>
-          <div class="manual-row">
-            <label class="manual-label" for="exerciseInput">Exercise (cycles, 1–255)</label>
-            <input type="number" id="exerciseInput" min="1" max="255" step="1" value="1">
-            <button class="btn btn-secondary btn-sm" data-onclick="exerciseSelected">RUN</button>
-            <button class="btn btn-secondary btn-sm" data-onclick="stopSelected">STOP</button>
-          </div>
-          <span class="toggle-hint">Setting total steps only writes the module's EEPROM; home the module afterwards. Go to step only moves forward from the current position (wrapping at total steps). Exercise steps through every flap one at a time, round the reel the given number of times; STOP (or any other move) ends it.</span>
+        <div class="inset-box" id="manualControls">
+          {% set last_flap = config.flap_chars | length - 1 %}
+          {{ manual_row('totalStepsInput', 'Total steps per revolution', [('SET', 'setTotalSteps')],
+                        attrs={'min': 1, 'max': 32767, 'step': 1}) }}
+          {{ manual_row('showCharInput', 'Show character', [('SHOW', 'showChar')],
+                        type='text', attrs={'placeholder': 'A, 7, 🟥…', 'autocomplete': 'off'}) }}
+          {{ manual_row('showIndexInput', 'Show flap index (0–' ~ last_flap ~ ')', [('SHOW', 'showIndex')],
+                        attrs={'min': 0, 'max': last_flap, 'step': 1}) }}
+          {{ manual_row('gotoStepInput', 'Go to step', [('GO', 'gotoStep')], attrs={'min': 0, 'step': 1}) }}
+          {{ manual_row('exerciseInput', 'Exercise (cycles, 1–255)', [('RUN', 'exerciseSelected'), ('STOP', 'stopSelected')],
+                        attrs={'min': 1, 'max': 255, 'step': 1, 'value': 1}) }}
+          <span class="hint">Setting total steps only writes the module's EEPROM; home the module afterwards. Go to step only moves forward from the current position (wrapping at total steps). Exercise steps through every flap one at a time, round the reel the given number of times; STOP (or any other move) ends it.</span>
         </div>
-        <div style="display:flex;gap:10px;margin-top:4px">
-          <button class="btn" style="flex:1;background:#444;color:#fff" data-onclick="homeSelected">HOME MOTOR</button>
-          <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
-          <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="identifySelected" title="Blink this module's status LED for 10 seconds">IDENTIFY</button>
+        <div class="button-row">
+          <button class="btn btn-secondary" data-onclick="homeSelected">HOME MOTOR</button>
+          <button class="btn btn-ghost" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
+          <button class="btn btn-ghost" data-onclick="identifySelected" title="Blink this module's status LED for 10 seconds">IDENTIFY</button>
         </div>
-        <div style="display:flex;gap:10px;margin-top:4px">
-          <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="rebootSelected">REBOOT</button>
-          <button class="btn" style="flex:1;background:#333;color:#aaa;border:1px solid #555" data-onclick="resetSettingsSelected" title="Reset every setting on this module to its firmware default, keeping its ID">RESET SETTINGS</button>
+        <div class="button-row">
+          <button class="btn btn-ghost" data-onclick="rebootSelected">REBOOT</button>
+          <button class="btn btn-ghost" data-onclick="resetSettingsSelected" title="Reset every setting on this module to its firmware default, keeping its ID">RESET SETTINGS</button>
         </div>
       </div>
     </div>
@@ -258,79 +232,48 @@
     <!-- Firmware settings: identical on every module, sent to all of them by broadcast -->
     <div class="config-section">
       <h3>Module Timing &amp; Home Detection</h3>
-      <p style="color:#888;font-size:.85rem;margin-top:0">Shared by every module: saved here and sent to all modules at once (each keeps them in its EEPROM).</p>
+      <p class="note">Shared by every module: saved here and sent to all modules at once (each keeps them in its EEPROM).</p>
       <div class="settings-grid">
+        {% for key, spec in firmware_settings.items() %}
+        {% if spec.type == 'bool' %}
+        {{ toggle_row('fw-' + key, spec.label, spec.hint) }}
+        {% else %}
         <div>
-          <label class="field-label" for="fw-stepDelayUs">Step delay (µs)</label>
-          <input type="number" class="line-input" style="margin:0" id="fw-stepDelayUs" data-label="Step delay" step="1">
-          <span class="toggle-hint">Pause between motor steps during normal moves, in microseconds (1000 µs = 1 ms). Lower is faster; too low and the motor skips steps.</span>
+          <label class="field-label" for="fw-{{ key }}">{{ spec.label }} ({{ spec.unit }})</label>
+          <input type="number" class="input" id="fw-{{ key }}" data-label="{{ spec.label }}" step="1">
+          <span class="hint">{{ spec.hint }}</span>
         </div>
-        <div>
-          <label class="field-label" for="fw-homingStepDelayUs">Homing step delay (µs)</label>
-          <input type="number" class="line-input" style="margin:0" id="fw-homingStepDelayUs" data-label="Homing step delay" step="1">
-          <span class="toggle-hint">Pause between steps while homing and calibrating, in microseconds.</span>
-        </div>
-        <div>
-          <label class="field-label" for="fw-debounceMs">Home sensor debounce (ms)</label>
-          <input type="number" class="line-input" style="margin:0" id="fw-debounceMs" data-label="Debounce" step="1">
-          <span class="toggle-hint">Ignore repeat home-sensor triggers within this time. Raise it if home is detected more than once per rotation.</span>
-        </div>
-        <div class="toggle-row">
-          <div>
-            <span class="toggle-name">Recalculate home each rotation</span>
-            <span class="toggle-hint">On: every pass over the home sensor re-syncs the module's position. Off: position is only set while homing.</span>
-          </div>
-          <label class="switch"><input type="checkbox" id="fw-recalculateHome"><span class="slider"></span></label>
-        </div>
-        <div>
-          <label class="field-label" for="fw-rampStartDelayUs">Ramp start delay (µs)</label>
-          <input type="number" class="line-input" style="margin:0" id="fw-rampStartDelayUs" data-label="Ramp start delay" step="1">
-          <span class="toggle-hint">Step delay at the start and end of a move, in microseconds. Moves speed up from this to the step delay, and slow back down at the end.</span>
-        </div>
-        <div>
-          <label class="field-label" for="fw-rampSteps">Ramp length (steps)</label>
-          <input type="number" class="line-input" style="margin:0" id="fw-rampSteps" data-label="Ramp length" step="1">
-          <span class="toggle-hint">Steps spent speeding up and slowing down at each end of a move. 0 turns the ramp off.</span>
-        </div>
-        <div>
-          <label class="field-label" for="fw-settleMs">Settle time (ms)</label>
-          <input type="number" class="line-input" style="margin:0" id="fw-settleMs" data-label="Settle time" step="1">
-          <span class="toggle-hint">Keep the coils powered this long after a move so the flap stops swinging. Only applies when the motor is released when idle.</span>
-        </div>
-        <div>
-          <label class="field-label" for="fw-staggerMs">Startup stagger (ms per module)</label>
-          <input type="number" class="line-input" style="margin:0" id="fw-staggerMs" data-label="Startup stagger" step="1">
-          <span class="toggle-hint">After power-on, each module waits this long times its ID before auto-homing, so the motors don't all start at once. Takes effect at the next power-on.</span>
-        </div>
+        {% endif %}
+        {% endfor %}
       </div>
-      <button class="btn btn-secondary" style="margin-top:14px" data-onclick="applyFirmwareConfig">Apply to All Modules</button>
+      <button class="btn btn-secondary section-action" data-onclick="applyFirmwareConfig">Apply to All Modules</button>
     </div>
 
     <!-- Global Settings -->
     <div class="config-section">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+      <div class="section-head">
         <h3>Global Settings</h3>
-        <div style="display:flex;align-items:center;gap:10px;background:#2a2a2a;padding:8px 12px;border-radius:8px">
-          <span style="font-size:.85rem;color:#ccc">Auto-Home on Boot</span>
+        <div class="row pill">
+          <span>Auto-Home on Boot</span>
           <label class="switch"><input type="checkbox" id="autoHomeToggle" data-onchange="toggleAutoHome"><span class="slider"></span></label>
         </div>
       </div>
       <div class="settings-grid" id="globalSettingsGrid">
         <!-- Populated from /global_fields by tuning.js -->
       </div>
-      <button class="btn btn-secondary" style="margin-top:14px" data-onclick="saveGlobal">Save Settings</button>
+      <button class="btn btn-secondary section-action" data-onclick="saveGlobal">Save Settings</button>
     </div>
 
     <!-- Backup / Restore -->
     <div class="config-section">
       <h3>Calibration Backup &amp; Restore</h3>
-      <p style="color:#888;font-size:.85rem;margin-top:0">Export/import all home offsets, step calibrations and per-module toggles (auto-home, motor direction, motor release).</p>
+      <p class="note">Export/import all home offsets, step calibrations and per-module toggles (auto-home, motor direction, motor release).</p>
       <div class="backup-row">
         <button class="btn btn-secondary" data-onclick="downloadBackup">⬇ Download Backup JSON</button>
-        <div style="display:flex;gap:8px;align-items:center;flex:1">
-          <input type="file" id="backupFile" accept=".json" style="display:none" data-onchange="uploadBackup">
-          <button class="btn btn-warning" style="flex:1" data-onclick="triggerBackupFileInput">⬆ Restore from JSON</button>
-          <span id="restoreStatus" style="font-size:.8rem;color:#888"></span>
+        <div class="row grow">
+          <input type="file" id="backupFile" accept=".json" hidden data-onchange="uploadBackup">
+          <button class="btn btn-warning grow" data-onclick="triggerBackupFileInput">⬆ Restore from JSON</button>
+          <span id="restoreStatus" class="hint"></span>
         </div>
       </div>
     </div>
@@ -341,11 +284,11 @@
 <!-- ══════════ APP SETTINGS MODAL ══════════ -->
 <div class="modal-overlay" id="appSettingsModal">
   <div class="modal-content">
-    <h3 id="appSettingsTitle" style="color:var(--accent);margin-bottom:16px">App Settings</h3>
+    <h3 id="appSettingsTitle" class="modal-title">App Settings</h3>
     <div id="appSettingsFields"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-success" style="flex:1" data-onclick="saveAppSettings">Save &amp; Close</button>
-      <button class="btn" style="background:#333;color:#aaa;border:1px solid #555" data-onclick="closeAppSettings">Cancel</button>
+    <div class="button-row">
+      <button class="btn btn-success" data-onclick="saveAppSettings">Save &amp; Close</button>
+      <button class="btn btn-ghost btn-fit" data-onclick="closeAppSettings">Cancel</button>
     </div>
   </div>
 </div>
@@ -353,17 +296,10 @@
 <!-- TOAST -->
 <div class="toast-container" id="toastContainer"></div>
 
-<script src="{{ url_for('static', filename='js/actions.js') }}"></script>
-<script src="{{ url_for('static', filename='js/constants.js') }}"></script>
-<script src="{{ url_for('static', filename='js/toast.js') }}"></script>
-<script src="{{ url_for('static', filename='js/api.js') }}"></script>
-<script src="{{ url_for('static', filename='js/live-flap.js') }}"></script>
-<script src="{{ url_for('static', filename='js/tabs.js') }}"></script>
-<script src="{{ url_for('static', filename='js/control.js') }}"></script>
-<script src="{{ url_for('static', filename='js/apps.js') }}"></script>
-<script src="{{ url_for('static', filename='js/app-settings-modal.js') }}"></script>
-<script src="{{ url_for('static', filename='js/tuning.js') }}"></script>
-<script src="{{ url_for('static', filename='js/main.js') }}"></script>
-<script src="{{ url_for('static', filename='js/debug.js') }}"></script>
+<script>const CONFIG = {{ config | tojson }};</script>
+{% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control',
+                  'apps', 'app-settings-modal', 'tuning', 'debug', 'main'] %}
+<script src="{{ url_for('static', filename='js/' + script + '.js') }}"></script>
+{% endfor %}
 </body>
 </html>

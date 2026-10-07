@@ -12,6 +12,17 @@ def get_tz(settings):
     return pytz.timezone(settings.get('timezone', 'US/Eastern'))
 
 
+def clock(dt, spaced=True):
+    """The time as 9:05 PM (or 9:05PM, when not `spaced`)."""
+    return dt.strftime('%I:%M %p' if spaced else '%I:%M%p').lstrip('0')
+
+
+def split_list(text, limit=None):
+    """The non-empty items of a comma-separated setting, at most `limit`."""
+    items = [item.strip() for item in text.split(',') if item.strip()]
+    return items[:limit]
+
+
 def cache_get_or_fetch(cache, key, interval, fetch_fn):
     """Simple time-boxed cache: re-run fetch_fn only if `interval` seconds
     have passed since the last successful call for this key."""
@@ -21,10 +32,6 @@ def cache_get_or_fetch(cache, key, interval, fetch_fn):
         cache[key] = fetch_fn()
         cache[f'{key}_ts'] = now
     return cache[key]
-
-
-def pad(text, center=False):
-    return (text.center(NUM_MODULES) if center else text.ljust(NUM_MODULES))[:NUM_MODULES]
 
 
 def center_page(*rows):
@@ -38,15 +45,23 @@ def center_page(*rows):
     return format_lines(*([''] * top + rows + [''] * bottom))
 
 
-def matrix_burst_frames(reveal_page, reveal_style='center_out'):
+def row_frames(pages, delay):
+    """A centered frame for each page, where a page is a tuple of rows."""
+    return [Frame(text=center_page(*rows), delay=delay) for rows in pages]
+
+
+NOISE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$&?%*-+'
+
+
+def matrix_burst_frames(reveal_page, reveal_style='center_out', noise_delay=0.6, reveal_delay=5):
     """Three frames of random noise (using different animation orders so the
     cascade reads as scrambling from multiple directions) followed by a
     clean reveal frame. Shared by the Matrix animation app and the Demo app."""
-    chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$&?%*'
-    noise = lambda: ''.join(random.choice(chars) for _ in range(NUM_MODULES))
+    def noise():
+        return ''.join(random.choice(NOISE_CHARS) for _ in range(NUM_MODULES))
     return [
-        Frame(text=noise(), delay=0.6, style='random', raw=True),
-        Frame(text=noise(), delay=0.6, style='rain', raw=True),
-        Frame(text=noise(), delay=0.6, style='spiral', raw=True),
-        Frame(text=reveal_page, delay=5, style=reveal_style),
+        Frame(text=noise(), delay=noise_delay, style='random', raw=True),
+        Frame(text=noise(), delay=noise_delay, style='rain', raw=True),
+        Frame(text=noise(), delay=noise_delay, style='spiral', raw=True),
+        Frame(text=reveal_page, delay=reveal_delay, style=reveal_style),
     ]

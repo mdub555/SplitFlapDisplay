@@ -4,6 +4,52 @@ import threading
 from config import NUM_MODULES
 
 
+class _Subscribers:
+    """The queues of every open SSE stream for one kind of message.
+
+    With `latest_only`, each queue holds just the newest message: a client
+    that hasn't drained the previous one gets it replaced rather than a
+    backlog, since only the current state matters. Otherwise every message
+    is queued for every subscriber."""
+
+    def __init__(self, latest_only):
+        self._latest_only = latest_only
+        self._queues = set()   # a set, so unsubscribing on disconnect is O(1)
+        self._lock = threading.Lock()
+
+    def subscribe(self, first=None):
+        """A new queue for one client, starting with `first` if given. The
+        caller must unsubscribe() it once the client disconnects, or it leaks."""
+        q = queue.Queue(maxsize=1 if self._latest_only else 0)
+        if first is not None:
+            q.put_nowait(first)
+        with self._lock:
+            self._queues.add(q)
+        return q
+
+    def unsubscribe(self, q):
+        with self._lock:
+            self._queues.discard(q)
+
+    def publish(self, item):
+        with self._lock:
+            queues = list(self._queues)
+        for q in queues:
+            if not self._latest_only:
+                q.put(item)
+                continue
+            # Never block the publisher (often the playlist loop): drop a
+            # stalled client's stale message in favour of this one.
+            try:
+                q.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                q.put_nowait(item)
+            except queue.Full:
+                pass
+
+
 class DisplayState:
     """Central, lock-aware home for everything the playlist loop and the
     Flask routes both need to read or write. Replaces the ~10 loose
@@ -35,18 +81,8 @@ class DisplayState:
         # rather than finishing the current page's full delay first.
         self.stop_event = threading.Event()
 
-        # SSE subscribers for state updates. Each is a Queue(maxsize=1) holding only the latest
-        # snapshot — a client that hasn't drained the previous update yet
-        # gets it overwritten rather than queued, since nobody needs a
-        # backlog of intermediate flap states, only the most current one.
-        # Kept as a set (not a list) so unsubscribe on disconnect is O(1).
-        self._subscribers = set()
-        self._subscribers_lock = threading.Lock()
-
-        # SSE subscribers for serial logs. Each is a Queue holding log entries.
-        # Unlike state updates, we want to deliver every log entry.
-        self._serial_subscribers = set()
-        self._serial_subscribers_lock = threading.Lock()
+        self._state_subscribers = _Subscribers(latest_only=True)
+        self._serial_subscribers = _Subscribers(latest_only=False)
 
     def request_stop(self):
         self.stop_event.set()
@@ -90,59 +126,28 @@ class DisplayState:
     # --- SSE pub/sub ---------------------------------------------------
 
     def subscribe(self):
-        """Register a new SSE client. Returns a Queue that receives a fresh
-        snapshot every time the display state changes. The caller (the
-        stream route's generator) must call unsubscribe() with the same
-        queue once the client disconnects, or this subscriber leaks."""
-        q = queue.Queue(maxsize=1)
-        q.put_nowait(self.snapshot())  # so a new client draws immediately, not on the next change
-        with self._subscribers_lock:
-            self._subscribers.add(q)
-        return q
+        """A queue that receives a fresh snapshot every time the display
+        changes, starting with the current one so a new client draws
+        immediately. Pass it to unsubscribe() once the client disconnects."""
+        return self._state_subscribers.subscribe(self.snapshot())
 
     def unsubscribe(self, q):
-        with self._subscribers_lock:
-            self._subscribers.discard(q)
+        self._state_subscribers.unsubscribe(q)
 
     def _broadcast(self):
-        data = self.snapshot()
-        with self._subscribers_lock:
-            subs = list(self._subscribers)
-        for q in subs:
-            try:
-                q.put_nowait(data)
-            except queue.Full:
-                # Slow/stalled client — drop its stale pending update in
-                # favor of this newer one rather than blocking the thread
-                # that's publishing (often the playlist loop itself).
-                try:
-                    q.get_nowait()
-                except queue.Empty:
-                    pass
-                try:
-                    q.put_nowait(data)
-                except queue.Full:
-                    pass
+        self._state_subscribers.publish(self.snapshot())
 
     def subscribe_serial(self):
-        """Register a new SSE client for serial logs. Returns a Queue that
-        receives every log entry. The caller must call unsubscribe_serial()
-        once the client disconnects."""
-        q = queue.Queue()
-        with self._serial_subscribers_lock:
-            self._serial_subscribers.add(q)
-        return q
+        """A queue that receives every serial log message. Pass it to
+        unsubscribe_serial() once the client disconnects."""
+        return self._serial_subscribers.subscribe()
 
     def unsubscribe_serial(self, q):
-        with self._serial_subscribers_lock:
-            self._serial_subscribers.discard(q)
+        self._serial_subscribers.unsubscribe(q)
 
-    def _broadcast_serial(self, msg):
-        """Broadcast a single serial log message to all subscribers."""
-        with self._serial_subscribers_lock:
-            subs = list(self._serial_subscribers)
-        for q in subs:
-            q.put(msg)
+    def log_serial(self, msg):
+        """Sends one serial log message to every subscriber."""
+        self._serial_subscribers.publish(msg)
 
 
 # Single shared instance — imported by player.py and every route module.

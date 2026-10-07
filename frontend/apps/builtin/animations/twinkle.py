@@ -1,6 +1,6 @@
 import random
 
-from apps.base import App, Frame, SettingField
+from apps.builtin.animations.base import AnimationApp
 from config import NUM_MODULES
 
 
@@ -10,16 +10,12 @@ def generate_pages(n=12):
     return [''.join(random.choice(colors) for _ in range(NUM_MODULES)) for _ in range(n)]
 
 
-class TwinkleApp(App):
+class TwinkleApp(AnimationApp):
     key = 'anim_twinkle'
     name = 'Twinkle'
     icon = '✨'
     desc = 'Sparkle effect'
-    settings_fields = [
-        SettingField('anim_twinkle_speed', 'Frame Speed (seconds)', type='number', default='0.5',
-                      placeholder='0.5', min='0.1', max='3', step='0.1'),
-    ]
+    fixed_style = 'random'
 
-    def get_pages(self, settings, cache):
-        speed = max(0.1, float(settings.get('anim_twinkle_speed', 0.5)))
-        return [Frame(text=p, delay=speed, style='random', raw=True) for p in generate_pages()]
+    def frames(self):
+        return generate_pages()

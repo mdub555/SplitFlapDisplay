@@ -1,12 +1,10 @@
-function showToast(msg, type='success'){
-  const c = document.getElementById('toastContainer');
-  const t = document.createElement('div');
-  t.className = `toast${type==='error'?' error':type==='warn'?' warn':''}`;
-  t.textContent = msg;
-  c.appendChild(t);
-  requestAnimationFrame(()=>{ requestAnimationFrame(()=>t.classList.add('show')); });
-  setTimeout(()=>{
-    t.classList.remove('show');
-    setTimeout(()=>t.remove(), 400);
+// A message in the corner for a few seconds. `type` is 'success', 'warn' or 'error'.
+function showToast(msg, type = 'success') {
+  const toast = el('div', {class: type === 'success' ? 'toast' : `toast ${type}`}, msg);
+  document.getElementById('toastContainer').appendChild(toast);
+  requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add('show')));
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 400);
   }, 2800);
 }

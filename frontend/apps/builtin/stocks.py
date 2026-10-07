@@ -1,11 +1,10 @@
 import yfinance as yf
 
-from apps.base import App, Frame, SettingField
-from apps.builtin._shared import cache_get_or_fetch, center_page
+from apps.base import App, SettingField
+from apps.builtin._shared import cache_get_or_fetch, row_frames, split_list
 
 
-def _fetch(settings):
-    tickers = [t.strip() for t in settings.get('stocks_list', 'MSFT,GOOG,NVDA').split(',') if t.strip()]
+def _fetch(tickers):
     pages = []
     for chunk in [tickers[i:i + 3] for i in range(0, len(tickers), 3)]:
         prices = [''] * 3
@@ -36,5 +35,5 @@ class StocksApp(App):
     ]
 
     def get_pages(self, settings, cache):
-        rows_pages = cache_get_or_fetch(cache, 'stocks', 60, lambda: _fetch(settings))
-        return [Frame(text=center_page(*rows), delay=10) for rows in rows_pages]
+        tickers = split_list(self.setting(settings, 'stocks_list'))
+        return row_frames(cache_get_or_fetch(cache, 'stocks', 60, lambda: _fetch(tickers)), delay=10)
