@@ -1,176 +1,119 @@
-let selectedModule = 0;
-let currentSettings = null;
+// The Tuning & Settings page: the hardware inspector for one module at a
+// time, the firmware settings shared by every module, global settings, and
+// backup/restore.
 
-function loadTuningData(){
-  document.getElementById('modMatrix').innerHTML='<div class="loading-note">Loading…</div>';
+let selectedModule = 0;
+let currentSettings = null;   // GET /settings, kept up to date as things change
+
+function loadTuningData() {
+  byId('modMatrix').replaceChildren(el('div', {class: 'loading-note'}, 'Loading…'));
   loadFirmwareConfig(); // independent of the settings load below, so one failing doesn't block the other
-  Promise.all([api.getSettings(), api.globalFields()]).then(([settingsData, fields])=>{
-    if (!settingsData || !fields) return; // error toast already shown by the api layer
-    currentSettings = settingsData;
-    renderGlobalSettingsForm(fields, settingsData);
-    document.getElementById('autoHomeToggle').checked = settingsData.auto_home;
-    renderModuleGrid();
+  Promise.all([api.getSettings(), api.globalFields()]).then(([settings, fields]) => {
+    if (!settings || !fields) return; // error toast already shown by the api layer
+    currentSettings = settings;
+    byId('globalSettingsGrid').replaceChildren(...fields.map(f => buildField(f, settings[f.key], 'gsf_')));
+    byId('autoHomeToggle').checked = settings.auto_home;
     selectModule(selectedModule);
   });
 }
 
-function renderGlobalSettingsForm(fields, settingsData){
-  const grid = document.getElementById('globalSettingsGrid');
-  grid.innerHTML = '';
-  fields.forEach(f=>{
-    const wrap = document.createElement('div');
-    if(f.type==='textarea') wrap.className='span2';
-    const label = document.createElement('label');
-    label.className = 'field-label';
-    label.textContent = f.label;
-    wrap.appendChild(label);
-
-    let input;
-    if(f.type==='select'){
-      input = document.createElement('select');
-      input.className = 'line-input';
-      (f.opts||[]).forEach(opt=>{
-        const o = document.createElement('option');
-        o.value=opt; o.textContent=opt;
-        if((settingsData[f.key]||f.default)===opt) o.selected=true;
-        input.appendChild(o);
-      });
-    } else {
-      input = document.createElement('input');
-      input.type = f.type||'text';
-      input.className = 'line-input';
-      input.style.margin = '0';
-      if(f.placeholder) input.placeholder = f.placeholder;
-      input.value = settingsData[f.key] !== undefined ? settingsData[f.key] : f.default;
-    }
-    input.id = `gsf_${f.key}`;
-    wrap.appendChild(input);
-    grid.appendChild(wrap);
-  });
-}
-
-function saveGlobal(){
-  api.globalFields().then(fields=>{
+function saveGlobal() {
+  api.globalFields().then(fields => {
     if (!fields) return;
-    const payload = {};
-    fields.forEach(f=>{
-      const el = document.getElementById(`gsf_${f.key}`);
-      if(el) payload[f.key] = el.value;
-    });
-    api.saveGlobalSettings(payload).then(result=>{
+    api.saveGlobalSettings(readFieldValues(fields, 'gsf_')).then(result => {
       if (result) showToast('Settings saved');
     });
   });
 }
 
-function renderModuleGrid(){
-  const grid = document.getElementById('modMatrix');
-  grid.innerHTML='';
-  grid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
-  for(let i=0;i<NUM_MODULES;i++){
-    const cell=document.createElement('div');
-    const isUnprovisioned = !currentSettings.modules || !currentSettings.modules[i.toString()];
-    cell.className=`mod-cell${i===selectedModule?' active':''} ${isUnprovisioned?' unprovisioned':''}`;
-    cell.textContent=formatModuleId(i);
-    cell.dataset.onclick = 'selectModuleAction';
-    cell.dataset.id = i;
-    grid.appendChild(cell);
-  }
+// --- The hardware inspector -----------------------------------------------
+
+// The stored settings of module `id` (the selected one by default), or null
+// if it isn't provisioned.
+function moduleSettings(id = selectedModule) {
+  return (currentSettings && currentSettings.modules && currentSettings.modules[id.toString()]) || null;
 }
 
-function selectModule(id){
-  selectedModule=id;
-  renderModuleGrid();
-  document.getElementById('inspectorPanel').style.display='flex';
-  document.getElementById('inspectTitle').textContent=`MODULE ${formatModuleId(id)}`;
+function renderModuleGrid() {
+  const grid = byId('modMatrix');
+  grid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
+  grid.replaceChildren(...Array.from({length: NUM_MODULES}, (_, i) => el('div', {
+    class: `mod-cell${i === selectedModule ? ' active' : ''}${moduleSettings(i) ? '' : ' unprovisioned'}`,
+    dataset: {onclick: 'selectModuleAction', id: i},
+  }, formatModuleId(i))));
+}
 
-  const mod = currentSettings.modules ? currentSettings.modules[id.toString()] : null;
-  if (mod) {
-      document.getElementById('inspectOffset').textContent = mod.homeOffset !== undefined ? mod.homeOffset : 480;
-      document.getElementById('inspectCalib').textContent = mod.totalSteps !== undefined ? mod.totalSteps : 4096;
-      document.getElementById('inspectDrift').textContent = mod.drift !== undefined ? mod.drift : '---';
-      document.getElementById('inspectRevolutions').textContent =
-        mod.revolutions !== undefined ? mod.revolutions.toLocaleString('en-US') : '---';
-  } else {
-      document.getElementById('inspectOffset').textContent = '---';
-      document.getElementById('inspectCalib').textContent = '---';
-      document.getElementById('inspectDrift').textContent = '---';
-      document.getElementById('inspectRevolutions').textContent = '---';
-  }
+// A number from the module's stored settings for the stats row, or ---.
+function statText(mod, key) {
+  return mod && mod[key] !== undefined ? mod[key].toLocaleString('en-US') : '---';
+}
+
+function selectModule(id) {
+  selectedModule = id;
+  renderModuleGrid();
+  byId('inspectorPanel').hidden = false;
+  byId('inspectTitle').textContent = `MODULE ${formatModuleId(id)}`;
+  const mod = moduleSettings();
+  // Offset and steps are plain numbers to tune by; no thousands separator.
+  byId('inspectOffset').textContent = mod && mod.homeOffset !== undefined ? mod.homeOffset : '---';
+  byId('inspectCalib').textContent = mod && mod.totalSteps !== undefined ? mod.totalSteps : '---';
+  byId('inspectRevolutions').textContent = statText(mod, 'revolutions');
+  byId('inspectDrift').textContent = statText(mod, 'drift');
   refreshModuleTiming();
   refreshModuleToggles();
   refreshManualControls();
 }
 
+function selectModuleAction(cell) {
+  selectModule(parseInt(cell.dataset.id, 10));
+}
+
 // The shared firmware settings as the selected module reported them in its
 // last sync (the dump), so you can check that what was sent actually took.
 // Values that differ from the saved shared settings are highlighted.
-const MODULE_TIMING_FIELDS = [
-  ['stepDelayUs', 'step', 'µs'],
-  ['homingStepDelayUs', 'homing', 'µs'],
-  ['debounceMs', 'debounce', 'ms'],
-  ['rampStartDelayUs', 'ramp start', 'µs'],
-  ['rampSteps', 'ramp', 'steps'],
-  ['settleMs', 'settle', 'ms'],
-  ['staggerMs', 'stagger', 'ms'],
-];
-
-function refreshModuleTiming(){
-  const el = document.getElementById('inspectTiming');
-  el.textContent = '';
-  const mod = currentSettings && currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
-  if (!mod) return;
-  // stepDelayUs is checked too: a module synced before the step delays moved
-  // to microseconds has only the old millisecond keys.
-  if (mod.settleMs === undefined || mod.stepDelayUs === undefined) {
-    el.textContent = 'Sync this module to read its timing settings.';
+function refreshModuleTiming() {
+  const box = byId('inspectTiming');
+  const mod = moduleSettings();
+  if (!mod) { box.replaceChildren(); return; }
+  // A module last synced by older firmware is missing some of the fields.
+  if (CONFIG.timing_fields.some(f => mod[f.key] === undefined)) {
+    box.textContent = 'Sync this module to read its timing settings.';
     return;
   }
   const shared = currentSettings.firmware || {};
+  const parts = [];
   let mismatches = 0;
-  el.appendChild(document.createTextNode('From last sync: '));
-  MODULE_TIMING_FIELDS.forEach(([key, label, unit], i)=>{
-    if (i) el.appendChild(document.createTextNode(' · '));
-    const span = document.createElement('span');
-    span.dataset.key = key;
-    span.textContent = `${label} ${mod[key]} ${unit}`;
-    if (shared[key] !== undefined && shared[key] !== mod[key]) {
-      span.className = 'mismatch';
-      span.title = `Shared setting is ${shared[key]} ${unit}`;
-      mismatches++;
-    }
-    el.appendChild(span);
+  CONFIG.timing_fields.forEach(({key, name, unit}, i) => {
+    const differs = shared[key] !== undefined && shared[key] !== mod[key];
+    if (differs) mismatches++;
+    if (i) parts.push(' · ');
+    parts.push(el('span', {
+      dataset: {key},
+      class: differs ? 'mismatch' : '',
+      title: differs ? `Shared setting is ${shared[key]} ${unit}` : '',
+    }, `${name} ${mod[key]} ${unit}`));
   });
-  if (mismatches) {
-    el.appendChild(document.createTextNode(
-      ' — highlighted values differ from the shared settings; Apply to All Modules resends them.'));
-  }
+  box.replaceChildren('From last sync: ', ...parts,
+    mismatches ? ' — highlighted values differ from the shared settings; Apply to All Modules resends them.' : '');
 }
 
-function selectModuleAction(el){
-  selectModule(parseInt(el.dataset.id, 10));
-}
-
-// Per-module boolean settings shown as toggles in the inspector. Each key is
-// the field name in settings.modules[id], the data-setting on its checkbox
-// (#modToggle-<key>), and what the backend maps to a firmware command.
-const MODULE_TOGGLE_KEYS = ['autoHome', 'motorClockwise', 'motorRelease'];
+// The per-module on/off settings, one checkbox per setting (data-setting).
+const moduleToggleInputs = () => byId('moduleToggles').querySelectorAll('[data-setting]');
 
 // Redraws the toggles from stored settings for the selected module. Also the
 // way a failed save gets undone: redraw from what we actually know.
-function refreshModuleToggles(){
-  const mod = currentSettings && currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
-  document.getElementById('moduleToggles').classList.toggle('disabled', !mod);
-  MODULE_TOGGLE_KEYS.forEach(key=>{
-    const el = document.getElementById(`modToggle-${key}`);
-    el.checked = !!(mod && mod[key]);
-    el.disabled = !mod; // an unprovisioned module has nothing to configure
+function refreshModuleToggles() {
+  const mod = moduleSettings();
+  byId('moduleToggles').classList.toggle('disabled', !mod);
+  moduleToggleInputs().forEach(input => {
+    input.checked = !!(mod && mod[input.dataset.setting]);
+    input.disabled = !mod; // an unprovisioned module has nothing to configure
   });
 }
 
-function toggleModuleSetting(el){
-  const key = el.dataset.setting;
-  const enabled = el.checked;
+function toggleModuleSetting(input) {
+  const key = input.dataset.setting;
+  const enabled = input.checked;
   const modId = selectedModule; // the user may pick another module before the reply arrives
   // Flipping the direction makes every move run backwards until it's flipped
   // back, so make it deliberate. Nothing has been sent yet, so backing out
@@ -178,15 +121,12 @@ function toggleModuleSetting(el){
   if (key === 'motorClockwise' &&
       !confirm(`Make module ${formatModuleId(modId)} turn ${enabled ? 'clockwise' : 'counter-clockwise'}? ` +
                `Only do this if the reel is turning the wrong way. Re-home the module afterwards.`)) {
-    el.checked = !enabled;
+    input.checked = !enabled;
     return;
   }
-  el.disabled = true;           // no overlapping toggles while a command is in flight
-  api.setModuleSetting(modId, key, enabled).then(result=>{
-    if (result) {
-      const mod = currentSettings.modules && currentSettings.modules[modId.toString()];
-      if (mod) mod[key] = enabled;
-    }
+  input.disabled = true;           // no overlapping toggles while a command is in flight
+  api.setModuleSetting(modId, key, enabled).then(result => {
+    if (result) storeModuleValue(modId, key, enabled);
     // On failure the api layer already showed a toast; either way redrawing
     // from stored state re-enables the toggle and reverts a failed change.
     refreshModuleToggles();
@@ -196,25 +136,20 @@ function toggleModuleSetting(el){
 // Manual controls under the toggles: set total steps, show a character or
 // flap index, jump to a raw step. Disabled for an unprovisioned module, like
 // the toggles (the backend answers those with a 404 anyway).
-const MAX_TOTAL_STEPS = 32767; // the firmware parses numbers into a 16-bit signed int
+const MAX_TOTAL_STEPS = 32767;
 
-function selectedModuleSettings(){
-  return currentSettings && currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
-}
-
-function refreshManualControls(){
-  const mod = selectedModuleSettings();
-  const box = document.getElementById('manualControls');
+function refreshManualControls() {
+  const mod = moduleSettings();
+  const box = byId('manualControls');
   box.classList.toggle('disabled', !mod);
-  box.querySelectorAll('input, button').forEach(el => { el.disabled = !mod; });
-  document.getElementById('totalStepsInput').value =
-    mod && mod.totalSteps !== undefined ? mod.totalSteps : '';
+  box.querySelectorAll('input, button').forEach(control => { control.disabled = !mod; });
+  byId('totalStepsInput').value = mod && mod.totalSteps !== undefined ? mod.totalSteps : '';
 }
 
 // Whole number from a number input, or null (after a warning toast) if it's
 // blank, fractional or outside [min, max].
-function readIntInput(id, label, min, max){
-  const raw = document.getElementById(id).value.trim();
+function readIntInput(id, label, min, max) {
+  const raw = byId(id).value.trim();
   const n = Number(raw);
   if (raw === '' || !Number.isInteger(n) || n < min || n > max) {
     showToast(`${label} must be a whole number from ${min} to ${max}`, 'warn');
@@ -223,284 +158,253 @@ function readIntInput(id, label, min, max){
   return n;
 }
 
-function setTotalSteps(){
+// Sets `key` in module `id`'s stored settings, if we have them.
+function storeModuleValue(id, key, value) {
+  const mod = moduleSettings(id);
+  if (mod) mod[key] = value;
+}
+
+// Sends one command to the selected module with `call(modId)`, and on
+// success shows `message(modId, result)` and runs `onSuccess`, if given.
+function moduleCommand(call, message, onSuccess) {
+  const modId = selectedModule; // the user may pick another module before the reply arrives
+  return call(modId).then(result => {
+    if (!result) return;
+    if (onSuccess) onSuccess(modId, result);
+    if (message) showToast(message(modId, result));
+  });
+}
+
+const moduleName = id => `Module ${formatModuleId(id)}`;
+
+function setTotalSteps() {
   const steps = readIntInput('totalStepsInput', 'Total steps', 1, MAX_TOTAL_STEPS);
   if (steps === null) return;
-  const modId = selectedModule;
-  api.setTotalSteps(modId, steps).then(d=>{
-    if (!d) return;
-    const mod = currentSettings.modules && currentSettings.modules[modId.toString()];
-    if (mod) mod.totalSteps = steps;
-    if (modId === selectedModule) document.getElementById('inspectCalib').textContent = steps;
-    showToast(`Module ${formatModuleId(modId)}: total steps set to ${steps}`);
-  });
+  moduleCommand(id => api.setTotalSteps(id, steps),
+    id => `${moduleName(id)}: total steps set to ${steps}`,
+    id => {
+      storeModuleValue(id, 'totalSteps', steps);
+      if (id === selectedModule) byId('inspectCalib').textContent = steps;
+    });
 }
 
-function sendShow(payload){
-  const modId = selectedModule;
-  api.showOnModule(modId, payload).then(d=>{
-    if (d) showToast(`Module ${formatModuleId(modId)} showing flap ${d.index}`);
-  });
+function showOnModule(payload) {
+  moduleCommand(id => api.showOnModule(id, payload), (id, d) => `${moduleName(id)} showing flap ${d.index}`);
 }
 
-function showChar(){
+function showChar() {
   // Array.from so a colour-tile emoji counts as one character, not two.
-  const chars = Array.from(document.getElementById('showCharInput').value);
+  const chars = Array.from(byId('showCharInput').value);
   if (chars.length !== 1) { showToast('Enter exactly one character', 'warn'); return; }
-  sendShow({char: chars[0]});
+  showOnModule({char: chars[0]});
 }
 
-function showIndex(){
+function showIndex() {
   const index = readIntInput('showIndexInput', 'Flap index', 0, CHAR_MAP.length - 1);
-  if (index !== null) sendShow({index});
+  if (index !== null) showOnModule({index});
 }
 
-function gotoStep(){
-  const mod = selectedModuleSettings();
+function gotoStep() {
+  const mod = moduleSettings();
   const total = mod && Number.isInteger(mod.totalSteps) ? mod.totalSteps : MAX_TOTAL_STEPS + 1;
   const step = readIntInput('gotoStepInput', 'Step', 0, total - 1);
   if (step === null) return;
-  const modId = selectedModule;
-  api.gotoStep(modId, step).then(d=>{
-    if (d) showToast(`Module ${formatModuleId(modId)} moved to step ${step}`);
-  });
+  moduleCommand(id => api.gotoStep(id, step), id => `${moduleName(id)} moved to step ${step}`);
 }
 
-function exerciseSelected(){
+function exerciseSelected() {
   const cycles = readIntInput('exerciseInput', 'Exercise cycles', 1, 255);
   if (cycles === null) return;
-  const modId = selectedModule;
-  api.exerciseModule(modId, cycles).then(d=>{
-    if (d) showToast(`Module ${formatModuleId(modId)}: exercising ${cycles} cycle${cycles === 1 ? '' : 's'}`);
+  moduleCommand(id => api.exerciseModule(id, cycles),
+    id => `${moduleName(id)}: exercising ${cycles} cycle${cycles === 1 ? '' : 's'}`);
+}
+
+function stopSelected() {
+  moduleCommand(api.stopModule, id => `${moduleName(id)} stopped`);
+}
+
+function adjustOffset(button) {
+  const delta = parseInt(button.dataset.delta, 10);
+  moduleCommand(id => api.adjustOffset(id, delta), null, (id, d) => {
+    storeModuleValue(id, 'homeOffset', d.new_offset);
+    if (id === selectedModule) byId('inspectOffset').textContent = d.new_offset;
   });
 }
 
-function stopSelected(){
-  const modId = selectedModule;
-  api.stopModule(modId).then(d=>{
-    if (d) showToast(`Module ${formatModuleId(modId)} stopped`);
-  });
+function homeSelected() {
+  moduleCommand(api.homeModule, id => `Homing module ${formatModuleId(id)}`);
 }
 
-function adjustOffset(el){
-  const delta = parseInt(el.dataset.delta, 10);
-  api.adjustOffset(selectedModule, delta).then(d=>{
-    if (!d) return;
-    if (!currentSettings.modules) currentSettings.modules = {};
-    if (!currentSettings.modules[selectedModule.toString()]) {
-        currentSettings.modules[selectedModule.toString()] = {'homeOffset': 480, 'totalSteps': 4096, 'autoHome': true, 'motorClockwise': true, 'motorRelease': false};
-    }
-    currentSettings.modules[selectedModule.toString()].homeOffset = d.new_offset;
-    document.getElementById('inspectOffset').textContent = d.new_offset;
-  });
+function identifySelected() {
+  moduleCommand(api.identifyModule, id => `${moduleName(id)}: status LED blinking for 10 s`);
 }
 
-function homeSelected(){
-  api.homeModule(selectedModule).then(result=>{
-    if (result) showToast(`Homing module ${formatModuleId(selectedModule)}`);
-  });
+function rebootSelected() {
+  if (!confirm(`Reboot module ${formatModuleId(selectedModule)}?`)) return;
+  moduleCommand(api.rebootModule, id => `${moduleName(id)} rebooting`);
 }
 
-function identifySelected(){
-  const modId = selectedModule;
-  api.identifyModule(modId).then(result=>{
-    if (result) showToast(`Module ${formatModuleId(modId)}: status LED blinking for 10 s`);
-  });
+// Replaces the stored settings with what a sync or reset returned.
+function useSettings(id, result) {
+  currentSettings = result.settings;
+  selectModule(selectedModule);
 }
 
-function rebootSelected(){
-  const modId = selectedModule;
-  if(!confirm(`Reboot module ${formatModuleId(modId)}?`)) return;
-  api.rebootModule(modId).then(result=>{
-    if (result) showToast(`Module ${formatModuleId(modId)} rebooting`);
-  });
-}
-
-function resetSettingsSelected(){
-  const modId = selectedModule;
-  if(!confirm(`Reset every setting on module ${formatModuleId(modId)} to its firmware default? ` +
-              `Its ID is kept, but its home offset and total steps are lost.`)) return;
+function resetSettingsSelected() {
+  if (!confirm(`Reset every setting on module ${formatModuleId(selectedModule)} to its firmware default? ` +
+               `Its ID is kept, but its home offset and total steps are lost.`)) return;
   showToast('Resetting…', 'warn');
-  api.resetModuleSettings(modId).then(d=>{
-    if (!d) return;
-    currentSettings = d.settings;
-    selectModule(selectedModule);
-    showToast(`Module ${formatModuleId(modId)} reset to defaults`);
+  moduleCommand(api.resetModuleSettings, id => `${moduleName(id)} reset to defaults`, useSettings);
+}
+
+function homeAll() {
+  if (!confirm(`Re-home all ${NUM_MODULES} modules via broadcast?`)) return;
+  api.homeAll().then(result => {
+    if (result) showToast('Homing all modules', 'warn');
   });
 }
 
-function homeAll(){
-  if(!confirm(`Re-home all ${NUM_MODULES} modules via broadcast?`)) return;
-  api.homeAll().then(result=>{
-    if (result) showToast('Homing all modules','warn');
+// Shows `busyText` in the stat `statId` until `request` settles, then puts
+// back what was there if it failed.
+function withBusyStat(statId, busyText, request) {
+  const stat = byId(statId);
+  const before = stat.textContent;
+  stat.textContent = busyText;
+  return request.then(result => {
+    if (!result) stat.textContent = before;
+    return result;
   });
 }
 
-function calibrateSelected(){
-  if(!confirm(`Calibrate Module ${formatModuleId(selectedModule)}? It will spin 360° to measure steps.`)) return;
-
-  const mod = currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
-  const prevCalib = mod ? (mod.totalSteps || 4096) : 4096;
-
-  document.getElementById('inspectCalib').textContent='Measuring…';
-  api.calibrateModule(selectedModule).then(d=>{
-    if (!d) {
-      document.getElementById('inspectCalib').textContent = prevCalib;
-      return;
-    }
-    if (!currentSettings.modules) currentSettings.modules = {};
-    if (!currentSettings.modules[selectedModule.toString()]) {
-        currentSettings.modules[selectedModule.toString()] = {'homeOffset': 480, 'totalSteps': 4096, 'autoHome': true, 'motorClockwise': true, 'motorRelease': false};
-    }
-    currentSettings.modules[selectedModule.toString()].totalSteps = d.steps;
-    document.getElementById('inspectCalib').textContent = d.steps;
-    refreshManualControls();
-    showToast(`Module ${formatModuleId(selectedModule)}: ${d.steps} steps`);
-  });
+function calibrateSelected() {
+  if (!confirm(`Calibrate Module ${formatModuleId(selectedModule)}? It will spin 360° to measure steps.`)) return;
+  moduleCommand(id => withBusyStat('inspectCalib', 'Measuring…', api.calibrateModule(id)),
+    (id, d) => `${moduleName(id)}: ${d.steps} steps`,
+    (id, d) => {
+      storeModuleValue(id, 'totalSteps', d.steps);
+      if (id === selectedModule) {
+        byId('inspectCalib').textContent = d.steps;
+        refreshManualControls();
+      }
+    });
 }
 
-function syncOneFromHardware(){
-  const mod = currentSettings.modules ? currentSettings.modules[selectedModule.toString()] : null;
-  const prevOffset = mod ? (mod.homeOffset || 480) : 480;
-  document.getElementById('inspectOffset').textContent='Syncing…';
-  api.syncModule(selectedModule).then(d=>{
-    if(d && d.status==='success'){
-      currentSettings=d.settings;
-      selectModule(selectedModule);
-      showToast('Synced');
-    } else {
-      document.getElementById('inspectOffset').textContent = prevOffset;
-      if (d) showToast('Sync failed','error');
-    }
-  });
+function syncOneFromHardware() {
+  moduleCommand(id => withBusyStat('inspectOffset', 'Syncing…', api.syncModule(id)), () => 'Synced', useSettings);
 }
 
-function syncAllFromHardware(){
-  if(!confirm(`Poll all ${NUM_MODULES} modules to rebuild settings.json?`)) return;
-  document.body.style.cursor='wait';
-  api.syncAllModules().then(d=>{
-    document.body.style.cursor='default';
-    if (!d) return;
-    currentSettings=d.settings;
-    selectModule(selectedModule);
+function syncAllFromHardware() {
+  if (!confirm(`Poll all ${NUM_MODULES} modules to rebuild settings.json?`)) return;
+  document.body.style.cursor = 'wait';
+  api.syncAllModules().then(result => {
+    document.body.style.cursor = '';
+    if (!result) return;
+    useSettings(null, result);
     showToast('All modules synced');
   });
 }
 
-function toggleAutoHome(el){
-  const enabled = el.checked;
-  api.toggleAutoHome(enabled).then(result=>{
-    if (!result) { el.checked = !enabled; return; }
+function provisionModule() {
+  const targetId = selectedModule; // provision as the selected module
+  if (!confirm(`Assign ID ${formatModuleId(targetId)} to the unprovisioned module on the bus?`)) return;
+  showToast('Provisioning…', 'warn');
+  api.provisionModule(targetId).then(result => {
+    if (!result) return;
+    showToast(`Module assigned ID ${formatModuleId(result.assigned_id)}`);
+    loadTuningData();
+  });
+}
+
+// --- Global settings ------------------------------------------------------
+
+function toggleAutoHome(input) {
+  const enabled = input.checked;
+  api.toggleAutoHome(enabled).then(result => {
+    if (!result) { input.checked = !enabled; return; }
     // The backend applies this to every provisioned module; mirror that here
     // so the inspector's per-module auto-home toggle doesn't go stale.
     if (currentSettings) {
       currentSettings.auto_home = enabled;
-      Object.values(currentSettings.modules || {}).forEach(m => { if (m) m.autoHome = enabled; });
+      Object.values(currentSettings.modules || {}).forEach(mod => { mod.autoHome = enabled; });
       refreshModuleToggles();
     }
   });
 }
 
-function provisionModule(){
-  const target_id = selectedModule; // Provision the currently selected module
-  if(!confirm(`Assign ID ${formatModuleId(target_id)} to the unprovisioned module on the bus?`)) return;
-  showToast('Provisioning…', 'warn');
-  api.provisionModule(target_id).then(d=>{
-    if (!d) return;
-    if(d.status === 'success'){
-      showToast(`Module assigned ID ${formatModuleId(d.assigned_id)}`);
-      loadTuningData();
-    } else {
-      showToast(d.message || 'Provisioning failed', 'error');
-    }
-  }).catch(()=>showToast('Provisioning failed', 'error'));
+// Firmware settings shared by every module (step delays, debounce, recalculate
+// home). The inputs are rendered from the backend's definitions (fw-<key>);
+// the values and their ranges come from GET /firmware_config.
+let firmwareLimits = null;
+
+function loadFirmwareConfig() {
+  api.firmwareConfig().then(cfg => {
+    if (!cfg) return; // error toast already shown by the api layer
+    firmwareLimits = cfg.limits;
+    Object.entries(cfg.limits).forEach(([key, lim]) => {
+      const input = byId(`fw-${key}`);
+      if (lim.type === 'bool') {
+        input.checked = !!cfg.values[key];
+      } else {
+        input.min = lim.min;
+        input.max = lim.max;
+        input.value = cfg.values[key];
+      }
+    });
+  });
 }
 
-function downloadBackup(){
-  api.backupSettings().then(data=>{
+function applyFirmwareConfig() {
+  if (!firmwareLimits) { showToast('Firmware settings have not loaded yet', 'warn'); return; }
+  const payload = {};
+  for (const [key, lim] of Object.entries(firmwareLimits)) {
+    const input = byId(`fw-${key}`);
+    if (lim.type === 'bool') { payload[key] = input.checked; continue; }
+    const n = readIntInput(`fw-${key}`, input.dataset.label, lim.min, lim.max);
+    if (n === null) return; // nothing is sent unless every value is valid
+    payload[key] = n;
+  }
+  api.saveFirmwareConfig(payload).then(result => {
+    if (result) showToast('Settings sent to all modules');
+  });
+}
+
+// --- Backup and restore ---------------------------------------------------
+
+function downloadBackup() {
+  api.backupSettings().then(data => {
     if (!data) return;
-    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download=`splitflap_backup_${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+    el('a', {href: URL.createObjectURL(blob),
+             download: `splitflap_backup_${new Date().toISOString().slice(0, 10)}.json`}).click();
     showToast('Backup downloaded');
   });
 }
 
-function triggerBackupFileInput(){
-  document.getElementById('backupFile').click();
+function triggerBackupFileInput() {
+  byId('backupFile').click();
 }
 
-function uploadBackup(input){
-  if(!input.files.length) return;
-  const reader=new FileReader();
-  reader.onload=e=>{
+function uploadBackup(input) {
+  const file = input.files[0];
+  input.value = '';   // so choosing the same file again still triggers a change
+  if (!file) return;
+  const status = byId('restoreStatus');
+  file.text().then(text => {
     let data;
-    try{
-      data = JSON.parse(e.target.result);
-    }catch(err){
-      showToast('Invalid JSON file','error');
-      input.value='';
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      showToast('Invalid JSON file', 'error');
       return;
     }
-    if(!confirm(`Restore calibration data and push to all modules?`)){
-      input.value='';
-      return;
-    }
-    document.getElementById('restoreStatus').textContent='Restoring…';
-    api.restoreSettings(data).then(d=>{
-      if(d && d.status==='success'){
-        document.getElementById('restoreStatus').textContent='✓ Done';
-        showToast('Restore complete');
-        loadTuningData();
-      } else {
-        document.getElementById('restoreStatus').textContent='✗ Error';
-        if (d) showToast('Restore error','error'); // a null d already got its own toast
-      }
+    if (!confirm('Restore calibration data and push to all modules?')) return;
+    status.textContent = 'Restoring…';
+    api.restoreSettings(data).then(result => {
+      status.textContent = result ? '✓ Done' : '✗ Error';
+      if (!result) return;
+      showToast('Restore complete');
+      loadTuningData();
     });
-    input.value='';
-  };
-  reader.readAsText(input.files[0]);
-}
-
-// Firmware settings shared by every module (step delays, debounce, recalculate
-// home). The backend owns the keys and their ranges (GET /firmware_config);
-// the inputs are plain HTML with ids fw-<key>, so a new setting only needs a
-// backend entry and one more input.
-let firmwareLimits = null;
-
-function loadFirmwareConfig(){
-  api.firmwareConfig().then(cfg=>{
-    if (!cfg) return; // error toast already shown by the api layer
-    firmwareLimits = cfg.limits;
-    Object.entries(cfg.limits).forEach(([key, lim])=>{
-      const el = document.getElementById(`fw-${key}`);
-      if (!el) return;
-      if (lim.type === 'bool') {
-        el.checked = !!cfg.values[key];
-      } else {
-        el.min = lim.min;
-        el.max = lim.max;
-        el.value = cfg.values[key];
-      }
-    });
-  });
-}
-
-function applyFirmwareConfig(){
-  if (!firmwareLimits) { showToast('Firmware settings have not loaded yet', 'warn'); return; }
-  const payload = {};
-  for (const [key, lim] of Object.entries(firmwareLimits)) {
-    const el = document.getElementById(`fw-${key}`);
-    if (!el) continue;
-    if (lim.type === 'bool') { payload[key] = el.checked; continue; }
-    const n = readIntInput(`fw-${key}`, el.dataset.label || key, lim.min, lim.max);
-    if (n === null) return; // nothing is sent unless every value is valid
-    payload[key] = n;
-  }
-  api.saveFirmwareConfig(payload).then(d=>{
-    if (d) showToast('Settings sent to all modules');
   });
 }
 

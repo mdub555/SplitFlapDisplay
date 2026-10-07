@@ -1,77 +1,540 @@
-:root {
-  --bg:#121212; --panel:#1e1e1e; --border:#333;
-  --accent:#007bff; --accent-hover:#0056b3;
-  --text:#e0e0e0; --text-muted:#888;
-  --green:#28a745; --orange:#fd7e14; --red:#dc3545;
-  --flap-bg:#111;
-}
-*{box-sizing:border-box}
-body{font-family:'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:20px;display:flex;flex-direction:column;align-items:center}
-.container{width:100%;max-width:820px}
-h3{margin-top:0;color:var(--text)}
+/* Shared look: colours, layout helpers, buttons, inputs, switches, toasts.
+   Page-specific styles are in control.css, apps.css, tuning.css, modals.css
+   and debug.css. */
 
-.section-label{text-align:center;color:#888;font-size:.8rem;margin-bottom:4px;font-weight:bold;letter-spacing:1px}
-.empty-note{color:#666;font-style:italic;font-size:.85rem}
-.loading-note{color:#888;grid-column:1/-1;text-align:center;padding:8px}
+:root {
+  /* Surfaces, from the page background up */
+  --bg: #121212;
+  --panel: #1e1e1e;          /* sections and cards */
+  --surface-dark: #1a1a1a;   /* panels inside a section */
+  --surface: #2a2a2a;        /* rows and cells inside a panel */
+  --inset: #000;             /* stat boxes and option lists */
+  --terminal: #080808;       /* the compose lines */
+  --input-bg: #111;
+  --flap-bg: #111;
+
+  /* Borders */
+  --border: #333;
+  --border-strong: #444;
+  --border-input: #555;
+
+  /* Text, from strongest to faintest */
+  --text-bright: #fff;
+  --text: #e0e0e0;
+  --text-soft: #ddd;
+  --text-dim: #aaa;
+  --text-muted: #888;
+  --text-faint: #777;
+
+  /* Accents */
+  --accent: #007bff;
+  --accent-hover: #0056b3;
+  --green: #28a745;
+  --orange: #fd7e14;
+  --red: #dc3545;
+  --display-green: #0f0;     /* digits and text in the "display" style */
+
+  --mono: 'Courier New', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.container {
+  width: 100%;
+  max-width: 820px;
+}
+
+h3 {
+  margin-top: 0;
+  color: var(--text);
+}
+
+/* ── LAYOUT HELPERS ── */
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.row-tight {
+  gap: 4px;
+}
+
+.grow {
+  flex: 1;
+}
+
+.push-right {
+  margin-left: auto;
+}
+
+.centered {
+  text-align: center;
+}
+
+/* A heading with controls on the right. */
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.section-head h3 {
+  margin: 0;
+}
+
+/* A row of buttons that share the width. */
+.button-row {
+  display: flex;
+  gap: 10px;
+}
+
+.button-row .btn {
+  flex: 1;
+}
+
+.button-row .btn-fit {
+  flex: 0 0 auto;
+}
+
+/* A bordered box inside a page. */
+.panel {
+  margin-top: 12px;
+  background: var(--panel);
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+/* ── TEXT ── */
+.section-label {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: .8rem;
+  margin-bottom: 4px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.note {
+  color: var(--text-muted);
+  font-size: .85rem;
+  margin-top: 0;
+}
+
+.hint {
+  display: block;
+  color: var(--text-faint);
+  font-size: .75rem;
+  margin-top: 2px;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: .85rem;
+}
+
+.empty-note {
+  color: #666;
+  font-style: italic;
+  font-size: .85rem;
+}
+
+.loading-note {
+  color: var(--text-muted);
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 8px;
+}
 
 /* ── TABS ── */
-.tab-bar{display:flex;background:var(--panel);border-radius:12px;margin-bottom:20px;border:1px solid var(--border);overflow:hidden}
-.tab-btn{flex:1;padding:15px 8px;border:none;background:none;color:var(--text-muted);cursor:pointer;font-weight:600;font-size:.95rem;transition:all .2s;white-space:nowrap}
-.tab-btn:hover{background:#252525;color:#fff}
-.tab-btn.active{background:var(--accent);color:#fff}
-.tab-label-short{display:none}
+.tab-bar {
+  display: flex;
+  background: var(--panel);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 15px 8px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: .95rem;
+  transition: all .2s;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  background: #252525;
+  color: var(--text-bright);
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  color: var(--text-bright);
+}
+
+.tab-label-short {
+  display: none;
+}
 
 /* ── PAGES ── */
-.page{display:none;animation:fadeIn .3s ease}
-.page.active{display:block}
-@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.page {
+  display: none;
+  animation: fadeIn .3s ease;
+}
 
-/* ── LIVE STREAM STATUS ── */
-.stream-status{display:none;align-items:center;gap:10px;background:#2a1a1a;border:1px solid var(--red);border-radius:8px;padding:10px 16px;margin-bottom:15px;font-size:.9rem;font-weight:600}
-.stream-status.visible{display:flex}
-.stream-status-dot{width:10px;height:10px;border-radius:50%;background:var(--red);animation:pulse 1.2s infinite}
+.page.active {
+  display: block;
+}
 
-/* ── ACTIVE APP BANNER ── */
-.active-app-banner{display:none;align-items:center;gap:10px;background:#1a2a1a;border:1px solid var(--green);border-radius:8px;padding:10px 16px;margin-bottom:15px}
-.active-app-banner.visible{display:flex}
-.aab-dot{width:10px;height:10px;border-radius:50%;background:var(--green);animation:pulse 1.2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.aab-label{flex:1;font-weight:600;font-size:.95rem}
-.aab-stop{background:var(--red);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:bold;font-size:.85rem}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── STATUS BANNERS: the live stream reconnecting, an app running ── */
+.stream-status,
+.active-app-banner {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 15px;
+}
+
+.stream-status.visible,
+.active-app-banner.visible {
+  display: flex;
+}
+
+.stream-status {
+  background: #2a1a1a;
+  border: 1px solid var(--red);
+  font-size: .9rem;
+  font-weight: 600;
+  --dot: var(--red);
+}
+
+.active-app-banner {
+  background: #1a2a1a;
+  border: 1px solid var(--green);
+  --dot: var(--green);
+}
+
+.pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--dot);
+  animation: pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .3; }
+}
+
+.aab-label {
+  flex: 1;
+  font-weight: 600;
+  font-size: .95rem;
+}
+
+.aab-stop {
+  background: var(--red);
+  color: var(--text-bright);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: .85rem;
+}
 
 /* ── BUTTONS ── */
-.btn{padding:12px 20px;border-radius:6px;border:none;font-weight:bold;cursor:pointer;transition:.2s;font-size:1rem}
-.btn:active{transform:scale(.98)}
-.btn-primary{background:var(--accent);color:#fff;width:100%;margin-top:16px;padding:16px;font-size:1.1rem}
-.btn-success{background:var(--green);color:#fff}
-.btn-warning{background:var(--orange);color:#fff}
-.btn-secondary{background:#444;color:#fff}
-.btn-del{background:var(--red);color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:bold}
-.btn-sm{padding:7px 12px;font-size:.85rem}
+.btn {
+  padding: 12px 20px;
+  border-radius: 6px;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+  transition: .2s;
+  font-size: 1rem;
+  color: var(--text-bright);
+}
 
-/* ── TOGGLE ── */
-.switch{position:relative;display:inline-block;width:40px;height:20px}
-.switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#444;transition:.4s;border-radius:20px}
-.slider:before{position:absolute;content:"";height:14px;width:14px;left:3px;bottom:3px;background:#fff;transition:.4s;border-radius:50%}
-input:checked+.slider{background:var(--green)}
-input:checked+.slider:before{transform:translateX(20px)}
+.btn:active {
+  transform: scale(.98);
+}
+
+.btn-primary {
+  background: var(--accent);
+}
+
+.btn-success {
+  background: var(--green);
+}
+
+.btn-warning {
+  background: var(--orange);
+}
+
+.btn-danger {
+  background: var(--red);
+}
+
+.btn-secondary {
+  background: var(--border-strong);
+}
+
+/* A less prominent action. */
+.btn-ghost {
+  background: var(--border);
+  color: var(--text-dim);
+  border: 1px solid var(--border-input);
+}
+
+.btn-sm {
+  padding: 7px 12px;
+  font-size: .85rem;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* The big button that sends the composed page. */
+.btn-push {
+  width: 100%;
+  margin-top: 16px;
+  padding: 16px;
+  font-size: 1.1rem;
+}
+
+/* ── INPUTS ── */
+.input {
+  background: var(--input-bg);
+  color: var(--text-bright);
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: .95rem;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.input:disabled {
+  cursor: not-allowed;
+}
+
+/* Settings forms and grids take the full width of their cell. */
+.field .input,
+.modal-field .input,
+.settings-grid .input {
+  width: 100%;
+}
+
+.input-num {
+  width: 60px;
+  text-align: center;
+}
+
+.input-sm {
+  padding: 3px 5px;
+  font-size: .8rem;
+  border-radius: 3px;
+  border-color: var(--border-strong);
+}
+
+/* Multi-line text shown on the display, like the livestream comments. */
+.input-code {
+  color: var(--display-green);
+  font-family: var(--mono);
+  font-size: .85rem;
+  line-height: 1.4;
+  min-height: 140px;
+  resize: vertical;
+}
+
+select.input option {
+  background: #222;
+}
+
+/* A short label with its input inline, e.g. "Default delay [5] s". */
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .85rem;
+  color: var(--text-dim);
+}
+
+.inline-field-sm {
+  gap: 4px;
+  font-size: .78rem;
+}
+
+.check-label {
+  cursor: pointer;
+}
+
+/* ── SWITCH ── */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--border-strong);
+  transition: .4s;
+  border-radius: 20px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--text-bright);
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background: var(--green);
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+.switch input:disabled + .slider {
+  cursor: not-allowed;
+}
+
+/* A labelled switch: name and hint on the left, the switch on the right. */
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+
+.toggle-name {
+  display: block;
+  color: var(--text-soft);
+  font-size: .9rem;
+}
 
 /* ── TOAST ── */
-.toast-container{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:999;pointer-events:none}
-.toast{background:#333;color:#fff;padding:12px 18px;border-radius:8px;font-size:.9rem;border-left:4px solid var(--green);opacity:0;transform:translateY(10px);transition:.3s;pointer-events:none;max-width:280px}
-.toast.show{opacity:1;transform:translateY(0)}
-.toast.error{border-left-color:var(--red)}
-.toast.warn{border-left-color:var(--orange)}
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 999;
+  pointer-events: none;
+}
 
-/* ── BACKUP ── */
-.backup-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.toast {
+  background: var(--border);
+  color: var(--text-bright);
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-size: .9rem;
+  border-left: 4px solid var(--green);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: .3s;
+  pointer-events: none;
+  max-width: 280px;
+}
 
-@media(max-width:600px){
-  body{padding:10px}
-  .tab-btn{font-size:.78rem;padding:12px 4px}
-  .tab-label-full{display:none}
-  .tab-label-short{display:inline}
-  .backup-row{flex-direction:column}
-  .aab-label{font-size:.82rem}
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast.error {
+  border-left-color: var(--red);
+}
+
+.toast.warn {
+  border-left-color: var(--orange);
+}
+
+@media (max-width: 600px) {
+  body {
+    padding: 10px;
+  }
+
+  .tab-btn {
+    font-size: .78rem;
+    padding: 12px 4px;
+  }
+
+  .tab-label-full {
+    display: none;
+  }
+
+  .tab-label-short {
+    display: inline;
+  }
+
+  .aab-label {
+    font-size: .82rem;
+  }
 }

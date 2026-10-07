@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify
 
 from config import NUM_MODULES
 from display.state import state
-from display.module_protocol import BROADCAST, Cmd, dump_format, message
+from display.module_protocol import BROADCAST, Cmd, message
 from display.serial_link import send_raw
 from routes.common import error, json_body, sse_response
 
@@ -28,13 +28,6 @@ def current_state_stream():
 def serial_log_stream():
     """Pushes every serial message, sent or received."""
     return sse_response(state.subscribe_serial, state.unsubscribe_serial, lambda msg: {'msg': msg})
-
-
-@bp.route('/serial/dump_format')
-def serial_dump_format():
-    """How a module's dump reply is laid out, so the debug panel can show
-    replies as labelled values."""
-    return jsonify(dump_format())
 
 
 @bp.route('/serial/send', methods=['POST'])

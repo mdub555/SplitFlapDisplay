@@ -2,26 +2,23 @@ import time
 
 from flask import Blueprint, jsonify, request
 
-from config import GRID_ROWS, GRID_COLS, NUM_MODULES
+from config import NUM_MODULES
 from settings.store import settings, save_settings
 from settings.schema import GLOBAL_FIELDS
 from display.module_protocol import BROADCAST, UNPROVISIONED_ID, Cmd, message
 from display.serial_link import is_connected, read_dump, send_raw
 from routes.common import error, json_body
+from routes.pages import client_config
 
 bp = Blueprint('settings_routes', __name__)
 
 
 @bp.route('/config')
 def get_config():
-    """Static config the frontend needs at load time — grid size drives all
-    dynamic grid rendering client-side instead of hardcoding 45/15/3."""
-    return jsonify(
-        grid_rows=GRID_ROWS,
-        grid_cols=GRID_COLS,
-        num_modules=NUM_MODULES,
-        hardware_connected=is_connected(),
-    )
+    """The page's configuration (see routes/pages.py), plus whether the serial
+    link is up. The page itself gets the configuration when it's rendered;
+    this is for checking it from outside."""
+    return jsonify(**client_config(), hardware_connected=is_connected())
 
 
 @bp.route('/global_fields')

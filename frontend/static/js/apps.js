@@ -1,61 +1,39 @@
+// The Apps page: one card per app, which runs it, with a ⚙️ button for its
+// settings if it has any.
+
 window.appsByKey = {};
 let appsLoaded = false;
 
-function buildAppCard(a){
-  const card = document.createElement('div');
-  card.className = 'app-card';
-  card.dataset.app = a.key;
-  card.dataset.onclick = 'runApp';
-
-  const hasCfg = a.settings_fields && a.settings_fields.length;
-  if (hasCfg) {
-    const gear = document.createElement('button');
-    gear.className = 'app-gear';
-    gear.title = 'Settings';
-    gear.textContent = '⚙️';
-    gear.dataset.onclick = 'openAppSettings';
-    // No manual stopPropagation needed: the dispatcher's closest('[data-onclick]')
-    // finds this button (the nearest match) before it ever reaches the card's
-    // own data-onclick="runApp" further up the tree.
-    card.appendChild(gear);
-  }
-
-  const icon = document.createElement('span');
-  icon.className = 'app-icon';
-  icon.textContent = a.icon;
-  card.appendChild(icon);
-
-  const name = document.createElement('span');
-  name.className = 'app-name';
-  name.textContent = a.name;
-  card.appendChild(name);
-
-  const desc = document.createElement('span');
-  desc.className = 'app-desc';
-  desc.textContent = a.desc;
-  card.appendChild(desc);
-
-  return card;
+function buildAppCard(app) {
+  return el('div', {class: 'app-card', dataset: {app: app.key, onclick: 'runApp'}},
+    // The dispatcher acts on the nearest data-onclick, so clicking the gear
+    // opens the settings without also running the app.
+    app.settings_fields.length
+      ? el('button', {class: 'app-gear', title: 'Settings', dataset: {onclick: 'openAppSettings'}}, '⚙️')
+      : '',
+    el('span', {class: 'app-icon'}, app.icon),
+    el('span', {class: 'app-name'}, app.name),
+    el('span', {class: 'app-desc'}, app.desc));
 }
 
-function buildAppsGrid(){
-  if(appsLoaded) return;
-  api.apps().then(list=>{
+function buildAppsGrid() {
+  if (appsLoaded) return;
+  api.apps().then(list => {
     if (!list) return;
-    list.forEach(a => window.appsByKey[a.key] = a);
-    const grid = document.getElementById('appsGrid');
-    grid.innerHTML = '';
-    list.forEach(a => grid.appendChild(buildAppCard(a)));
+    list.forEach(app => { window.appsByKey[app.key] = app; });
+    byId('appsGrid').replaceChildren(...list.map(buildAppCard));
     appsLoaded = true;
   });
 }
 
-function runApp(el){
-  const appKey = el.dataset.app;
-  api.runApp(appKey).then(result=>{
-    if (!result) return;
-    const label = (window.appsByKey[appKey]||{name:appKey}).name;
-    showToast(`▶ ${label} started`);
+function appName(key) {
+  return (window.appsByKey[key] || {name: key}).name;
+}
+
+function runApp(card) {
+  const key = card.dataset.app;
+  api.runApp(key).then(result => {
+    if (result) showToast(`▶ ${appName(key)} started`);
   });
 }
 

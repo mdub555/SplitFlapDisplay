@@ -1,15 +1,17 @@
+/* The serial debug panel, which slides in from the right. */
+
 .debug-panel {
   position: fixed;
   right: 0;
   top: 0;
   bottom: 0;
   width: 320px;
-  background: #1a1a1a;
-  border-left: 1px solid #333;
+  background: var(--surface-dark);
+  border-left: 1px solid var(--border);
   z-index: 1000;
   display: none;
   flex-direction: column;
-  box-shadow: -5px 0 15px rgba(0,0,0,0.5);
+  box-shadow: -5px 0 15px rgba(0, 0, 0, .5);
 }
 
 .debug-panel.visible {
@@ -19,10 +21,15 @@
 .debug-panel-header {
   padding: 12px;
   background: #222;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.debug-title {
+  margin: 0;
+  font-size: .9rem;
 }
 
 .debug-panel-content {
@@ -39,33 +46,23 @@
   margin-bottom: 12px;
 }
 
-.debug-cmd-select {
-  flex: 1;
-  background: #111;
-  color: #fff;
-  border: 1px solid #444;
-  padding: 6px;
-  border-radius: 4px;
-}
-
+.debug-cmd-select,
 .debug-cmd-input {
   flex: 1;
-  background: #111;
-  color: #fff;
-  border: 1px solid #444;
   padding: 6px;
+  border-color: var(--border-strong);
   border-radius: 4px;
 }
 
 .debug-log {
   flex: 1;
   background: #0a0a0a;
-  border: 1px solid #333;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 8px;
   overflow-y: auto;
-  font-family: 'Courier New', monospace;
-  font-size: 0.8rem;
+  font-family: var(--mono);
+  font-size: .8rem;
 }
 
 .debug-log-line {

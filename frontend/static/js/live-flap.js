@@ -1,4 +1,12 @@
-const liveFlaps = {control: [], apps: []};
+// The animated copy of the display on the Control and Apps pages, kept in
+// step with the real one over /current_state/stream.
+
+// The pages that show the live display (see live_display() in index.html).
+const LIVE_PAGES = ['control', 'apps'];
+const liveFlaps = Object.fromEntries(LIVE_PAGES.map(page => [page, []]));
+
+// One flap on screen. Like a real module it only turns forwards, one
+// character at a time, until it reaches its target.
 
 class LiveFlap {
   constructor(el) {
@@ -25,41 +33,38 @@ class LiveFlap {
     this._flip(CHAR_MAP[this.curIdx], CHAR_MAP[next], () => { this.curIdx = next; this._render(CHAR_MAP[next]); this._step(); });
   }
   _render(ch) {
-    const d = STATE_DISPLAY[ch] || ch;
-    const v = d === ' ' ? '' : d;
-    this.el.querySelector('.ft .fc').textContent = v;
-    this.el.querySelector('.fb .fc').textContent = v;
+    const shown = displayChar(ch);
+    this.el.querySelector('.ft .fc').textContent = shown;
+    this.el.querySelector('.fb .fc').textContent = shown;
   }
   _flip(from, to, done) {
-    const fd = STATE_DISPLAY[from] || from;
-    const td = STATE_DISPLAY[to] || to;
-    const fv = fd === ' ' ? '' : fd;
-    const tv = td === ' ' ? '' : td;
+    const next = displayChar(to);
     this.el.querySelectorAll('.ff').forEach(e => e.remove());
-    const dn = document.createElement('div'); dn.className = 'ff ffd';
-    const dnc = document.createElement('span'); dnc.className = 'fc'; dnc.textContent = fv; dn.appendChild(dnc);
-    const up = document.createElement('div'); up.className = 'ff ffu';
-    const upc = document.createElement('span'); upc.className = 'fc'; upc.textContent = tv; up.appendChild(upc);
-    this.el.querySelector('.fb .fc').textContent = tv;
-    this.el.appendChild(dn); this.el.appendChild(up);
-    setTimeout(() => { dn.remove(); up.remove(); this.el.querySelector('.ft .fc').textContent = tv; done(); }, 90);
+    // The top half falls away showing the old character, then the bottom
+    // half swings down showing the new one.
+    const down = el('div', {class: 'ff ffd'}, el('span', {class: 'fc'}, displayChar(from)));
+    const up = el('div', {class: 'ff ffu'}, el('span', {class: 'fc'}, next));
+    this.el.querySelector('.fb .fc').textContent = next;
+    this.el.append(down, up);
+    setTimeout(() => {
+      down.remove();
+      up.remove();
+      this.el.querySelector('.ft .fc').textContent = next;
+      done();
+    }, 90);
   }
 }
 
 function initLiveGrids() {
-  ['control', 'apps'].forEach(tab => {
-    const grid = document.querySelector(`.live-grid-${tab}`);
-    if (!grid) return;
+  LIVE_PAGES.forEach(page => {
+    const grid = document.querySelector(`.live-grid-${page}`);
     grid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
-    grid.innerHTML = '';
-    liveFlaps[tab] = [];
-    for (let i = 0; i < NUM_MODULES; i++) {
-      const el = document.createElement('div');
-      el.className = 'live-flap';
-      el.innerHTML = '<div class="fh ft"><span class="fc"></span></div><div class="fh fb"><span class="fc"></span></div><div class="fd"></div>';
-      grid.appendChild(el);
-      liveFlaps[tab].push(new LiveFlap(el));
-    }
+    const flaps = Array.from({length: NUM_MODULES}, () => el('div', {class: 'live-flap'},
+      el('div', {class: 'fh ft'}, el('span', {class: 'fc'})),
+      el('div', {class: 'fh fb'}, el('span', {class: 'fc'})),
+      el('div', {class: 'fd'})));
+    grid.replaceChildren(...flaps);
+    liveFlaps[page] = flaps.map(flap => new LiveFlap(flap));
   });
 }
 
@@ -69,34 +74,20 @@ function initLiveGrids() {
 function applyLiveState(data) {
   if (!data) return;
 
-  ['control','apps'].forEach(tab=>{
-    const el = document.getElementById(`homing-${tab}`);
-    if(el) el.style.display = data.is_homed ? 'none' : 'flex';
-  });
-
-  const s = data.state || '';
-  ['control','apps'].forEach(tab=>{
-    const fa = liveFlaps[tab];
-    for(let i=0; i<fa.length; i++){
-      const ch = s[i] || ' ';
-      const idx = CHAR_MAP.indexOf(ch);
-      fa[i].setTarget(idx >= 0 ? idx : 0, i * 5);
-    }
-  });
-
+  const text = data.state || '';
   const app = data.active_app;
-  const appInfo = app ? (window.appsByKey[app] || {name: app}) : null;
-  ['control','apps'].forEach(tab=>{
-    const banner = document.getElementById(`${tab}-banner`);
-    const nameEl = document.getElementById(`${tab}-app-name`);
-    if(banner){
-      banner.classList.toggle('visible', !!app);
-      if(app && nameEl) nameEl.textContent = appInfo.name;
-    }
+  LIVE_PAGES.forEach(page => {
+    byId(`homing-${page}`).style.display = data.is_homed ? 'none' : 'flex';
+    liveFlaps[page].forEach((flap, i) => {
+      const idx = CHAR_MAP.indexOf(text[i] || ' ');
+      flap.setTarget(idx >= 0 ? idx : 0, i * 5);   // a slight ripple across the grid
+    });
+    byId(`${page}-banner`).classList.toggle('visible', !!app);
+    if (app) byId(`${page}-app-name`).textContent = appName(app);
   });
 
-  document.querySelectorAll('.app-card').forEach(c=>{
-    c.classList.toggle('running', c.dataset.app === app);
+  document.querySelectorAll('.app-card').forEach(card => {
+    card.classList.toggle('running', card.dataset.app === app);
   });
 }
 

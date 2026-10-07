@@ -1,54 +1,31 @@
-// Grid size is populated at load time by main.js from GET /config — these
-// placeholders are overwritten before anything else runs. Nothing else in
-// the frontend should hardcode 45 / 15 / 3.
-let GRID_ROWS = 3;
-let GRID_COLS = 15;
-let NUM_MODULES = 45;
+// What the backend knows about the display, rendered into the page as
+// CONFIG (see client_config() in routes/pages.py), so nothing here is a
+// hand-kept copy of the backend's tables.
+const GRID_ROWS = CONFIG.grid_rows;
+const GRID_COLS = CONFIG.grid_cols;
+const NUM_MODULES = CONFIG.num_modules;
 
-// Must match display/charset.py FLAP_CHARS exactly.
-const CHAR_MAP = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!,.q:@#$&()+-*/=%dhwroygbp";
+// Every character the reels can show, in flap order (index 0 is blank).
+const CHAR_MAP = CONFIG.flap_chars;
 
-const STATE_DISPLAY = {
-  'r':'🟥','o':'🟧','y':'🟨','g':'🟩','b':'🟦','p':'🟪','w':'⬜','q':'"',
-  'd':'°','h':'♥'
-};
-
-const COLOR_PALETTE = ['🟥','🟧','🟨','🟩','🟦','🟪','⬜','⬛'];
-const COLOR_TITLES = {'🟥':'Red','🟧':'Orange','🟨':'Yellow','🟩':'Green','🟦':'Blue','🟪':'Purple','⬜':'White','⬛':'Black'};
-
-const TRANSITION_STYLES = [
-  {v:'ltr',          l:'Left → Right'},
-  {v:'rtl',          l:'Right → Left'},
-  {v:'diagonal',     l:'Diagonal ↘'},
-  {v:'anti_diagonal',l:'Diagonal ↙'},
-  {v:'center_out',   l:'Center Out'},
-  {v:'outside_in',   l:'Outside In'},
-  {v:'random',       l:'Random'},
-  {v:'rain',         l:'Rain (Top→Bot)'},
-  {v:'reverse_rain', l:'Rain (Bot→Top)'},
-  {v:'spiral',       l:'Spiral'},
-  {v:'columns',      l:'Columns'},
-  {v:'alternating',  l:'Alt (↔↔↔)'},
-];
-
-function buildStyleOptions(selected='ltr'){
-  return TRANSITION_STYLES.map(s=>
-    `<option value="${s.v}"${s.v===selected?' selected':''}>${s.l}</option>`
-  ).join('');
+// How a flap character is shown on screen: colour codes as their tile,
+// the quote's stand-in as a quote, and a blank as nothing.
+function displayChar(ch) {
+  const shown = CONFIG.display_chars[ch] || ch;
+  return shown === ' ' ? '' : shown;
 }
 
-function setGridConfig(cfg){
-  GRID_ROWS = cfg.grid_rows;
-  GRID_COLS = cfg.grid_cols;
-  NUM_MODULES = cfg.num_modules;
+// The options of an animation style <select>, with `selected` chosen.
+function styleOptions(selected = 'ltr') {
+  return CONFIG.styles.map(s => el('option', {value: s.value, selected: s.value === selected}, s.label));
 }
 
 // Module IDs are shown to the user in hex (easier to scan at a glance than
 // decimal once you get past a handful of modules) everywhere in the UI —
 // the module grid, the inspector title, and any toast/confirm message that
 // names a module. This is purely cosmetic: every network request and the
-// wire protocol itself still use the plain decimal id (see api.js and
-// transceiver.h) — only text the user reads goes through this.
-function formatModuleId(id){
+// wire protocol itself still use the plain decimal id — only text the user
+// reads goes through this.
+function formatModuleId(id) {
   return id.toString(16).toUpperCase().padStart(2, '0');
 }

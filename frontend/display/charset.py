@@ -9,11 +9,24 @@ FLAP_CHARS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!,.q:@#$&()+-*/=%dhwroygbp"
 QUOTE_CHAR = '"'
 QUOTE_SUBSTITUTE = 'q'
 
-# Emoji color tiles used in the compose UI <-> single-char codes on the wire.
+# The colour tiles the compose UI offers: (emoji, code on the wire, name).
+# Black is the blank flap.
+COLOR_TILES = [
+    ('\U0001f7e5', 'r', 'Red'), ('\U0001f7e7', 'o', 'Orange'), ('\U0001f7e8', 'y', 'Yellow'),
+    ('\U0001f7e9', 'g', 'Green'), ('\U0001f7e6', 'b', 'Blue'), ('\U0001f7ea', 'p', 'Purple'),
+    ('\u2b1c', 'w', 'White'), ('\u2b1b', ' ', 'Black'),
+]
+
+# Characters typed or shown in the UI -> their code on the wire.
 COLOR_MAP = {
-    '\U0001f7e5': 'r', '\U0001f7e7': 'o', '\U0001f7e8': 'y', '\U0001f7e9': 'g',
-    '\U0001f7e6': 'b', '\U0001f7ea': 'p', '\u2b1c': 'w', '\u2b1b': ' ',
+    **{emoji: code for emoji, code, _ in COLOR_TILES},
     '\u00B0': 'd', '\u2665': 'h',
+}
+
+# How the UI shows each code that isn't shown as itself.
+DISPLAY_CHARS = {
+    **{code: shown for shown, code in COLOR_MAP.items() if code != ' '},
+    QUOTE_SUBSTITUTE: QUOTE_CHAR,
 }
 
 

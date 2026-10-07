@@ -1,0 +1,61 @@
+"""Tests for the page and its configuration in routes/pages.py.
+
+Run from frontend/:   python -m unittest tests.test_pages
+"""
+import json
+import os
+import re
+import sys
+import unittest
+
+from flask import Flask
+
+FRONTEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, FRONTEND)
+
+from config import NUM_MODULES  # noqa: E402
+from display.charset import FLAP_CHARS  # noqa: E402
+from display.layout import STYLES  # noqa: E402
+from display.module_protocol import GLOBAL_SETTINGS, MODULE_TOGGLES  # noqa: E402
+from routes import pages  # noqa: E402
+
+
+class PageTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        app = Flask(__name__, template_folder=os.path.join(FRONTEND, 'templates'),
+                    static_folder=os.path.join(FRONTEND, 'static'))
+        app.register_blueprint(pages.bp)
+        cls.html = app.test_client().get('/').get_data(as_text=True)
+
+    def test_every_firmware_setting_has_an_input(self):
+        for key, spec in GLOBAL_SETTINGS.items():
+            with self.subTest(key=key):
+                self.assertIn(f'id="fw-{key}"', self.html)
+                self.assertIn(spec['label'], self.html)
+
+    def test_every_module_toggle_has_a_working_checkbox(self):
+        # The attributes must come out as attributes, not escaped text.
+        for key in MODULE_TOGGLES:
+            with self.subTest(key=key):
+                self.assertRegex(self.html, rf'id="modToggle-{key}" data-onchange="toggleModuleSetting" '
+                                            rf'data-setting="{key}"')
+
+    def test_config_carries_what_the_scripts_read(self):
+        config = json.loads(re.search(r'const CONFIG = (.*?);</script>', self.html).group(1))
+        self.assertEqual(config['num_modules'], NUM_MODULES)
+        self.assertEqual(config['flap_chars'], FLAP_CHARS)
+        self.assertEqual([s['value'] for s in config['styles']], list(STYLES))
+        self.assertEqual(config['display_chars']['q'], '"')
+        self.assertEqual(len(config['color_tiles']), 8)
+
+    def test_every_script_exists(self):
+        scripts = re.findall(r'<script src="/(static/js/[^"]+)"', self.html)
+        self.assertTrue(scripts)
+        for src in scripts:
+            with self.subTest(src=src):
+                self.assertTrue(os.path.exists(os.path.join(FRONTEND, src)))
+
+
+if __name__ == '__main__':
+    unittest.main()
