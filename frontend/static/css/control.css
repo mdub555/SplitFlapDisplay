@@ -183,6 +183,34 @@
   transform: scale(1.2);
 }
 
+.palette-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+/* ° and ♥: drawn like a flap, the same size as the colour tiles. */
+.symbol-btn {
+  box-sizing: border-box;
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin: 2px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--flap-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  color: var(--text-bright);
+  font-family: var(--mono);
+  font-size: 1rem;
+  line-height: 1;
+}
+
 /* ── COMPOSE: the grid you type into ── */
 .compose-wrapper {
   position: relative;
@@ -338,6 +366,21 @@
 
   .control-panel {
     gap: 8px;
+  }
+
+  /* Smaller tiles, so the colours, ° and ♥ fit on one line. */
+  .color-palette {
+    gap: 3px;
+  }
+
+  .color-btn {
+    font-size: 1.2rem;
+  }
+
+  .symbol-btn {
+    width: 1.4rem;
+    height: 1.4rem;
+    font-size: .9rem;
   }
 
   .saved-pl-item {

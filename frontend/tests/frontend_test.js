@@ -40,7 +40,9 @@ async function main() {
   check('GRID_COLS picked up from /config (16)', globalVar('GRID_COLS') === 16);
   check('NUM_MODULES picked up from /config (64)', globalVar('NUM_MODULES') === 64);
   check('compose grid built with a flap per module', document.querySelectorAll('#preview .flap-unit').length === 64);
-  check('color palette built', document.querySelectorAll('#colorPalette .color-btn').length === 8);
+  check('color palette built', document.querySelectorAll('#colorPalette .color-btn:not(.symbol-btn)').length === 8);
+  check('degree and heart buttons follow the colours',
+    [...document.querySelectorAll('#colorPalette .symbol-btn')].map(b => b.textContent).join('') === '°♥');
   check('live flap grid built', document.querySelectorAll('#liveGrid .live-flap').length === 64);
   check('the live display sits above the tabs, outside every page',
     !document.getElementById('liveGrid').closest('.page') &&
@@ -541,6 +543,11 @@ async function main() {
   check('the grid clears', flapText().trim() === '');
   click(document.querySelector('#playlistList .playlist-item:last-child [data-onclick="editPlaylist"]'));
   check('EDIT restores the page into the grid', row0() === '      HEXL      ' && rowN(1) === '      "O🟥"      ');
+
+  console.log('\n--- Degree and heart buttons ---');
+  click(document.querySelector('#preview .flap-unit[data-cell="32"]'));
+  document.querySelectorAll('#colorPalette .symbol-btn').forEach(click);
+  check('the degree and heart buttons type their flaps at the cursor', rowN(2) === '°♥              ');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

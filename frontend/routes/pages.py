@@ -4,7 +4,7 @@ the page when it's rendered, so the frontend never keeps its own copy."""
 from flask import Blueprint, render_template
 
 from config import GRID_ROWS, GRID_COLS, NUM_MODULES
-from display.charset import COLOR_TILES, DISPLAY_CHARS, FLAP_CHARS
+from display.charset import COLOR_TILES, DISPLAY_CHARS, FLAP_CHARS, SYMBOL_TILES
 from display.debug_commands import DEBUG_COMMANDS
 from display.layout import STYLES
 from display.module_protocol import (
@@ -23,6 +23,7 @@ def client_config():
         'flap_chars': FLAP_CHARS,
         'display_chars': DISPLAY_CHARS,
         'color_tiles': [{'emoji': emoji, 'name': name} for emoji, _, name in COLOR_TILES],
+        'symbol_tiles': [{'char': char, 'name': name} for char, _, name in SYMBOL_TILES],
         'styles': [{'value': key, 'label': style.label} for key, style in STYLES.items()],
         # The shared settings each module reports in its dump, which the
         # inspector compares with the saved values.

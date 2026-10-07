@@ -187,13 +187,19 @@ function centerLines() {
   renderComposer();
 }
 
+// The colour tiles, then the symbol flaps no keyboard has (° and ♥). Each
+// goes in at the cursor.
 function buildColorPalette() {
-  byId('colorPalette').replaceChildren(...CONFIG.color_tiles.map(tile => {
-    const btn = el('button', {class: 'color-btn', title: tile.name}, tile.emoji);
+  const tileButton = (text, name, cls) => {
+    const btn = el('button', {class: cls, title: name}, text);
     btn.addEventListener('mousedown', e => e.preventDefault());   // keep the grid focused
-    btn.addEventListener('click', () => { typeText(tile.emoji); focusComposer(); });
+    btn.addEventListener('click', () => { typeText(text); focusComposer(); });
     return btn;
-  }));
+  };
+  byId('colorPalette').replaceChildren(
+    ...CONFIG.color_tiles.map(tile => tileButton(tile.emoji, tile.name, 'color-btn')),
+    el('span', {class: 'palette-divider'}),
+    ...CONFIG.symbol_tiles.map(tile => tileButton(tile.char, tile.name, 'color-btn symbol-btn')));
 }
 
 function stopEditing() {
