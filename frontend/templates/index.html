@@ -12,21 +12,6 @@
 
 {# ── Macros for the blocks the page repeats ── #}
 
-{# The running-app banner and the live display, shown on the Control and Apps pages. #}
-{% macro live_display(page) %}
-  <div id="{{ page }}-banner" class="active-app-banner">
-    <div class="pulse-dot"></div>
-    <span class="aab-label">▶ <span id="{{ page }}-app-name">APP</span> is running</span>
-    <button class="aab-stop" data-onclick="stopApp">⏹ STOP</button>
-  </div>
-
-  <div class="section-label">LIVE DISPLAY</div>
-  <div class="preview-wrapper live-wrapper">
-    <div class="preview-grid live-grid-{{ page }}"></div>
-    <div class="homing-overlay" id="homing-{{ page }}">HOMING REQUIRED</div>
-  </div>
-{% endmacro %}
-
 {# A labelled on/off switch. #}
 {% macro toggle_row(input_id, name, hint='', attrs={}) %}
   <div class="toggle-row">
@@ -51,6 +36,27 @@
 
 <div class="container">
 
+  <!-- Shown only while the live-state stream (SSE) is disconnected — the
+       browser retries automatically, this is just so a dropped connection
+       is visibly different from "genuinely nothing is happening." -->
+  <div id="streamStatus" class="stream-status">
+    <div class="pulse-dot"></div>
+    <span>Reconnecting to display…</span>
+  </div>
+
+  <!-- LIVE DISPLAY: above the tabs, so it shows on every page -->
+  <div id="live-banner" class="active-app-banner">
+    <div class="pulse-dot"></div>
+    <span class="aab-label">▶ <span id="live-app-name">APP</span> is running</span>
+    <button class="aab-stop" data-onclick="stopApp">⏹ STOP</button>
+  </div>
+
+  <div class="section-label">LIVE DISPLAY</div>
+  <div class="preview-wrapper live-wrapper">
+    <div class="preview-grid" id="liveGrid"></div>
+    <div class="homing-overlay" id="homingOverlay">HOMING REQUIRED</div>
+  </div>
+
   <!-- TAB BAR -->
   <div class="tab-bar">
     {% for tab, full, short, action in [
@@ -65,18 +71,8 @@
     {% endfor %}
   </div>
 
-  <!-- Shown only while the live-state stream (SSE) is disconnected — the
-       browser retries automatically, this is just so a dropped connection
-       is visibly different from "genuinely nothing is happening." -->
-  <div id="streamStatus" class="stream-status">
-    <div class="pulse-dot"></div>
-    <span>Reconnecting to display…</span>
-  </div>
-
   <!-- ══════════ CONTROL PAGE ══════════ -->
   <div id="page-control" class="page active">
-    {{ live_display('control') }}
-
     <div class="section-label">COMPOSE</div>
     <div class="preview-wrapper"><div class="preview-grid" id="preview"></div></div>
 
@@ -127,8 +123,6 @@
 
   <!-- ══════════ APPS PAGE ══════════ -->
   <div id="page-apps" class="page">
-    {{ live_display('apps') }}
-
     <h3 class="apps-title">Available Apps</h3>
     <p class="note">Tap to launch · ⚙️ to configure</p>
 

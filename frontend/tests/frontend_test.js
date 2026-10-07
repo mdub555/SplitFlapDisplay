@@ -41,7 +41,10 @@ async function main() {
   check('NUM_MODULES picked up from /config (64)', globalVar('NUM_MODULES') === 64);
   check('line inputs built for 4 rows', document.querySelectorAll('#lineInputs .line-input').length === 4);
   check('color palette built', document.querySelectorAll('#colorPalette .color-btn').length === 8);
-  check('live flap grids built (control)', document.querySelectorAll('.live-grid-control .live-flap').length === 64);
+  check('live flap grid built', document.querySelectorAll('#liveGrid .live-flap').length === 64);
+  check('the live display sits above the tabs, outside every page',
+    !document.getElementById('liveGrid').closest('.page') &&
+    !!(document.getElementById('liveGrid').compareDocumentPosition(document.querySelector('.tab-bar')) & window.Node.DOCUMENT_POSITION_FOLLOWING));
   check('apps grid pre-populated by main.js', Object.keys(window.appsByKey).length === 2);
 
   console.log('\n--- Debug page ---');
@@ -147,17 +150,17 @@ async function main() {
   source.emit({ is_homed: false, state: ' '.repeat(64), active_app: 'weather' });
   await sleep(10);
   check('a pushed snapshot toggles the homing overlay',
-    document.getElementById('homing-control').style.display === 'flex');
+    document.getElementById('homingOverlay').style.display === 'flex');
   check('a pushed snapshot updates the active-app banner',
-    document.getElementById('control-banner').classList.contains('visible') &&
-    document.getElementById('control-app-name').textContent === 'Weather');
+    document.getElementById('live-banner').classList.contains('visible') &&
+    document.getElementById('live-app-name').textContent === 'Weather');
 
   source.emit({ is_homed: true, state: 'X'.repeat(64), active_app: null });
   await sleep(10);
   check('homing overlay clears once is_homed is true',
-    document.getElementById('homing-control').style.display === 'none');
+    document.getElementById('homingOverlay').style.display === 'none');
   check('banner hides once active_app is null',
-    !document.getElementById('control-banner').classList.contains('visible'));
+    !document.getElementById('live-banner').classList.contains('visible'));
 
   console.log('\n--- Malformed SSE payload logged and skipped, not thrown ---');
   let threw = false;

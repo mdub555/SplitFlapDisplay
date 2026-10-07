@@ -1,9 +1,7 @@
-// The animated copy of the display on the Control and Apps pages, kept in
-// step with the real one over /current_state/stream.
+// The animated copy of the display above the tabs, kept in step with the
+// real one over /current_state/stream.
 
-// The pages that show the live display (see live_display() in index.html).
-const LIVE_PAGES = ['control', 'apps'];
-const liveFlaps = Object.fromEntries(LIVE_PAGES.map(page => [page, []]));
+let liveFlaps = [];
 
 // One flap on screen. Like a real module it only turns forwards, one
 // character at a time, until it reaches its target.
@@ -56,16 +54,14 @@ class LiveFlap {
 }
 
 function initLiveGrids() {
-  LIVE_PAGES.forEach(page => {
-    const grid = document.querySelector(`.live-grid-${page}`);
-    grid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
-    const flaps = Array.from({length: NUM_MODULES}, () => el('div', {class: 'live-flap'},
-      el('div', {class: 'fh ft'}, el('span', {class: 'fc'})),
-      el('div', {class: 'fh fb'}, el('span', {class: 'fc'})),
-      el('div', {class: 'fd'})));
-    grid.replaceChildren(...flaps);
-    liveFlaps[page] = flaps.map(flap => new LiveFlap(flap));
-  });
+  const grid = byId('liveGrid');
+  grid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
+  const flaps = Array.from({length: NUM_MODULES}, () => el('div', {class: 'live-flap'},
+    el('div', {class: 'fh ft'}, el('span', {class: 'fc'})),
+    el('div', {class: 'fh fb'}, el('span', {class: 'fc'})),
+    el('div', {class: 'fd'})));
+  grid.replaceChildren(...flaps);
+  liveFlaps = flaps.map(flap => new LiveFlap(flap));
 }
 
 // Pulled out from the SSE wiring below so it can be exercised directly in
@@ -76,15 +72,13 @@ function applyLiveState(data) {
 
   const text = data.state || '';
   const app = data.active_app;
-  LIVE_PAGES.forEach(page => {
-    byId(`homing-${page}`).style.display = data.is_homed ? 'none' : 'flex';
-    liveFlaps[page].forEach((flap, i) => {
-      const idx = CHAR_MAP.indexOf(text[i] || ' ');
-      flap.setTarget(idx >= 0 ? idx : 0, i * 5);   // a slight ripple across the grid
-    });
-    byId(`${page}-banner`).classList.toggle('visible', !!app);
-    if (app) byId(`${page}-app-name`).textContent = appName(app);
+  byId('homingOverlay').style.display = data.is_homed ? 'none' : 'flex';
+  liveFlaps.forEach((flap, i) => {
+    const idx = CHAR_MAP.indexOf(text[i] || ' ');
+    flap.setTarget(idx >= 0 ? idx : 0, i * 5);   // a slight ripple across the grid
   });
+  byId('live-banner').classList.toggle('visible', !!app);
+  if (app) byId('live-app-name').textContent = appName(app);
 
   document.querySelectorAll('.app-card').forEach(card => {
     card.classList.toggle('running', card.dataset.app === app);
