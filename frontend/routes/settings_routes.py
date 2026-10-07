@@ -5,7 +5,7 @@ from flask import Blueprint, jsonify, request
 from config import NUM_MODULES
 from settings.store import settings, save_settings
 from settings.schema import GLOBAL_FIELDS
-from display.module_protocol import BROADCAST, UNPROVISIONED_ID, Cmd, message
+from display.module_protocol import UNPROVISIONED_ID, Cmd, message
 from display.serial_link import is_connected, read_dump, send_raw
 from routes.common import error, json_body
 from routes.pages import client_config
@@ -35,20 +35,6 @@ def handle_settings():
         save_settings(settings)
         return jsonify(status='Saved')
     return jsonify(settings)
-
-
-@bp.route('/toggle_autohome', methods=['POST'])
-def toggle_autohome():
-    enabled = json_body().get('enabled', True)
-    settings['auto_home'] = enabled
-
-    # Sync with per-module autoHome
-    for mod_id in settings['modules']:
-        settings['modules'][mod_id]['autoHome'] = enabled
-
-    save_settings(settings)
-    send_raw(message(BROADCAST, Cmd.SET_AUTO_HOME, 1 if enabled else 0))
-    return jsonify(status='Auto-home updated')
 
 
 @bp.route('/provision_module', methods=['POST'])

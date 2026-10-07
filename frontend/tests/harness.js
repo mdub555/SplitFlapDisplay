@@ -150,14 +150,12 @@ window.fetch = async (url, options = {}) => {
     const { setting, value } = JSON.parse(options.body);
     return ok({ status: 'success', setting, value });
   }
-  if (url === '/toggle_autohome') {
-    return ok({ status: 'Auto-home updated' });
-  }
   if (url === '/firmware_config') {
     if (options.method === 'POST') return ok({ status: 'success', values: JSON.parse(options.body) });
     return ok({
       values: { stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, recalculateHome: true,
-                rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 150 },
+                rampStartDelayUs: 3000, rampSteps: 0, motorRelease: false, settleMs: 0,
+                autoHome: true, staggerMs: 150 },
       limits: {
         stepDelayUs:       { type: 'int',  min: 1, max: 65535 },
         homingStepDelayUs: { type: 'int',  min: 1, max: 65535 },
@@ -165,7 +163,9 @@ window.fetch = async (url, options = {}) => {
         recalculateHome: { type: 'bool', min: null, max: null },
         rampStartDelayUs:  { type: 'int',  min: 1, max: 65535 },
         rampSteps:       { type: 'int',  min: 0, max: 255 },
+        motorRelease:    { type: 'bool', min: null, max: null },
         settleMs:        { type: 'int',  min: 0, max: 255 },
+        autoHome:        { type: 'bool', min: null, max: null },
         staggerMs:       { type: 'int',  min: 0, max: 255 },
       },
     });

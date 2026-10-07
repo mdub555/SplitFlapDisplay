@@ -24,16 +24,6 @@
   grid-column: span 2;
 }
 
-/* A switch with its label, set apart in a section header. */
-.pill {
-  gap: 10px;
-  background: var(--surface);
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: .85rem;
-  color: #ccc;
-}
-
 .backup-row {
   display: flex;
   gap: 10px;

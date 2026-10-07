@@ -207,7 +207,7 @@
 
     <!-- Firmware settings: identical on every module, sent to all of them by broadcast -->
     <div class="config-section">
-      <h3>Module Timing &amp; Home Detection</h3>
+      <h3>Settings for All Modules</h3>
       <p class="note">Shared by every module: saved here and sent to all modules at once (each keeps them in its EEPROM).</p>
       <div class="settings-grid">
         {% for key, spec in firmware_settings.items() %}
@@ -227,13 +227,7 @@
 
     <!-- Global Settings -->
     <div class="config-section">
-      <div class="section-head">
-        <h3>Global Settings</h3>
-        <div class="row pill">
-          <span>Auto-Home on Boot</span>
-          <label class="switch"><input type="checkbox" id="autoHomeToggle" data-onchange="toggleAutoHome"><span class="slider"></span></label>
-        </div>
-      </div>
+      <h3>Global Settings</h3>
       <div class="settings-grid" id="globalSettingsGrid">
         <!-- Populated from /global_fields by tuning.js -->
       </div>
@@ -243,7 +237,7 @@
     <!-- Backup / Restore -->
     <div class="config-section">
       <h3>Calibration Backup &amp; Restore</h3>
-      <p class="note">Export/import all home offsets, step calibrations and per-module toggles (auto-home, motor direction, motor release).</p>
+      <p class="note">Export/import all home offsets, step calibrations, motor directions and the settings for all modules.</p>
       <div class="backup-row">
         <button class="btn btn-secondary" data-onclick="downloadBackup">⬇ Download Backup JSON</button>
         <div class="row grow">

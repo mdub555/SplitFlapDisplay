@@ -12,7 +12,6 @@ function loadTuningData() {
     if (!settings || !fields) return; // error toast already shown by the api layer
     currentSettings = settings;
     byId('globalSettingsGrid').replaceChildren(...fields.map(f => buildField(f, settings[f.key], 'gsf_')));
-    byId('autoHomeToggle').checked = settings.auto_home;
     selectModule(selectedModule);
   });
 }
@@ -317,24 +316,8 @@ function provisionModule() {
   });
 }
 
-// --- Global settings ------------------------------------------------------
-
-function toggleAutoHome(input) {
-  const enabled = input.checked;
-  api.toggleAutoHome(enabled).then(result => {
-    if (!result) { input.checked = !enabled; return; }
-    // The backend applies this to every provisioned module; mirror that here
-    // so the inspector's per-module auto-home toggle doesn't go stale.
-    if (currentSettings) {
-      currentSettings.auto_home = enabled;
-      Object.values(currentSettings.modules || {}).forEach(mod => { mod.autoHome = enabled; });
-      refreshModuleToggles();
-    }
-  });
-}
-
-// Firmware settings shared by every module (step delays, debounce, recalculate
-// home). The inputs are rendered from the backend's definitions (fw-<key>);
+// Firmware settings shared by every module (step delays, debounce, auto-home,
+// ...). The inputs are rendered from the backend's definitions (fw-<key>);
 // the values and their ranges come from GET /firmware_config.
 let firmwareLimits = null;
 
@@ -366,7 +349,9 @@ function applyFirmwareConfig() {
     payload[key] = n;
   }
   api.saveFirmwareConfig(payload).then(result => {
-    if (result) showToast('Settings sent to all modules');
+    if (!result) return;
+    if (currentSettings) currentSettings.firmware = result.values;
+    showToast('Settings sent to all modules');
   });
 }
 
@@ -413,7 +398,7 @@ function uploadBackup(input) {
 registerActions({
   selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected, identifySelected,
   rebootSelected, resetSettingsSelected, exerciseSelected, stopSelected,
-  syncOneFromHardware, syncAllFromHardware, toggleAutoHome, provisionModule,
+  syncOneFromHardware, syncAllFromHardware, provisionModule,
   setTotalSteps, showChar, showIndex, gotoStep,
   applyFirmwareConfig,
   toggleModuleSetting,

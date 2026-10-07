@@ -30,7 +30,7 @@ class SettingsRoutesTest(unittest.TestCase):
         self.sent = []
         self.saves = 0
         self.settings = {'modules': {'1': {'autoHome': False}}, 'timezone': 'US/Eastern',
-                         'auto_home': False, 'saved_playlists': {}}
+                         'saved_playlists': {}}
 
         def save_settings(_):
             self.saves += 1
@@ -62,12 +62,6 @@ class SettingsRoutesTest(unittest.TestCase):
         self.assertEqual(self.settings['timezone'], 'UTC')
         self.assertEqual(self.settings['modules'], {'1': {'autoHome': False}})
         self.assertEqual(self.saves, 1)
-
-    def test_toggle_autohome_updates_every_module_and_broadcasts(self):
-        self.client.post('/toggle_autohome', json={'enabled': True})
-        self.assertTrue(self.settings['auto_home'])
-        self.assertTrue(self.settings['modules']['1']['autoHome'])
-        self.assertEqual(self.sent, ['m*A1'])
 
     def test_provisioning_needs_the_hardware(self):
         self.assertEqual(self.client.post('/provision_module', json={}).status_code, 503)

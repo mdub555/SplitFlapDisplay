@@ -57,7 +57,6 @@ const api = {
   globalFields:       () => apiGet('/global_fields', 'Could not load settings fields'),
   getSettings:        () => apiGet('/settings', 'Could not load settings'),
   saveGlobalSettings: (data) => apiPost('/settings', data, 'Could not save settings'),
-  toggleAutoHome:     (enabled) => apiPost('/toggle_autohome', {enabled}, 'Could not update auto-home'),
 
   updatePlaylist:     (pages, delay) => apiPost('/update_playlist', {pages, delay}, 'Could not push to display'),
   playlists:          () => apiGet('/playlists', 'Could not load saved playlists'),

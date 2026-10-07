@@ -2,8 +2,10 @@ from datetime import datetime
 
 from config import NUM_MODULES
 from settings.store import settings, save_settings
+from settings.shared import current_firmware_values, migrate
 from display.serial_link import send_raw, is_connected
-from display.module_protocol import TOGGLE_COMMANDS, Cmd, message, toggle_command
+from display.module_protocol import (
+    TOGGLE_COMMANDS, Cmd, global_command, global_setting_problem, message, toggle_command)
 
 # Must match the firmware defaults (HOME_OFFSET / TOTAL_STEPS in eeprom_store.cpp).
 DEFAULT_HOME_OFFSET = 480
@@ -15,7 +17,8 @@ def build_backup():
         'version': 3,  # v3 uses the 'modules' dictionary
         'created': datetime.now().isoformat(),
         'modules': settings.get('modules', {}),
-        'auto_home': settings.get('auto_home', True),
+        # The settings shared by every module (timing, auto-home, ...).
+        'firmware': current_firmware_values(settings),
     }
 
 
@@ -32,8 +35,14 @@ def restore_backup(data: dict) -> bool:
         for mod_id, fields in data.get('modules', {}).items():
             settings['modules'].setdefault(mod_id, {}).update(fields)
 
-    if 'auto_home' in data:
-        settings['auto_home'] = data['auto_home']
+    # The shared settings: from 'firmware', or (from an older backup) the old
+    # auto-home switch and per-module release-motor values, the same way an
+    # old settings.json is migrated. Anything malformed is left out.
+    incoming = migrate({key: data[key] for key in ('auto_home', 'modules', 'firmware') if key in data})
+    shared = {key: value for key, value in (incoming.get('firmware') or {}).items()
+              if global_setting_problem(key, value) is None}
+    if shared:
+        settings['firmware'] = {**current_firmware_values(settings), **shared}
 
     save_settings(settings)
 
@@ -51,4 +60,6 @@ def restore_backup(data: dict) -> bool:
         for key in TOGGLE_COMMANDS:
             if isinstance(mod.get(key), bool):
                 send_raw(toggle_command(i, key, mod[key]))
+    for key, value in shared.items():
+        send_raw(global_command(key, value))
     return True

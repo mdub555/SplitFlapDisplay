@@ -15,7 +15,7 @@ function check(label, cond) {
 // a shared lexical lookup, which window.eval() can do as long as it's only
 // *reading* an existing binding, not declaring a new one.
 const globalVar = (name) => window.eval(name);
-const MODULE_TOGGLES_ALL = () => ['autoHome', 'motorClockwise', 'motorRelease'];
+const MODULE_TOGGLES_ALL = () => ['motorClockwise'];
 
 function click(el) {
   el.dispatchEvent(new window.Event('click', { bubbles: true }));
@@ -215,7 +215,12 @@ async function main() {
   const toastCount = () => document.getElementById('toastContainer').children.length;
   check('inputs are filled from /firmware_config',
     fw('stepDelayUs').value === '1000' && fw('homingStepDelayUs').value === '1800' &&
-    fw('debounceMs').value === '100' && fw('recalculateHome').checked === true);
+    fw('debounceMs').value === '100' && fw('recalculateHome').checked === true &&
+    fw('autoHome').checked === true && fw('motorRelease').checked === false);
+  check('auto-home and release motor are in the settings for all modules',
+    !!fw('autoHome').closest('.config-section').querySelector('[data-onclick="applyFirmwareConfig"]') &&
+    !!fw('motorRelease').closest('.config-section').querySelector('[data-onclick="applyFirmwareConfig"]') &&
+    !document.getElementById('autoHomeToggle'));
   check('input ranges come from the backend limits',
     fw('debounceMs').min === '0' && fw('debounceMs').max === '65535' && fw('stepDelayUs').min === '1' &&
     fw('stepDelayUs').max === '65535');
@@ -224,6 +229,7 @@ async function main() {
   fw('stepDelayUs').value = '1250';
   fw('debounceMs').value = '150';
   fw('recalculateHome').checked = false;
+  fw('autoHome').checked = false;
   click(document.querySelector('[data-onclick="applyFirmwareConfig"]'));
   await sleep(20);
   const fwPost = calls.find(c => c.url === '/firmware_config' && c.method === 'POST');
@@ -231,7 +237,8 @@ async function main() {
   check('apply sends every setting with real numbers and a real boolean',
     fwPost && JSON.stringify(JSON.parse(fwPost.body)) ===
       JSON.stringify({ stepDelayUs: 1250, homingStepDelayUs: 1800, debounceMs: 150, recalculateHome: false,
-                       rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 150 }));
+                       rampStartDelayUs: 3000, rampSteps: 0, motorRelease: false, settleMs: 0,
+                       autoHome: false, staggerMs: 150 }));
 
   for (const [key, bad] of [['stepDelayUs', '0'], ['stepDelayUs', '65536'], ['debounceMs', '65536'],
                             ['homingStepDelayUs', ''], ['homingStepDelayUs', '1.5'],
@@ -249,19 +256,7 @@ async function main() {
     fw(key).value = good;
   }
 
-  console.log('\n--- Optimistic-UI revert on failure (auto-home toggle) ---');
-  const autoHomeToggle = document.getElementById('autoHomeToggle');
-  autoHomeToggle.checked = true;
-  // Force this specific call to fail by monkey-patching fetch just for this one call.
   const realFetch = window.fetch;
-  window.fetch = async (url, opts) => {
-    if (url === '/toggle_autohome') return { ok: false, status: 500, json: async () => ({message: 'boom'}) };
-    return realFetch(url, opts);
-  };
-  change(autoHomeToggle);
-  await sleep(20);
-  check('checkbox reverted to previous state after failed save', autoHomeToggle.checked === false);
-  window.fetch = realFetch;
 
   console.log('\n--- Optimistic-UI revert on failure (calibration timeout, HTTP 500 body) ---');
   const inspectCalib = document.getElementById('inspectCalib');
@@ -282,42 +277,35 @@ async function main() {
 
   console.log('\n--- Per-module toggles in the Hardware Inspector ---');
   const modToggle = (key) => document.getElementById(`modToggle-${key}`);
-  check('toggles reflect the selected module\'s stored settings',
-    modToggle('autoHome').checked === true && modToggle('motorClockwise').checked === true &&
-    modToggle('motorRelease').checked === false);
-  check('toggles are enabled for a provisioned module', !modToggle('autoHome').disabled);
+  check('only motor direction is set per module',
+    document.querySelectorAll('#moduleToggles [data-setting]').length === 1 && !!modToggle('motorClockwise'));
+  check('the toggle reflects the selected module\'s stored setting', modToggle('motorClockwise').checked === true);
+  check('the toggle is enabled for a provisioned module', !modToggle('motorClockwise').disabled);
 
   calls.length = 0;
-  modToggle('motorRelease').checked = true;
-  change(modToggle('motorRelease'));
+  modToggle('motorClockwise').checked = false;
+  change(modToggle('motorClockwise'));
   await sleep(20);
   const settingCall = calls.find(c => c.url === '/modules/0/setting' && c.method === 'POST');
   check('toggling posts to the per-module setting endpoint', !!settingCall);
   check('body names the setting and carries a real boolean',
-    settingCall && JSON.parse(settingCall.body).setting === 'motorRelease' && JSON.parse(settingCall.body).value === true);
-  check('toggle stays on and is re-enabled after success',
-    modToggle('motorRelease').checked === true && !modToggle('motorRelease').disabled);
+    settingCall && JSON.parse(settingCall.body).setting === 'motorClockwise' && JSON.parse(settingCall.body).value === false);
+  check('toggle stays off and is re-enabled after success',
+    modToggle('motorClockwise').checked === false && !modToggle('motorClockwise').disabled);
   check('local settings updated, so switching modules keeps the value',
-    globalVar('currentSettings').modules['0'].motorRelease === true);
+    globalVar('currentSettings').modules['0'].motorClockwise === false);
 
   window.fetch = async (url, opts) => {
     if (url === '/modules/0/setting') return { ok: false, status: 500, json: async () => ({message: 'boom'}) };
     return realFetch(url, opts);
   };
-  modToggle('autoHome').checked = false;
-  change(modToggle('autoHome'));
+  modToggle('motorClockwise').checked = true;
+  change(modToggle('motorClockwise'));
   await sleep(20);
-  check('toggle reverts after a failed save', modToggle('autoHome').checked === true);
-  check('stored value is unchanged after a failed save', globalVar('currentSettings').modules['0'].autoHome === true);
-  check('toggle is re-enabled after a failed save', !modToggle('autoHome').disabled);
+  check('toggle reverts after a failed save', modToggle('motorClockwise').checked === false);
+  check('stored value is unchanged after a failed save', globalVar('currentSettings').modules['0'].motorClockwise === false);
+  check('toggle is re-enabled after a failed save', !modToggle('motorClockwise').disabled);
   window.fetch = realFetch;
-
-  autoHomeToggle.checked = false;
-  change(autoHomeToggle);
-  await sleep(20);
-  check('global auto-home toggle is mirrored into the per-module toggle', modToggle('autoHome').checked === false);
-  check('global auto-home toggle is mirrored into stored module settings',
-    globalVar('currentSettings').modules['0'].autoHome === false);
 
   click(document.querySelector('#modMatrix .mod-cell[data-id="5"]'));
   await sleep(20);
@@ -326,7 +314,7 @@ async function main() {
     document.getElementById('moduleToggles').classList.contains('disabled'));
   click(document.querySelector('#modMatrix .mod-cell[data-id="0"]'));
   await sleep(20);
-  check('selecting a provisioned module again re-enables its toggles', !modToggle('autoHome').disabled);
+  check('selecting a provisioned module again re-enables its toggles', !modToggle('motorClockwise').disabled);
 
   console.log('\n--- Module IDs are displayed in hex, not decimal ---');
   check('grid cell for module 10 shows hex (0A), not decimal',
