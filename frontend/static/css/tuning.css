@@ -8,11 +8,6 @@
   border: 1px solid var(--border);
 }
 
-/* The hardware inspector, marked as the page's main section. */
-.config-section-main {
-  border-left: 5px solid var(--accent);
-}
-
 /* The button that saves a section's form. */
 .section-action {
   margin-top: 14px;
