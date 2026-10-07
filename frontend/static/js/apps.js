@@ -1,5 +1,5 @@
 // The Apps page: one card per app, which runs it, with a ⚙️ button for its
-// settings if it has any.
+// settings if it has any; and the global settings the apps share.
 
 window.appsByKey = {};
 let appsLoaded = false;
@@ -37,4 +37,22 @@ function runApp(card) {
   });
 }
 
-registerActions({ runApp });
+// The global settings (timezone, YouTube keys, ...), read fresh each time
+// the page is opened. The fields come from /global_fields.
+function loadGlobalSettings() {
+  Promise.all([api.getSettings(), api.globalFields()]).then(([settings, fields]) => {
+    if (!settings || !fields) return; // error toast already shown by the api layer
+    byId('globalSettingsGrid').replaceChildren(...fields.map(f => buildField(f, settings[f.key], 'gsf_')));
+  });
+}
+
+function saveGlobal() {
+  api.globalFields().then(fields => {
+    if (!fields) return;
+    api.saveGlobalSettings(readFieldValues(fields, 'gsf_')).then(result => {
+      if (result) showToast('Settings saved');
+    });
+  });
+}
+
+registerActions({ runApp, saveGlobal });

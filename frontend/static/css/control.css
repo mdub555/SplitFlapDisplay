@@ -1,9 +1,16 @@
 /* The Control page: the live display, composing a page, and playlists. */
 
 /* ── FLAP PREVIEW ── */
+/* A display box. Flaps grow with the page up to about 64px wide, so a small
+   display (say 1x8) stays display-sized and centred instead of stretching
+   across the page. */
 .preview-wrapper {
+  --box-pad: 12px;
+  max-width: calc(var(--grid-cols, 16) * 64px + (var(--grid-cols, 16) - 1) * 3px + 2 * var(--box-pad) + 4px);
+  margin-left: auto;
+  margin-right: auto;
+  padding: var(--box-pad);
   background: var(--inset);
-  padding: 12px;
   border-radius: 8px;
   border: 2px solid var(--border-strong);
   margin-bottom: 16px;
@@ -183,23 +190,83 @@
   transform: scale(1.2);
 }
 
-/* One line of the page being composed, in the display's style. */
-.line-input {
-  width: 100%;
-  font-size: 1.3rem;
-  background: var(--terminal);
-  color: var(--display-green);
-  border: 1px solid var(--border);
-  margin: 5px 0;
-  padding: 10px 12px;
-  font-family: var(--mono);
-  text-transform: uppercase;
-  border-radius: 6px;
+.palette-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 4px;
 }
 
-.line-input:focus {
-  outline: none;
-  border-color: var(--accent);
+/* ° and ♥: drawn like a flap, the same size as the colour tiles. */
+.symbol-btn {
+  box-sizing: border-box;
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin: 2px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--flap-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  color: var(--text-bright);
+  font-family: var(--mono);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* ── COMPOSE: the grid you type into ── */
+.compose-wrapper {
+  position: relative;
+  cursor: text;
+}
+
+.compose-wrapper .flap-unit.cursor {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* The cursor only shows while the grid has focus, and blinks. */
+.compose-wrapper:not(.focused) .flap-unit.cursor {
+  outline-color: transparent;
+}
+
+.compose-wrapper.focused .flap-unit.cursor {
+  animation: compose-blink 1s steps(1) infinite;
+}
+
+@keyframes compose-blink {
+  50% { outline-color: transparent; }
+}
+
+.compose-wrapper.focused {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Invisible, but focusable and on screen so the page doesn't jump and a
+   phone shows its keyboard. 16px stops iOS zooming in on focus. */
+.compose-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  resize: none;
+  overflow: hidden;
+  font-size: 16px;
+  pointer-events: none;
+}
+
+.compose-hint {
+  text-align: center;
+  margin: 6px 0 12px;
+  font-size: .8rem;
 }
 
 /* ── PLAYLIST ── */
@@ -301,16 +368,26 @@
   }
 
   .preview-wrapper {
-    padding: 7px;
+    --box-pad: 7px;
   }
 
   .control-panel {
     gap: 8px;
   }
 
-  .line-input {
-    font-size: 1.05rem;
-    padding: 8px;
+  /* Smaller tiles, so the colours, ° and ♥ fit on one line. */
+  .color-palette {
+    gap: 3px;
+  }
+
+  .color-btn {
+    font-size: 1.2rem;
+  }
+
+  .symbol-btn {
+    width: 1.4rem;
+    height: 1.4rem;
+    font-size: .9rem;
   }
 
   .saved-pl-item {

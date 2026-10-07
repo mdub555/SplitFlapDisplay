@@ -1,24 +1,223 @@
-// The serial debug panel: every message sent or received on the bus, live,
-// and a box to send any command. Dump replies are shown as labelled values.
+// The Debug page: send any command in the firmware's protocol to a module
+// (or all of them), watch every message sent or received on the bus, and
+// look up the flap character table. Dump replies are shown as labelled values.
 
-const debugPanel = {
-  el: null,
+// What a character typed or shown in the UI is sent as: colour emoji, °, ♥
+// and " become their codes on the wire; anything else is sent as typed.
+const WIRE_CHARS = Object.fromEntries(Object.entries(CONFIG.display_chars).map(([code, shown]) => [shown, code]));
+const toWireChars = text => Array.from(text).map(ch => WIRE_CHARS[ch] || ch).join('');
+
+const DEBUG_COMMANDS = Object.fromEntries(CONFIG.debug_commands.map(c => [c.key, c]));
+
+const debugPage = {
   logEl: null,
-  cmdInput: null,
   source: null,
 
   init() {
-    this.el = byId('debug-panel');
-    this.logEl = this.el.querySelector('.debug-log');
-    this.cmdInput = this.el.querySelector('.debug-cmd-input');
-    const cmdSelect = this.el.querySelector('.debug-cmd-select');
-
-    cmdSelect.addEventListener('change', () => { this.cmdInput.value = cmdSelect.value; });
-    this.el.querySelector('.debug-cmd-send').addEventListener('click', () => this.send());
-    this.cmdInput.addEventListener('keydown', e => { if (e.key === 'Enter') this.send(); });
-
+    this.logEl = byId('debugLog');
+    // Enter in any of the command's inputs sends it.
+    byId('debugParams').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && e.target.matches('input')) this.send();
+    });
+    byId('debugModuleId').addEventListener('keydown', e => { if (e.key === 'Enter') this.send(); });
+    this.buildFlapTable();
+    this.selectCommand();
     this.startLogStream();
   },
+
+  // ── The command form ──
+
+  command() {
+    return DEBUG_COMMANDS[byId('debugCommand').value];
+  },
+
+  // Builds the inputs for the chosen command.
+  selectCommand() {
+    const command = this.command();
+    const target = command.target === 'module';
+    byId('debugModuleId').disabled = !target || byId('debugBroadcast').checked;
+    byId('debugBroadcast').disabled = !target;
+    byId('debugTarget').classList.toggle('disabled', !target);
+    byId('debugCommandHint').textContent = command.hint;
+    byId('debugParams').replaceChildren(
+      ...command.params.map(param => this.paramField(param)),
+      ...(command.dump_after ? [el('label', {class: 'check-label debug-dump-after'},
+        el('input', {type: 'checkbox', id: 'debugDumpAfter', dataset: {onchange: 'updateDebugPreview'}}),
+        ' Then request a state dump (answered once it finishes)')] : []));
+    this.updatePreview();
+  },
+
+  paramField(param) {
+    const id = `debugParam-${param.name}`;
+    let input;
+    if (param.kind === 'bool') {
+      input = el('select', {class: 'input', id, dataset: {onchange: 'updateDebugPreview'}},
+        el('option', {value: '1', selected: param.default}, param.on),
+        el('option', {value: '0', selected: !param.default}, param.off));
+    } else if (param.kind === 'select') {
+      input = el('select', {class: 'input', id, dataset: {onchange: 'updateDebugPreview'}},
+        ...param.options.map(([value, label]) => el('option', {value, selected: value === param.default}, label)));
+    } else if (param.kind === 'int') {
+      input = el('input', {type: 'number', class: 'input', id, min: param.min, max: param.max, step: 1,
+        value: param.default ?? '', placeholder: `${param.min}–${param.max}`, dataset: {oninput: 'updateDebugPreview'}});
+    } else {
+      input = el('input', {type: 'text', class: 'input', id, autocomplete: 'off', spellcheck: false,
+        placeholder: param.placeholder || '', dataset: {oninput: 'updateDebugPreview'}});
+    }
+    const range = param.kind === 'int' ? ` (${param.min}–${param.max}${param.unit ? ' ' + param.unit : ''})` : '';
+    return el('div', {class: 'debug-param'},
+      el('label', {class: 'field-label', htmlFor: id}, param.label + range), input);
+  },
+
+  paramValue(name) {
+    return byId(`debugParam-${name}`).value;
+  },
+
+  // The chosen module ID, as it goes on the wire (two or more digits, or *).
+  target() {
+    if (byId('debugBroadcast').checked) return {wire: CONFIG.broadcast, name: 'every module'};
+    const raw = byId('debugModuleId').value.trim();
+    const id = Number(raw);
+    if (!/^\d+$/.test(raw) || id > CONFIG.max_module_id) {
+      return {error: `Module ID must be 0–${CONFIG.max_module_id}, or broadcast`};
+    }
+    return {wire: String(id).padStart(2, '0'), name: `module ${formatModuleId(id)}`};
+  },
+
+  // The messages the form describes: {messages, targetName, warning} or {error}.
+  build() {
+    const command = this.command();
+    const values = [];
+    for (const param of command.params) {
+      const value = this.paramValue(param.name);
+      if (param.kind === 'int') {
+        const n = Number(value);
+        if (value.trim() === '' || !Number.isInteger(n) || n < param.min || n > param.max) {
+          return {error: `${param.label} must be a whole number from ${param.min} to ${param.max}`};
+        }
+        values.push(String(n));
+      } else {
+        values.push(value);
+      }
+    }
+
+    if (command.format === 'raw') {
+      const message = values[0].trim();
+      return message ? {messages: [message], targetName: 'the bus'} : {error: 'Type a message to send'};
+    }
+
+    if (command.format === 'frame') {
+      const [rawText, interval, order] = values;
+      const text = toWireChars(rawText);
+      const maxLength = command.params[0].max_length;
+      if (!text) return {error: 'Type the text to show'};
+      if (text.length > maxLength) return {error: `At most ${maxLength} characters`};
+      const n = text.length;
+      const rank = i => order === 'rtl' ? n - 1 - i : order === 'all' ? 0 : i;
+      const pairs = Array.from(text, (ch, i) => ch + String.fromCharCode('!'.charCodeAt(0) + rank(i))).join('');
+      return {messages: [`m${CONFIG.broadcast}${command.cmd}${interval}:${pairs}`],
+              targetName: 'every module', warning: this.missingFlaps(text)};
+    }
+
+    const target = this.target();
+    if (target.error) return target;
+    let warning = '';
+    if (command.params.some(p => p.kind === 'char')) {
+      const ch = toWireChars(values[0].trim() || values[0]);
+      if (Array.from(ch).length !== 1) return {error: 'Enter exactly one character'};
+      values[0] = ch;
+      const index = CHAR_MAP.indexOf(ch);
+      warning = index >= 0 ? '' : this.missingFlaps(ch);
+    }
+    const messages = [`m${target.wire}${command.cmd}${values.join('')}`];
+    if (command.dump_after && byId('debugDumpAfter').checked) {
+      messages.push(`m${target.wire}${DEBUG_COMMANDS.dump.cmd}`);
+    }
+    return {messages, targetName: target.name, warning};
+  },
+
+  missingFlaps(text) {
+    const missing = [...new Set(Array.from(text).filter(ch => !CHAR_MAP.includes(ch)))];
+    return missing.length ? `Not on the reel (the module will ignore it): ${missing.join(' ')}` : '';
+  },
+
+  // Shows the message that would be sent, and what the target and inputs mean.
+  updatePreview() {
+    const target = this.target();
+    byId('debugModuleHint').textContent = this.command().target !== 'module'
+      ? (this.command().target === 'broadcast' ? 'This command always goes to every module.'
+                                               : 'The message is sent exactly as typed.')
+      : (target.error || `Sends to ${target.name} (IDs are typed in decimal, shown elsewhere in hex).`);
+
+    const built = this.build();
+    const preview = byId('debugPreview');
+    preview.classList.toggle('invalid', !!built.error);
+    preview.textContent = built.error ? built.error : built.messages.join('   then   ');
+    byId('debugSend').disabled = !!built.error;
+
+    // A note about the input itself: which flap an index or character is.
+    const command = this.command();
+    let note = built.warning || '';
+    if (!built.error && command.key === 'show_index') {
+      note = `Flap ${this.paramValue('index')}: ${this.flapLabel(CHAR_MAP[Number(this.paramValue('index'))])}`;
+    } else if (!built.error && command.key === 'show_char' && !note) {
+      note = `Flap index ${CHAR_MAP.indexOf(built.messages[0].slice(-1))}`;
+    }
+    const noteEl = byId('debugNote');
+    noteEl.hidden = !note;
+    noteEl.textContent = note;
+    noteEl.classList.toggle('warning', !!built.warning);
+  },
+
+  async send() {
+    const built = this.build();
+    if (built.error) {
+      showToast(built.error, 'error');
+      return;
+    }
+    const confirmText = this.command().confirm;
+    if (confirmText && !confirm(confirmText.replace('{target}', built.targetName))) return;
+    for (const message of built.messages) {
+      if (!await api.serialSend(message)) {
+        this.appendLine(`(error: could not send ${message})`);
+        return;
+      }
+    }
+  },
+
+  // ── The flap table ──
+
+  flapLabel(ch) {
+    if (ch === undefined) return '?';
+    if (ch === ' ') return 'blank';
+    const shown = displayChar(ch);
+    return shown === ch ? ch : `${shown} (${ch})`;
+  },
+
+  buildFlapTable() {
+    byId('flapTable').replaceChildren(...Array.from(CHAR_MAP, (ch, i) =>
+      el('button', {class: 'flap-cell', type: 'button', title: `Use flap ${i}`,
+                    dataset: {onclick: 'useFlap', index: i}},
+        el('span', {class: 'flap-idx'}, String(i)),
+        el('span', {class: 'flap-char'}, ch === ' ' ? '␣' : displayChar(ch)),
+        el('span', {class: 'flap-code'}, ch === ' ' ? 'blank' : (displayChar(ch) === ch ? '' : ch)))));
+  },
+
+  // Puts a flap from the table into the form: as the character or index to
+  // show, switching to Show character unless a flap command is chosen.
+  useFlap(index) {
+    const select = byId('debugCommand');
+    if (!['show_char', 'show_index'].includes(select.value)) {
+      select.value = 'show_char';
+      this.selectCommand();
+    }
+    const input = select.value === 'show_index' ? byId('debugParam-index') : byId('debugParam-char');
+    input.value = select.value === 'show_index' ? index : CHAR_MAP[index];
+    this.updatePreview();
+    input.focus();
+  },
+
+  // ── The serial log ──
 
   startLogStream() {
     this.source = new EventSource('/serial_log/stream');
@@ -81,28 +280,26 @@ const debugPanel = {
   // Adds a timestamped line to the log and returns it.
   appendLine(msg) {
     const line = el('div', {class: 'debug-log-line'}, `[${new Date().toLocaleTimeString()}] ${msg}`);
-    if (msg.startsWith('SENT:')) line.classList.add('sent');
+    if (msg.startsWith('SENT:') || msg.startsWith('SIMULATED SENT:')) line.classList.add('sent');
     if (msg.startsWith('RECV')) line.classList.add('recv');
+    // Only follow new lines if the log was already scrolled to the bottom.
+    const atBottom = this.logEl.scrollHeight - this.logEl.scrollTop - this.logEl.clientHeight < 20;
     this.logEl.appendChild(line);
-    this.logEl.scrollTop = this.logEl.scrollHeight;
-    // Keep the log to the last 200 lines.
-    while (this.logEl.childNodes.length > 200) this.logEl.firstChild.remove();
+    if (atBottom) this.logEl.scrollTop = this.logEl.scrollHeight;
+    // Keep the log to the last 500 lines.
+    while (this.logEl.childNodes.length > 500) this.logEl.firstChild.remove();
     return line;
-  },
-
-  async send() {
-    const cmd = this.cmdInput.value.trim();
-    if (!cmd) return;
-    this.appendLine(`(attempting to send: ${cmd})`);
-    if (!await api.serialSend(cmd)) this.appendLine('(error: could not send command)');
-    this.cmdInput.value = '';
-  },
-
-  toggle() {
-    this.el.classList.toggle('visible');
   },
 };
 
 registerActions({
-  toggleDebug: () => debugPanel.toggle(),
+  selectDebugCommand: () => debugPage.selectCommand(),
+  updateDebugPreview: () => debugPage.updatePreview(),
+  toggleDebugBroadcast: () => {
+    byId('debugModuleId').disabled = byId('debugBroadcast').checked;
+    debugPage.updatePreview();
+  },
+  sendDebugCommand: () => debugPage.send(),
+  clearDebugLog: () => debugPage.logEl.replaceChildren(),
+  useFlap: button => debugPage.useFlap(Number(button.dataset.index)),
 });

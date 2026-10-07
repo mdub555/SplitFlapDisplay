@@ -5,7 +5,7 @@ from config import NUM_MODULES, BAUD_RATE, FRAME_BROADCAST
 from display.state import state
 from display.charset import FLAP_CHARS, NUM_FLAPS, normalize_text
 from display.layout import get_animation_order
-from display.module_protocol import BROADCAST, Cmd, message
+from display.module_protocol import BROADCAST, FRAME_MAX_MODULES, Cmd, message
 from display.serial_link import ser, serial_lock
 from apps.base import Frame
 from apps.registry import registry
@@ -14,11 +14,6 @@ from settings.store import settings
 
 # Seconds for a module to turn one flap position (a revolution takes about 4 s).
 SECONDS_PER_FLAP = 4.0 / NUM_FLAPS
-
-# A frame broadcast gives each module's place in the animation as one
-# printable byte ('!' + rank), so it covers up to 94 modules.
-FRAME_MAX_MODULES = 94
-
 
 def _bus_ms(num_bytes):
     """Time to send `num_bytes` at BAUD_RATE (8N1: 10 bits per byte)."""

@@ -17,10 +17,14 @@ COLOR_TILES = [
     ('\u2b1c', 'w', 'White'), ('\u2b1b', ' ', 'Black'),
 ]
 
+# The symbol flaps the compose UI offers buttons for, since keyboards don't
+# have them: (character, code on the wire, name).
+SYMBOL_TILES = [('\u00B0', 'd', 'Degree'), ('\u2665', 'h', 'Heart')]
+
 # Characters typed or shown in the UI -> their code on the wire.
 COLOR_MAP = {
     **{emoji: code for emoji, code, _ in COLOR_TILES},
-    '\u00B0': 'd', '\u2665': 'h',
+    **{char: code for char, code, _ in SYMBOL_TILES},
 }
 
 # How the UI shows each code that isn't shown as itself.

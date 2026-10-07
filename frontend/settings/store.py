@@ -5,6 +5,7 @@ import os
 from config import CONFIG_PATH
 from display.module_protocol import GLOBAL_SETTINGS
 from settings.schema import GLOBAL_FIELDS
+from settings.shared import migrate
 
 
 def _global_defaults():
@@ -26,7 +27,6 @@ def _app_defaults():
 def build_defaults():
     defaults = {
         'modules': {},
-        'auto_home': True,
         'saved_playlists': {},
         'firmware': {k: spec['default'] for k, spec in GLOBAL_SETTINGS.items()},
     }
@@ -40,7 +40,7 @@ def load_settings():
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, 'r') as f:
-                defaults.update(json.load(f))
+                defaults.update(migrate(json.load(f)))
         except Exception as e:
             logging.error(f"Failed to load {CONFIG_PATH}, using defaults: {e}")
     return defaults

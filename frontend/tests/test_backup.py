@@ -53,15 +53,50 @@ class RestoreBackupTest(unittest.TestCase):
         self.assertIn('m00O100', self.sent)
         self.assertIn('m00T2000', self.sent)
 
-    def test_pushes_toggles_present_in_the_restored_module(self):
+    def test_pushes_motor_direction_present_in_the_restored_module(self):
         self.settings['modules'] = {}
         self.restore({'version': 3, 'modules': {
-            '3': {'homeOffset': 480, 'totalSteps': 4096,
-                  'autoHome': True, 'motorClockwise': False, 'motorRelease': True},
+            '3': {'homeOffset': 480, 'totalSteps': 4096, 'motorClockwise': False},
         }})
-        for cmd in ('m03A1', 'm03C0', 'm03F1'):
+        self.assertIn('m03C0', self.sent)
+
+    def test_restores_and_broadcasts_the_shared_settings(self):
+        self.restore({'version': 3, 'modules': {},
+                      'firmware': {'autoHome': False, 'motorRelease': True, 'stepDelayUs': 1500}})
+        self.assertEqual(self.settings['firmware']['autoHome'], False)
+        self.assertEqual(self.settings['firmware']['stepDelayUs'], 1500)
+        self.assertEqual(self.settings['firmware']['debounceMs'], 50)   # the rest keep their defaults
+        for cmd in ('m*A0', 'm*F1', 'm*S1500'):
             with self.subTest(cmd=cmd):
                 self.assertIn(cmd, self.sent)
+        # Each module's own copy isn't sent any more.
+        self.assertFalse([c for c in self.sent if c[1:3].isdigit() and c[3] in 'AF'])
+
+    def test_malformed_shared_settings_are_skipped(self):
+        self.restore({'version': 3, 'modules': {},
+                      'firmware': {'autoHome': 'yes', 'stepDelayUs': 0, 'bogus': 1, 'motorRelease': False}})
+        self.assertEqual(self.settings['firmware']['motorRelease'], False)
+        self.assertEqual(self.settings['firmware']['autoHome'], True)    # default, not 'yes'
+        self.assertEqual(self.settings['firmware']['stepDelayUs'], 1000)
+        self.assertNotIn('bogus', self.settings['firmware'])
+        self.assertEqual([c for c in self.sent if c.startswith('m*')], ['m*F0'])
+
+    def test_an_older_backup_carries_auto_home_and_release_motor_over(self):
+        # Before they were shared: a top-level auto_home switch, and release
+        # motor set on each module.
+        self.restore({'version': 3, 'auto_home': False, 'modules': {
+            '0': {'motorRelease': False}, '1': {'motorRelease': False}}})
+        self.assertEqual((self.settings['firmware']['autoHome'], self.settings['firmware']['motorRelease']),
+                         (False, False))
+        self.assertIn('m*A0', self.sent)
+        self.assertIn('m*F0', self.sent)
+
+    def test_backup_carries_the_shared_settings(self):
+        self.settings['firmware'] = {'autoHome': False}
+        backup = self.backup.build_backup()
+        self.assertEqual(backup['firmware']['autoHome'], False)
+        self.assertEqual(backup['firmware']['motorRelease'], True)
+        self.assertNotIn('auto_home', backup)
 
     def test_does_not_invent_toggle_values_for_a_backup_without_them(self):
         # Older backups (pre-toggle feature) only have homeOffset/totalSteps.
@@ -79,9 +114,9 @@ class RestoreBackupTest(unittest.TestCase):
         # or coerce a stray string/number into a firmware command.
         self.settings['modules'] = {}
         self.restore({'version': 3, 'modules': {'2': {
-            'homeOffset': 480, 'totalSteps': 4096, 'autoHome': 'yes', 'motorRelease': 1,
+            'homeOffset': 480, 'totalSteps': 4096, 'motorClockwise': 'yes',
         }}})
-        self.assertFalse([c for c in self.sent if c.startswith('m02') and c[3] in ('a', 'r')])
+        self.assertFalse([c for c in self.sent if c.startswith('m02') and c[3] == 'C'])
 
     def test_merges_into_existing_modules_rather_than_replacing(self):
         self.settings['modules'] = {'7': {'homeOffset': 1, 'totalSteps': 2,

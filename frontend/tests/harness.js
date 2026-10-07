@@ -103,7 +103,7 @@ window.fetch = async (url, options = {}) => {
     if (options.method === 'POST') return ok({ status: 'Saved' });
     // Same shape the real backend returns: per-module config lives under `modules`
     // (only module 0 is provisioned here).
-    return ok({ timezone: 'US/Eastern', zip_code: '02118', auto_home: true,
+    return ok({ timezone: 'US/Eastern', zip_code: '02118',
       modules: { '0': { homeOffset: 2832, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false, drift: 3, revolutions: 12345,
                        stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 120 },
                 '2': { homeOffset: 480, totalSteps: 4096, autoHome: true, motorClockwise: true, motorRelease: false },
@@ -133,7 +133,7 @@ window.fetch = async (url, options = {}) => {
     return ok({ status: 'success' });
   }
   if (url.match(/^\/modules\/\d+\/reset_settings$/)) {
-    return ok({ status: 'success', settings: { auto_home: true, modules: {
+    return ok({ status: 'success', settings: { modules: {
       '10': { homeOffset: 480, totalSteps: 4096, autoHome: false, motorClockwise: true, motorRelease: true } } } });
   }
   if (url.match(/^\/modules\/\d+\/identify$/)) {
@@ -150,14 +150,12 @@ window.fetch = async (url, options = {}) => {
     const { setting, value } = JSON.parse(options.body);
     return ok({ status: 'success', setting, value });
   }
-  if (url === '/toggle_autohome') {
-    return ok({ status: 'Auto-home updated' });
-  }
   if (url === '/firmware_config') {
     if (options.method === 'POST') return ok({ status: 'success', values: JSON.parse(options.body) });
     return ok({
       values: { stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, recalculateHome: true,
-                rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 150 },
+                rampStartDelayUs: 3000, rampSteps: 0, motorRelease: false, settleMs: 0,
+                autoHome: true, staggerMs: 150 },
       limits: {
         stepDelayUs:       { type: 'int',  min: 1, max: 65535 },
         homingStepDelayUs: { type: 'int',  min: 1, max: 65535 },
@@ -165,7 +163,9 @@ window.fetch = async (url, options = {}) => {
         recalculateHome: { type: 'bool', min: null, max: null },
         rampStartDelayUs:  { type: 'int',  min: 1, max: 65535 },
         rampSteps:       { type: 'int',  min: 0, max: 255 },
+        motorRelease:    { type: 'bool', min: null, max: null },
         settleMs:        { type: 'int',  min: 0, max: 255 },
+        autoHome:        { type: 'bool', min: null, max: null },
         staggerMs:       { type: 'int',  min: 0, max: 255 },
       },
     });
@@ -175,6 +175,12 @@ window.fetch = async (url, options = {}) => {
   }
   if (url === '/provision_module') {
     return ok({ status: 'success', assigned_id: 10 });
+  }
+  if (url === '/update_playlist') {
+    return ok({ status: 'success' });
+  }
+  if (url === '/serial/send') {
+    return ok({ status: 'success' });
   }
 
   throw new Error(`Unmocked fetch: ${url}`);

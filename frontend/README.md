@@ -24,7 +24,8 @@ python app.py
 
 Set `SPLITFLAP_ROWS` / `SPLITFLAP_COLS` env vars (or edit `config.py`) to
 match your hardware — everything (module count, animation layout, frontend
-grid rendering) derives from those two numbers. Defaults are 4x16.
+grid rendering) derives from those two numbers. Defaults are 4x16. The UI is
+laid out for displays up to 4x16; bigger ones work but may not look as good.
 
 If `SPLITFLAP_SERIAL_PORT` can't be opened, the app logs a warning and runs
 in simulation mode — the UI works, but nothing physically moves. `/config`

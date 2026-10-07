@@ -28,3 +28,7 @@ flaps.json
 
 # Frontend configs
 !.dockerignore
+
+# Python bytecode and test dependencies
+__pycache__/
+node_modules/

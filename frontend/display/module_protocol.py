@@ -53,6 +53,11 @@ BROADCAST = '*'
 UNPROVISIONED_ID = 255
 
 
+# A frame broadcast (m*f<interval>:<pairs>) gives each module's place in the
+# animation as one printable byte ('!' + rank), so it covers up to 94 modules.
+FRAME_MAX_MODULES = 94
+
+
 def message(mod_id, cmd: str, data='') -> str:
     """The bus message m<ID><cmd><data>, without the newline. `mod_id` is a
     module ID (sent as at least two digits) or BROADCAST."""
@@ -69,7 +74,7 @@ DUMP_REVOLUTIONS = '#'
 DUMP_DRIFT = '~'
 
 # key: the settings key the value is stored under; kind: 'int' or 'bool';
-# name and unit: how the debug panel describes it.
+# name and unit: how the Debug page describes it.
 DumpField = namedtuple('DumpField', 'key kind name unit')
 
 # Label -> field, in the order the firmware sends them.
@@ -115,7 +120,7 @@ def parse_dump_fields(fields: str):
 
 
 def dump_format():
-    """The dump layout for the debug panel, which parses replies itself."""
+    """The dump layout for the Debug page, which parses replies itself."""
     return {
         'marker': Cmd.DUMP_STATE,
         'fields': [dict(label=label, **spec._asdict()) for label, spec in DUMP_FIELDS.items()],
@@ -128,12 +133,8 @@ def dump_format():
 Toggle = namedtuple('Toggle', 'cmd label hint')
 
 MODULE_TOGGLES = {
-    'autoHome': Toggle(Cmd.SET_AUTO_HOME, 'Auto-home on boot',
-                       'Find the home flap whenever this module powers up'),
     'motorClockwise': Toggle(Cmd.SET_MOTOR_CW, 'Motor clockwise',
                              'Off = counter-clockwise. Only change this if the reel turns the wrong way'),
-    'motorRelease': Toggle(Cmd.SET_MOTOR_RELEASE, 'Release motor when idle',
-                           'Cut coil power after each move so the motor runs cooler'),
 }
 
 TOGGLE_COMMANDS = {key: toggle.cmd for key, toggle in MODULE_TOGGLES.items()}
@@ -180,11 +181,19 @@ GLOBAL_SETTINGS = {
         'cmd': Cmd.SET_RAMP_STEPS, 'type': 'int', 'min': 0, 'max': 255, 'default': 0,
         'label': 'Ramp length', 'unit': 'steps',
         'hint': 'Steps spent speeding up and slowing down at each end of a move. 0 turns the ramp off.'},
+    'motorRelease': {
+        'cmd': Cmd.SET_MOTOR_RELEASE, 'type': 'bool', 'default': True,
+        'label': 'Release motor when idle',
+        'hint': 'Cut coil power after each move so the motors run cooler.'},
     'settleMs': {
         'cmd': Cmd.SET_SETTLE_MS, 'type': 'int', 'min': 0, 'max': 255, 'default': 0,
         'label': 'Settle time', 'unit': 'ms',
         'hint': 'Keep the coils powered this long after a move so the flap stops swinging. '
                 'Only applies when the motor is released when idle.'},
+    'autoHome': {
+        'cmd': Cmd.SET_AUTO_HOME, 'type': 'bool', 'default': True,
+        'label': 'Auto-home on boot',
+        'hint': 'Find the home flap whenever a module powers up.'},
     'staggerMs': {
         'cmd': Cmd.SET_STAGGER_MS, 'type': 'int', 'min': 0, 'max': 255, 'default': 150,
         'label': 'Startup stagger', 'unit': 'ms per module',
@@ -197,6 +206,20 @@ GLOBAL_SETTINGS = {
 # x DUMP_SLOT_S after the request (or after it finishes a move it was busy
 # with). Matches DUMP_SLOT_MS in the firmware.
 DUMP_SLOT_S = 0.105
+
+
+def global_setting_problem(key: str, value):
+    """Why `value` isn't acceptable for global setting `key`, or None if it is."""
+    spec = GLOBAL_SETTINGS.get(key)
+    if spec is None:
+        return f'Unknown setting: {key}'
+    if spec['type'] == 'bool':
+        # Strict: bool("false") is True, so stringly-typed values must not slip through.
+        return None if isinstance(value, bool) else f'{key} must be true or false'
+    # bool is a subclass of int, so true/false must not pass as 1/0.
+    if not isinstance(value, int) or isinstance(value, bool) or not spec['min'] <= value <= spec['max']:
+        return f"{key} must be an integer from {spec['min']} to {spec['max']}"
+    return None
 
 
 def global_command(key: str, value) -> str:

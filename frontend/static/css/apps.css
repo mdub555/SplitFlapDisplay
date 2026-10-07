@@ -11,6 +11,11 @@
   margin-top: 16px;
 }
 
+/* The global settings, below the app cards. */
+.global-settings {
+  margin-top: 28px;
+}
+
 .app-card {
   background: var(--panel);
   border: 1px solid var(--border);

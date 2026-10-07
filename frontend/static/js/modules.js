@@ -1,28 +1,16 @@
-// The Tuning & Settings page: the hardware inspector for one module at a
-// time, the firmware settings shared by every module, global settings, and
-// backup/restore.
+// The Modules page: the hardware inspector for one module at a
+// time, the firmware settings shared by every module, and backup/restore.
 
 let selectedModule = 0;
 let currentSettings = null;   // GET /settings, kept up to date as things change
 
-function loadTuningData() {
+function loadModulesPage() {
   byId('modMatrix').replaceChildren(el('div', {class: 'loading-note'}, 'Loading…'));
   loadFirmwareConfig(); // independent of the settings load below, so one failing doesn't block the other
-  Promise.all([api.getSettings(), api.globalFields()]).then(([settings, fields]) => {
-    if (!settings || !fields) return; // error toast already shown by the api layer
+  api.getSettings().then(settings => {
+    if (!settings) return; // error toast already shown by the api layer
     currentSettings = settings;
-    byId('globalSettingsGrid').replaceChildren(...fields.map(f => buildField(f, settings[f.key], 'gsf_')));
-    byId('autoHomeToggle').checked = settings.auto_home;
     selectModule(selectedModule);
-  });
-}
-
-function saveGlobal() {
-  api.globalFields().then(fields => {
-    if (!fields) return;
-    api.saveGlobalSettings(readFieldValues(fields, 'gsf_')).then(result => {
-      if (result) showToast('Settings saved');
-    });
   });
 }
 
@@ -34,9 +22,20 @@ function moduleSettings(id = selectedModule) {
   return (currentSettings && currentSettings.modules && currentSettings.modules[id.toString()]) || null;
 }
 
+// How many columns the module grid gets on a phone: up to 9 fit. A wider
+// display wraps at a whole fraction of its width if it can (16 -> 8, 15 -> 5,
+// 12 -> 6), so each display row is a whole number of grid rows; otherwise 8.
+function phoneColumns(cols) {
+  if (cols <= 9) return cols;
+  for (let n = 9; n >= 5; n--) if (cols % n === 0) return n;
+  return 8;
+}
+
 function renderModuleGrid() {
   const grid = byId('modMatrix');
-  grid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
+  // Laid out like the display; phones wrap it narrower (see modules.css).
+  grid.style.setProperty('--cols', GRID_COLS);
+  grid.style.setProperty('--phone-cols', phoneColumns(GRID_COLS));
   grid.replaceChildren(...Array.from({length: NUM_MODULES}, (_, i) => el('div', {
     class: `mod-cell${i === selectedModule ? ' active' : ''}${moduleSettings(i) ? '' : ' unprovisioned'}`,
     dataset: {onclick: 'selectModuleAction', id: i},
@@ -311,28 +310,12 @@ function provisionModule() {
   api.provisionModule(targetId).then(result => {
     if (!result) return;
     showToast(`Module assigned ID ${formatModuleId(result.assigned_id)}`);
-    loadTuningData();
+    loadModulesPage();
   });
 }
 
-// --- Global settings ------------------------------------------------------
-
-function toggleAutoHome(input) {
-  const enabled = input.checked;
-  api.toggleAutoHome(enabled).then(result => {
-    if (!result) { input.checked = !enabled; return; }
-    // The backend applies this to every provisioned module; mirror that here
-    // so the inspector's per-module auto-home toggle doesn't go stale.
-    if (currentSettings) {
-      currentSettings.auto_home = enabled;
-      Object.values(currentSettings.modules || {}).forEach(mod => { mod.autoHome = enabled; });
-      refreshModuleToggles();
-    }
-  });
-}
-
-// Firmware settings shared by every module (step delays, debounce, recalculate
-// home). The inputs are rendered from the backend's definitions (fw-<key>);
+// Firmware settings shared by every module (step delays, debounce, auto-home,
+// ...). The inputs are rendered from the backend's definitions (fw-<key>);
 // the values and their ranges come from GET /firmware_config.
 let firmwareLimits = null;
 
@@ -364,7 +347,9 @@ function applyFirmwareConfig() {
     payload[key] = n;
   }
   api.saveFirmwareConfig(payload).then(result => {
-    if (result) showToast('Settings sent to all modules');
+    if (!result) return;
+    if (currentSettings) currentSettings.firmware = result.values;
+    showToast('Settings sent to all modules');
   });
 }
 
@@ -403,7 +388,7 @@ function uploadBackup(input) {
       status.textContent = result ? '✓ Done' : '✗ Error';
       if (!result) return;
       showToast('Restore complete');
-      loadTuningData();
+      loadModulesPage();
     });
   });
 }
@@ -411,9 +396,9 @@ function uploadBackup(input) {
 registerActions({
   selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected, identifySelected,
   rebootSelected, resetSettingsSelected, exerciseSelected, stopSelected,
-  syncOneFromHardware, syncAllFromHardware, toggleAutoHome, provisionModule,
+  syncOneFromHardware, syncAllFromHardware, provisionModule,
   setTotalSteps, showChar, showIndex, gotoStep,
   applyFirmwareConfig,
   toggleModuleSetting,
-  saveGlobal, downloadBackup, triggerBackupFileInput, uploadBackup,
+  downloadBackup, triggerBackupFileInput, uploadBackup,
 });

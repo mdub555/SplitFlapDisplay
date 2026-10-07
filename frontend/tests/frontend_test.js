@@ -15,7 +15,7 @@ function check(label, cond) {
 // a shared lexical lookup, which window.eval() can do as long as it's only
 // *reading* an existing binding, not declaring a new one.
 const globalVar = (name) => window.eval(name);
-const MODULE_TOGGLES_ALL = () => ['autoHome', 'motorClockwise', 'motorRelease'];
+const MODULE_TOGGLES_ALL = () => ['motorClockwise'];
 
 function click(el) {
   el.dispatchEvent(new window.Event('click', { bubbles: true }));
@@ -39,17 +39,21 @@ async function main() {
   console.log('\n--- Boot ---');
   check('GRID_COLS picked up from /config (16)', globalVar('GRID_COLS') === 16);
   check('NUM_MODULES picked up from /config (64)', globalVar('NUM_MODULES') === 64);
-  check('line inputs built for 4 rows', document.querySelectorAll('#lineInputs .line-input').length === 4);
-  check('color palette built', document.querySelectorAll('#colorPalette .color-btn').length === 8);
-  check('live flap grids built (control)', document.querySelectorAll('.live-grid-control .live-flap').length === 64);
+  check('compose grid built with a flap per module', document.querySelectorAll('#preview .flap-unit').length === 64);
+  check('color palette built', document.querySelectorAll('#colorPalette .color-btn:not(.symbol-btn)').length === 8);
+  check('degree and heart buttons follow the colours',
+    [...document.querySelectorAll('#colorPalette .symbol-btn')].map(b => b.textContent).join('') === '°♥');
+  check('live flap grid built', document.querySelectorAll('#liveGrid .live-flap').length === 64);
+  check('the live display sits above the tabs, outside every page',
+    !document.getElementById('liveGrid').closest('.page') &&
+    !!(document.getElementById('liveGrid').compareDocumentPosition(document.querySelector('.tab-bar')) & window.Node.DOCUMENT_POSITION_FOLLOWING));
   check('apps grid pre-populated by main.js', Object.keys(window.appsByKey).length === 2);
 
-  console.log('\n--- Serial debug panel ---');
-  const debugPanelEl = document.getElementById('debug-panel');
+  console.log('\n--- Debug page ---');
   click(document.getElementById('tab-debug'));
-  check('SERIAL DEBUG tab opens the debug panel', debugPanelEl.classList.contains('visible'));
-  click(debugPanelEl.querySelector('[data-onclick="toggleDebug"]'));
-  check('CLOSE button hides the debug panel again', !debugPanelEl.classList.contains('visible'));
+  check('DEBUG tab shows the debug page', document.getElementById('page-debug').classList.contains('active'));
+  check('and hides the control page', !document.getElementById('page-control').classList.contains('active'));
+  click(document.getElementById('tab-control'));
 
   console.log('\n--- Tab switching (data-onclick delegation) ---');
   const appsTab = document.getElementById('tab-apps');
@@ -58,6 +62,18 @@ async function main() {
   check('apps tab becomes active on click', document.getElementById('page-apps').classList.contains('active'));
   check('control tab becomes inactive', !document.getElementById('page-control').classList.contains('active'));
   check('apps grid rendered with 2 cards', document.querySelectorAll('#appsGrid .app-card').length === 2);
+
+  console.log('\n--- Global settings live on the Apps page ---');
+  const globalGrid = document.getElementById('globalSettingsGrid');
+  check('the global settings are on the Apps page, not Modules',
+    !!globalGrid.closest('#page-apps') && !document.querySelector('#page-modules #globalSettingsGrid'));
+  check('opening Apps fills them from /settings', document.getElementById('gsf_timezone').value === 'US/Eastern');
+  document.getElementById('gsf_timezone').value = 'UTC';
+  calls.length = 0;
+  click(document.querySelector('#page-apps [data-onclick="saveGlobal"]'));
+  await sleep(20);
+  const globalSave = calls.find(c => c.url === '/settings' && c.method === 'POST');
+  check('Save Settings posts the edited values', globalSave && JSON.parse(globalSave.body).timezone === 'UTC');
 
   const weatherCard = document.querySelector('#appsGrid .app-card[data-app="weather"]');
   check('weather card has a gear icon (has settings_fields)', !!weatherCard.querySelector('.app-gear'));
@@ -94,12 +110,15 @@ async function main() {
   click(document.getElementById('tab-control'));
   await sleep(20);
 
-  // Type something with HTML-special characters into line 1 and add it to the playlist —
-  // this is exactly the case that would have been dangerous with old-style innerHTML +
-  // string-interpolated onclick if it ever touched something less constrained than flap text.
-  const l0 = document.getElementById('L0');
-  l0.value = '<b>hi</b>';
-  l0.dispatchEvent(new window.Event('input', { bubbles: true }));
+  // Type something with HTML-special characters into the grid and add it to the
+  // playlist: exactly the case that would be dangerous with innerHTML.
+  const composeInput = document.getElementById('composeInput');
+  const flapText = () => [...document.querySelectorAll('#preview .flap-unit')].map(f => f.textContent || ' ').join('');
+  const typeKeys = text => {
+    composeInput.value = '_' + text;
+    composeInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+  };
+  typeKeys('(hi) & #1');
   click(document.getElementById('saveMsgBtn'));
   await sleep(20);
 
@@ -108,7 +127,7 @@ async function main() {
   check('row carries data-idx for delegation', row && row.dataset.idx === '0');
   check('no live <b> element was injected into the preview (textContent, not innerHTML)',
     row && row.querySelectorAll('b').length === 0);
-  check('the literal text (uppercased) is present as text', row && row.textContent.includes('<B>HI</B>'));
+  check('the typed text (uppercased) is present as text', row && row.textContent.replace(/\u00a0/g, ' ').includes('(HI) & #1'));
 
   console.log('\n--- Playlist row buttons dispatch via delegation, not per-row listeners ---');
   calls.length = 0;
@@ -137,7 +156,7 @@ async function main() {
   console.log('\n--- Live state arrives over SSE, not polling ---');
   const stateStreams = MockEventSource.instances.filter(s => s.url === '/current_state/stream');
   check('exactly one EventSource was opened at /current_state/stream', stateStreams.length === 1);
-  check('the only other EventSource is the debug panel\'s /serial_log/stream',
+  check('the only other EventSource is the Debug page\'s /serial_log/stream',
     MockEventSource.instances.length === 2 &&
     MockEventSource.instances.filter(s => s.url === '/serial_log/stream').length === 1);
   check('no /current_state polling request was ever made', !calls.some(c => c.url === '/current_state'));
@@ -148,23 +167,23 @@ async function main() {
   source.emit({ is_homed: false, state: ' '.repeat(64), active_app: 'weather' });
   await sleep(10);
   check('a pushed snapshot toggles the homing overlay',
-    document.getElementById('homing-control').style.display === 'flex');
+    document.getElementById('homingOverlay').style.display === 'flex');
   check('a pushed snapshot updates the active-app banner',
-    document.getElementById('control-banner').classList.contains('visible') &&
-    document.getElementById('control-app-name').textContent === 'Weather');
+    document.getElementById('live-banner').classList.contains('visible') &&
+    document.getElementById('live-app-name').textContent === 'Weather');
 
   source.emit({ is_homed: true, state: 'X'.repeat(64), active_app: null });
   await sleep(10);
   check('homing overlay clears once is_homed is true',
-    document.getElementById('homing-control').style.display === 'none');
+    document.getElementById('homingOverlay').style.display === 'none');
   check('banner hides once active_app is null',
-    !document.getElementById('control-banner').classList.contains('visible'));
+    !document.getElementById('live-banner').classList.contains('visible'));
 
   console.log('\n--- Malformed SSE payload logged and skipped, not thrown ---');
   let threw = false;
   try { source.emitRaw('not valid json'); } catch (e) { threw = true; }
   await sleep(10);
-  check('a malformed message does not throw / app still responsive', !threw && document.getElementById('tab-tuning') !== null);
+  check('a malformed message does not throw / app still responsive', !threw && document.getElementById('tab-modules') !== null);
 
   console.log('\n--- Stream disconnect shows the status banner; reconnect clears it ---');
   const streamStatus = document.getElementById('streamStatus');
@@ -176,9 +195,12 @@ async function main() {
   await sleep(10);
   check('status banner hides again once the stream reconnects', !streamStatus.classList.contains('visible'));
 
-  click(document.getElementById('tab-tuning'));
+  click(document.getElementById('tab-modules'));
   await sleep(30);
-  check('tuning tab loaded module grid', document.querySelectorAll('#modMatrix .mod-cell').length === 64);
+  check('modules tab loaded module grid', document.querySelectorAll('#modMatrix .mod-cell').length === 64);
+  const phoneColumns = globalVar('phoneColumns');
+  check('on a phone the module grid wraps at a whole fraction of the display width',
+    [[16, 8], [15, 5], [12, 6], [10, 5], [9, 9], [8, 8], [13, 8], [1, 1]].every(([cols, n]) => phoneColumns(cols) === n));
   check('inspector shows the selected module\'s drift', document.getElementById('inspectDrift').textContent === '3');
   check('inspector shows the revolution count', document.getElementById('inspectRevolutions').textContent === '12,345');
   const timing = document.getElementById('inspectTiming');
@@ -208,7 +230,12 @@ async function main() {
   const toastCount = () => document.getElementById('toastContainer').children.length;
   check('inputs are filled from /firmware_config',
     fw('stepDelayUs').value === '1000' && fw('homingStepDelayUs').value === '1800' &&
-    fw('debounceMs').value === '100' && fw('recalculateHome').checked === true);
+    fw('debounceMs').value === '100' && fw('recalculateHome').checked === true &&
+    fw('autoHome').checked === true && fw('motorRelease').checked === false);
+  check('auto-home and release motor are in the settings for all modules',
+    !!fw('autoHome').closest('.config-section').querySelector('[data-onclick="applyFirmwareConfig"]') &&
+    !!fw('motorRelease').closest('.config-section').querySelector('[data-onclick="applyFirmwareConfig"]') &&
+    !document.getElementById('autoHomeToggle'));
   check('input ranges come from the backend limits',
     fw('debounceMs').min === '0' && fw('debounceMs').max === '65535' && fw('stepDelayUs').min === '1' &&
     fw('stepDelayUs').max === '65535');
@@ -217,6 +244,7 @@ async function main() {
   fw('stepDelayUs').value = '1250';
   fw('debounceMs').value = '150';
   fw('recalculateHome').checked = false;
+  fw('autoHome').checked = false;
   click(document.querySelector('[data-onclick="applyFirmwareConfig"]'));
   await sleep(20);
   const fwPost = calls.find(c => c.url === '/firmware_config' && c.method === 'POST');
@@ -224,7 +252,8 @@ async function main() {
   check('apply sends every setting with real numbers and a real boolean',
     fwPost && JSON.stringify(JSON.parse(fwPost.body)) ===
       JSON.stringify({ stepDelayUs: 1250, homingStepDelayUs: 1800, debounceMs: 150, recalculateHome: false,
-                       rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 150 }));
+                       rampStartDelayUs: 3000, rampSteps: 0, motorRelease: false, settleMs: 0,
+                       autoHome: false, staggerMs: 150 }));
 
   for (const [key, bad] of [['stepDelayUs', '0'], ['stepDelayUs', '65536'], ['debounceMs', '65536'],
                             ['homingStepDelayUs', ''], ['homingStepDelayUs', '1.5'],
@@ -242,19 +271,7 @@ async function main() {
     fw(key).value = good;
   }
 
-  console.log('\n--- Optimistic-UI revert on failure (auto-home toggle) ---');
-  const autoHomeToggle = document.getElementById('autoHomeToggle');
-  autoHomeToggle.checked = true;
-  // Force this specific call to fail by monkey-patching fetch just for this one call.
   const realFetch = window.fetch;
-  window.fetch = async (url, opts) => {
-    if (url === '/toggle_autohome') return { ok: false, status: 500, json: async () => ({message: 'boom'}) };
-    return realFetch(url, opts);
-  };
-  change(autoHomeToggle);
-  await sleep(20);
-  check('checkbox reverted to previous state after failed save', autoHomeToggle.checked === false);
-  window.fetch = realFetch;
 
   console.log('\n--- Optimistic-UI revert on failure (calibration timeout, HTTP 500 body) ---');
   const inspectCalib = document.getElementById('inspectCalib');
@@ -275,42 +292,35 @@ async function main() {
 
   console.log('\n--- Per-module toggles in the Hardware Inspector ---');
   const modToggle = (key) => document.getElementById(`modToggle-${key}`);
-  check('toggles reflect the selected module\'s stored settings',
-    modToggle('autoHome').checked === true && modToggle('motorClockwise').checked === true &&
-    modToggle('motorRelease').checked === false);
-  check('toggles are enabled for a provisioned module', !modToggle('autoHome').disabled);
+  check('only motor direction is set per module',
+    document.querySelectorAll('#moduleToggles [data-setting]').length === 1 && !!modToggle('motorClockwise'));
+  check('the toggle reflects the selected module\'s stored setting', modToggle('motorClockwise').checked === true);
+  check('the toggle is enabled for a provisioned module', !modToggle('motorClockwise').disabled);
 
   calls.length = 0;
-  modToggle('motorRelease').checked = true;
-  change(modToggle('motorRelease'));
+  modToggle('motorClockwise').checked = false;
+  change(modToggle('motorClockwise'));
   await sleep(20);
   const settingCall = calls.find(c => c.url === '/modules/0/setting' && c.method === 'POST');
   check('toggling posts to the per-module setting endpoint', !!settingCall);
   check('body names the setting and carries a real boolean',
-    settingCall && JSON.parse(settingCall.body).setting === 'motorRelease' && JSON.parse(settingCall.body).value === true);
-  check('toggle stays on and is re-enabled after success',
-    modToggle('motorRelease').checked === true && !modToggle('motorRelease').disabled);
+    settingCall && JSON.parse(settingCall.body).setting === 'motorClockwise' && JSON.parse(settingCall.body).value === false);
+  check('toggle stays off and is re-enabled after success',
+    modToggle('motorClockwise').checked === false && !modToggle('motorClockwise').disabled);
   check('local settings updated, so switching modules keeps the value',
-    globalVar('currentSettings').modules['0'].motorRelease === true);
+    globalVar('currentSettings').modules['0'].motorClockwise === false);
 
   window.fetch = async (url, opts) => {
     if (url === '/modules/0/setting') return { ok: false, status: 500, json: async () => ({message: 'boom'}) };
     return realFetch(url, opts);
   };
-  modToggle('autoHome').checked = false;
-  change(modToggle('autoHome'));
+  modToggle('motorClockwise').checked = true;
+  change(modToggle('motorClockwise'));
   await sleep(20);
-  check('toggle reverts after a failed save', modToggle('autoHome').checked === true);
-  check('stored value is unchanged after a failed save', globalVar('currentSettings').modules['0'].autoHome === true);
-  check('toggle is re-enabled after a failed save', !modToggle('autoHome').disabled);
+  check('toggle reverts after a failed save', modToggle('motorClockwise').checked === false);
+  check('stored value is unchanged after a failed save', globalVar('currentSettings').modules['0'].motorClockwise === false);
+  check('toggle is re-enabled after a failed save', !modToggle('motorClockwise').disabled);
   window.fetch = realFetch;
-
-  autoHomeToggle.checked = false;
-  change(autoHomeToggle);
-  await sleep(20);
-  check('global auto-home toggle is mirrored into the per-module toggle', modToggle('autoHome').checked === false);
-  check('global auto-home toggle is mirrored into stored module settings',
-    globalVar('currentSettings').modules['0'].autoHome === false);
 
   click(document.querySelector('#modMatrix .mod-cell[data-id="5"]'));
   await sleep(20);
@@ -319,7 +329,7 @@ async function main() {
     document.getElementById('moduleToggles').classList.contains('disabled'));
   click(document.querySelector('#modMatrix .mod-cell[data-id="0"]'));
   await sleep(20);
-  check('selecting a provisioned module again re-enables its toggles', !modToggle('autoHome').disabled);
+  check('selecting a provisioned module again re-enables its toggles', !modToggle('motorClockwise').disabled);
 
   console.log('\n--- Module IDs are displayed in hex, not decimal ---');
   check('grid cell for module 10 shows hex (0A), not decimal',
@@ -394,9 +404,9 @@ async function main() {
   await sleep(20);
   check('provisioned-module toast names the assigned id in hex, not decimal', lastToastText() === 'Module assigned ID 0A');
 
-  console.log('\n--- Debug panel shows dump replies as labelled values ---');
+  console.log('\n--- Debug page shows dump replies as labelled values ---');
   const serialLog = MockEventSource.instances.find(s => s.url === '/serial_log/stream');
-  const logEl = document.querySelector('#debug-panel .debug-log');
+  const logEl = document.getElementById('debugLog');
   const logLines = () => [...logEl.querySelectorAll('.debug-log-line')];
   const logBefore = logLines().length;
   const fields = '\tO480\tT4096\tD100\tS1250\tH1800\tC1\tA0\tF1\tE1\tR3000\tL0\tW0\tP150\t#123456\t~-3';
@@ -419,6 +429,128 @@ async function main() {
   check('a garbled reply is shown as received', !garbled.classList.contains('dump') &&
     garbled.textContent.endsWith('RECV: m07?\tO48x'));
   check('other received text is shown as received', noise.textContent.endsWith('RECV: junk'));
+
+  console.log('\n--- Debug page builds and sends any command ---');
+  const debugSelect = document.getElementById('debugCommand');
+  const preview = () => document.getElementById('debugPreview').textContent;
+  const param = name => document.getElementById(`debugParam-${name}`);
+  const choose = key => { debugSelect.value = key; change(debugSelect); };
+  const typeInto = (input, value) => { input.value = value; input.dispatchEvent(new window.Event('input', { bubbles: true })); };
+  const sentCmds = () => calls.filter(c => c.url === '/serial/send').map(c => JSON.parse(c.body).cmd);
+  const commandKeys = [...debugSelect.options].map(o => o.value);
+  check('the dropdown lists every command, grouped',
+    commandKeys.length === globalVar('CONFIG').debug_commands.length &&
+    [...debugSelect.querySelectorAll('optgroup')].map(g => g.label).join('|') ===
+      'Actions|Module|Settings (saved to EEPROM)|Utilities');
+  typeInto(document.getElementById('debugModuleId'), '10');
+  choose('home');
+  check('a command without data goes to the chosen module', preview() === 'm10h');
+  check('no inputs for a command without data', document.getElementById('debugParams').children.length === 0);
+  choose('show_index');
+  typeInto(param('index'), '7');
+  check('an index command carries its value', preview() === 'm10+7');
+  check('the flap at that index is named', document.getElementById('debugNote').textContent === 'Flap 7: G');
+  typeInto(param('index'), '99');
+  check('an out-of-range value is refused', document.getElementById('debugSend').disabled);
+  choose('show_char');
+  typeInto(param('char'), '"');
+  check('a quote is sent as its code', preview() === 'm10-q');
+  typeInto(param('char'), '\u{1F7E5}');
+  check('a colour emoji is sent as its code', preview() === 'm10-r');
+  choose('motorClockwise');
+  param('value').value = '0'; change(param('value'));
+  check('a yes/no setting is a dropdown sent as 0/1', param('value').tagName === 'SELECT' && preview() === 'm10C0');
+  const broadcast = document.getElementById('debugBroadcast');
+  broadcast.checked = true; change(broadcast);
+  check('broadcast sends to *', preview() === 'm*C0' && document.getElementById('debugModuleId').disabled);
+  broadcast.checked = false; change(broadcast);
+  choose('frame');
+  typeInto(param('text'), 'HI!');
+  typeInto(param('interval'), '20');
+  param('order').value = 'rtl'; change(param('order'));
+  check('a frame broadcast always goes to every module, with each character\'s rank',
+    preview() === 'm*f20:H#I"!!' && document.getElementById('debugModuleId').disabled);
+  choose('calibrate');
+  document.getElementById('debugDumpAfter').checked = true;
+  change(document.getElementById('debugDumpAfter'));
+  calls.length = 0;
+  click(document.getElementById('debugSend'));
+  await sleep(20);
+  check('calibrate can be followed by a state dump', sentCmds().join(',') === 'm10c,m10?');
+  choose('reset_settings');
+  calls.length = 0;
+  click(document.getElementById('debugSend'));
+  await sleep(20);
+  check('a destructive command asks first, naming the module in hex',
+    lastConfirmMsg === 'Reset ALL settings on module 0A to their defaults?' && sentCmds().join() === 'm10!');
+  choose('raw');
+  typeInto(param('message'), 'm05-B');
+  calls.length = 0;
+  click(document.getElementById('debugSend'));
+  await sleep(20);
+  check('a raw message is sent as typed', sentCmds().join() === 'm05-B');
+  click(document.querySelector('#flapTable .flap-cell[data-index="3"]'));
+  check('picking a flap from the table fills in Show character',
+    debugSelect.value === 'show_char' && preview() === 'm10-C');
+  click(document.querySelector('[data-onclick="clearDebugLog"]'));
+  check('the log can be cleared', logLines().length === 0);
+
+  console.log('\n--- Typing straight into the compose grid ---');
+  click(document.getElementById('tab-control'));
+  click(document.querySelector('[data-onclick="clearDisplay"]'));
+  const key = k => composeInput.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+  const rowN = n => Array.from(flapText()).slice(n * 16, (n + 1) * 16).join('');   // a colour tile is one flap
+  const row0 = () => rowN(0);
+  const cursorAt = () => [...document.querySelectorAll('#preview .flap-unit')].findIndex(f => f.classList.contains('cursor'));
+  typeKeys('hello');
+  check('typed letters fill flaps from the cursor, uppercased', row0() === 'HELLO           ' && cursorAt() === 5);
+  typeKeys('~');
+  check('a character no flap shows is skipped', row0() === 'HELLO           ' && cursorAt() === 5);
+  composeInput.value = '';   // a phone keyboard's Backspace deletes the sentinel
+  composeInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+  check('backspace clears the flap before the cursor', row0() === 'HELL            ' && cursorAt() === 4);
+  check('the hidden textarea is reset after each keystroke', composeInput.value === '_');
+  key('Enter');
+  typeKeys('“ok”');
+  check('Enter starts the next line; curly quotes become the quote flap', rowN(1) === '"OK"            ');
+  click(document.querySelector('#preview .flap-unit[data-cell="2"]'));
+  typeKeys('x');
+  check('clicking a flap moves the cursor there; typing overwrites', row0() === 'HEXL            ');
+  key('ArrowDown'); key('ArrowLeft');
+  check('arrow keys move the cursor', cursorAt() === 18);
+  key('Delete');
+  check('Delete clears the flap under the cursor', rowN(1) === '"O "            ' && cursorAt() === 18);
+  click(document.querySelector('#colorPalette .color-btn'));
+  check('a colour tile goes in at the cursor', rowN(1) === '"O🟥"            ');
+  const paste = new window.Event('paste', { bubbles: true, cancelable: true });
+  paste.clipboardData = { getData: () => 'AB\nCD' };
+  click(document.querySelector('#preview .flap-unit[data-cell="48"]'));
+  composeInput.dispatchEvent(paste);
+  check('pasted lines go on successive rows', rowN(3) === 'AB              ' && rowN(4) === '');
+  click(document.querySelector('[data-onclick="centerLines"]'));
+  check('Center Lines centers each line in its row', row0() === '      HEXL      ' &&
+    rowN(1) === '      "O🟥"      ' && rowN(2).trim() === '' && rowN(3) === '       AB       ');
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="sync"]'));
+  await sleep(20);
+  const pushed = calls.find(c => c.url === '/update_playlist');
+  check('PUSH sends the grid as one page of 64 flaps',
+    pushed && Array.from(JSON.parse(pushed.body).pages[0].text).length === 64 &&
+    JSON.parse(pushed.body).pages[0].text.startsWith('      HEXL      '));
+
+  console.log('\n--- Editing a playlist page puts it back in the grid ---');
+  document.getElementById('modeToggle').checked = true;
+  change(document.getElementById('modeToggle'));
+  click(document.getElementById('saveMsgBtn'));
+  click(document.querySelector('[data-onclick="clearDisplay"]'));
+  check('the grid clears', flapText().trim() === '');
+  click(document.querySelector('#playlistList .playlist-item:last-child [data-onclick="editPlaylist"]'));
+  check('EDIT restores the page into the grid', row0() === '      HEXL      ' && rowN(1) === '      "O🟥"      ');
+
+  console.log('\n--- Degree and heart buttons ---');
+  click(document.querySelector('#preview .flap-unit[data-cell="32"]'));
+  document.querySelectorAll('#colorPalette .symbol-btn').forEach(click);
+  check('the degree and heart buttons type their flaps at the cursor', rowN(2) === '°♥              ');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

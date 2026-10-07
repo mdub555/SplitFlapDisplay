@@ -173,12 +173,8 @@ class ModuleRoutesTest(unittest.TestCase):
 
     def test_each_setting_sends_its_firmware_command(self):
         cases = [
-            ('autoHome', True, 'm05A1'),
-            ('autoHome', False, 'm05A0'),
             ('motorClockwise', True, 'm05C1'),
             ('motorClockwise', False, 'm05C0'),
-            ('motorRelease', True, 'm05F1'),
-            ('motorRelease', False, 'm05F0'),
         ]
         for setting, value, expected in cases:
             with self.subTest(setting=setting, value=value):
@@ -191,18 +187,24 @@ class ModuleRoutesTest(unittest.TestCase):
                 self.assertIs(self.settings['modules']['5'][setting], value)
 
     def test_success_persists_settings(self):
-        self.post(5, {'setting': 'autoHome', 'value': True})
+        self.post(5, {'setting': 'motorClockwise', 'value': False})
         self.assertEqual(self.saves, 1)
 
     def test_only_the_requested_setting_changes(self):
-        self.post(5, {'setting': 'autoHome', 'value': True})
+        self.post(5, {'setting': 'motorClockwise', 'value': False})
         mod = self.settings['modules']['5']
-        self.assertEqual((mod['motorClockwise'], mod['motorRelease'], mod['homeOffset']),
-                         (True, True, 480))
+        self.assertEqual((mod['autoHome'], mod['motorRelease'], mod['homeOffset']),
+                         (False, True, 480))
 
     def test_three_digit_module_id_is_not_zero_padded_wrongly(self):
-        self.post(123, {'setting': 'motorRelease', 'value': False})
-        self.assertEqual(self.sent, ['m123F0'])
+        self.post(123, {'setting': 'motorClockwise', 'value': False})
+        self.assertEqual(self.sent, ['m123C0'])
+
+    def test_settings_shared_by_every_module_are_not_set_per_module(self):
+        # Auto-home and release-motor go to every module at once (/firmware_config).
+        for setting in ('autoHome', 'motorRelease'):
+            with self.subTest(setting=setting):
+                self.assert_rejected(self.post(5, {'setting': setting, 'value': True}), 400)
 
     # ---- rejected requests: nothing sent, nothing saved -------------------
 
@@ -219,20 +221,20 @@ class ModuleRoutesTest(unittest.TestCase):
         self.assert_rejected(self.post(5, {'value': True}), 400)
 
     def test_unhashable_setting_is_a_400_not_a_crash(self):
-        self.assert_rejected(self.post(5, {'setting': ['autoHome'], 'value': True}), 400)
+        self.assert_rejected(self.post(5, {'setting': ['motorClockwise'], 'value': True}), 400)
 
     def test_non_boolean_values_are_rejected(self):
         # bool("false") is True in Python, so strings/ints must not be coerced.
         for bad in ('false', 'true', 0, 1, None):
             with self.subTest(value=bad):
                 self.sent.clear()
-                self.assert_rejected(self.post(5, {'setting': 'autoHome', 'value': bad}), 400)
+                self.assert_rejected(self.post(5, {'setting': 'motorClockwise', 'value': bad}), 400)
 
     def test_missing_value(self):
-        self.assert_rejected(self.post(5, {'setting': 'autoHome'}), 400)
+        self.assert_rejected(self.post(5, {'setting': 'motorClockwise'}), 400)
 
     def test_unprovisioned_module(self):
-        self.assert_rejected(self.post(9, {'setting': 'autoHome', 'value': True}), 404)
+        self.assert_rejected(self.post(9, {'setting': 'motorClockwise', 'value': True}), 404)
 
 
 if __name__ == '__main__':

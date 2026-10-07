@@ -1,4 +1,4 @@
-/* The Tuning & Settings page: the hardware inspector and the settings forms. */
+/* The Modules page: the hardware inspector and the settings forms. */
 
 .config-section {
   background: var(--panel);
@@ -6,11 +6,6 @@
   border-radius: 12px;
   margin-bottom: 28px;
   border: 1px solid var(--border);
-}
-
-/* The hardware inspector, marked as the page's main section. */
-.config-section-main {
-  border-left: 5px solid var(--accent);
 }
 
 /* The button that saves a section's form. */
@@ -29,16 +24,6 @@
   grid-column: span 2;
 }
 
-/* A switch with its label, set apart in a section header. */
-.pill {
-  gap: 10px;
-  background: var(--surface);
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: .85rem;
-  color: #ccc;
-}
-
 .backup-row {
   display: flex;
   gap: 10px;
@@ -49,6 +34,8 @@
 /* ── MODULE GRID ── */
 .mod-matrix {
   display: grid;
+  /* Cells share the width, but no wider than 72px for a small display. */
+  grid-template-columns: repeat(var(--cols), minmax(0, 72px));
   gap: 3px;
   margin-bottom: 18px;
 }
@@ -227,10 +214,15 @@
 }
 
 @media (max-width: 600px) {
+  /* A full row of 16 is too narrow to tap on a phone, so a wide display's
+     grid wraps (see phoneColumns() in modules.js). */
   .mod-matrix {
-    overflow-x: auto;
-    grid-auto-flow: column;
-    grid-auto-columns: 32px;
+    grid-template-columns: repeat(var(--phone-cols), minmax(0, 72px));
+  }
+
+  /* The inspector's buttons wrap rather than run off the edge. */
+  .inspector-panel .button-row {
+    flex-wrap: wrap;
   }
 
   .adj-controls {
@@ -242,8 +234,15 @@
     font-size: .8rem;
   }
 
+  /* The four stats go 2x2, so labels and values each fit on one line. */
   .inspector-stats {
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 8px;
+  }
+
+  .stat-val {
+    white-space: nowrap;
   }
 
   .settings-grid {

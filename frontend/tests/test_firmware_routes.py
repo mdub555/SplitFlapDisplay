@@ -1,5 +1,5 @@
 """Tests for GET/POST /firmware_config in routes/firmware_routes.py: the
-settings every module shares (step delays, debounce, recalculate-home).
+settings every module shares (step delays, debounce, auto-home, ...).
 
 Run from frontend/:   python -m unittest tests.test_firmware_routes
 
@@ -20,7 +20,8 @@ FRONTEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, FRONTEND)
 
 DEFAULTS = {'stepDelayUs': 1000, 'homingStepDelayUs': 1000, 'debounceMs': 50, 'recalculateHome': True,
-            'rampStartDelayUs': 3000, 'rampSteps': 0, 'settleMs': 0, 'staggerMs': 150}
+            'rampStartDelayUs': 3000, 'rampSteps': 0, 'motorRelease': True, 'settleMs': 0,
+            'autoHome': True, 'staggerMs': 150}
 
 
 def _module(name, **attrs):
@@ -83,18 +84,26 @@ class FirmwareRoutesTest(unittest.TestCase):
 
     def test_post_broadcasts_each_setting_saves_and_returns_values(self):
         body = {'stepDelayUs': 1250, 'homingStepDelayUs': 1800, 'debounceMs': 150, 'recalculateHome': False,
-                'rampStartDelayUs': 6000, 'rampSteps': 40, 'settleMs': 120, 'staggerMs': 80}
+                'rampStartDelayUs': 6000, 'rampSteps': 40, 'motorRelease': False, 'settleMs': 120,
+                'autoHome': False, 'staggerMs': 80}
         res = self.post(body)
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.get_json()['values'], body)
         self.assertCountEqual(self.sent, ['m*S1250', 'm*H1800', 'm*D150', 'm*E0', 'm*R6000', 'm*L40',
-                                          'm*W120', 'm*P80'])
+                                          'm*F0', 'm*W120', 'm*A0', 'm*P80'])
         self.assertEqual(self.settings['firmware'], body)
         self.assertEqual(self.saves, 1)
 
     def test_post_boolean_true_sends_one(self):
         self.post({'recalculateHome': True})
         self.assertEqual(self.sent, ['m*E1'])
+
+    def test_auto_home_and_release_motor_go_to_every_module(self):
+        self.post({'autoHome': False, 'motorRelease': True})
+        self.assertCountEqual(self.sent, ['m*A0', 'm*F1'])
+
+    def test_non_boolean_auto_home_is_rejected(self):
+        self.assert_rejected(self.post({'autoHome': 1}))
 
     def test_partial_post_sends_only_those_and_keeps_the_rest(self):
         self.settings['firmware'] = {'stepDelayUs': 4000, 'homingStepDelayUs': 5000,
