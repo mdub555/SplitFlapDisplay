@@ -32,10 +32,10 @@ def send_raw(cmd: str):
         if ser:
             ser.write(cmd.encode())
             ser.flush()
-            state._broadcast_serial(f"SENT: {cmd.strip()}")
+            state.log_serial(f"SENT: {cmd.strip()}")
             time.sleep(0.02)
         else:
-            state._broadcast_serial(f"SIMULATED SENT: {cmd.strip()}")
+            state.log_serial(f"SIMULATED SENT: {cmd.strip()}")
 
 
 def read_dump(mod_id: int, timeout: float = 5.0):
@@ -49,7 +49,7 @@ def read_dump(mod_id: int, timeout: float = 5.0):
         request = message(mod_id, Cmd.DUMP_STATE)
         ser.write(f"{request}\n".encode())
         ser.flush()
-        state._broadcast_serial(f"SENT: {request}")
+        state.log_serial(f"SENT: {request}")
         start = time.time()
         buffer = ""
         while time.time() - start < timeout:
@@ -59,10 +59,10 @@ def read_dump(mod_id: int, timeout: float = 5.0):
                     buffer += chunk
                     dump = parse_buffer(buffer, mod_id)
                     if dump is not None:
-                        state._broadcast_serial(f"RECV: {buffer}")
+                        state.log_serial(f"RECV: {buffer}")
                         return dump
                 except Exception as e:
-                    state._broadcast_serial(f"MONITOR ERROR: {e}")
+                    state.log_serial(f"MONITOR ERROR: {e}")
                     logging.error(f"Parse error reading module {mod_id} dump: {e}")
             time.sleep(0.05)
     return None
@@ -81,7 +81,7 @@ def read_all_dumps(max_id: int, margin: float = 0.5):
         request = message(BROADCAST, Cmd.DUMP_STATE)
         ser.write(f"{request}\n".encode())
         ser.flush()
-        state._broadcast_serial(f"SENT: {request}")
+        state.log_serial(f"SENT: {request}")
         deadline = time.time() + (max_id + 1) * DUMP_SLOT_S + margin
         buffer = ""
         while time.time() < deadline:
@@ -89,7 +89,7 @@ def read_all_dumps(max_id: int, margin: float = 0.5):
                 buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
             time.sleep(0.02)
     if buffer:
-        state._broadcast_serial(f"RECV: {buffer}")
+        state.log_serial(f"RECV: {buffer}")
     return parse_all_dumps(buffer)
 
 

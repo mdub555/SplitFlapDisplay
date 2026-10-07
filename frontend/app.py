@@ -3,15 +3,19 @@ import threading
 
 from flask import Flask, render_template
 
-from routes import BLUEPRINTS
+from routes import (
+    apps_routes, backup_routes, control, firmware_routes, module_routes, playlist_routes,
+    settings_routes,
+)
 from display.module_protocol import BROADCAST, Cmd, message
 from display.player import playlist_loop
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 app = Flask(__name__)
-for bp in BLUEPRINTS:
-    app.register_blueprint(bp)
+for routes in (control, settings_routes, apps_routes, module_routes, backup_routes,
+               playlist_routes, firmware_routes):
+    app.register_blueprint(routes.bp)
 
 
 # The serial debug panel's quick commands: (message, label).

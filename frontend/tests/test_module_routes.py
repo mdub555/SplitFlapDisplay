@@ -112,6 +112,53 @@ class ModuleRoutesTest(unittest.TestCase):
         self.assertEqual(self.adjust(5, -32).get_json(), {'new_offset': 448})
         self.assertEqual(self.sent, ['m05O448'])
 
+    def test_adjust_must_keep_the_offset_inside_one_revolution(self):
+        # 0 isn't allowed either: the firmware reads "O0" as "make here flap 0".
+        for delta in (-480, -500, 4096 - 480):
+            with self.subTest(delta=delta):
+                res = self.adjust(5, delta)
+                self.assertEqual(res.status_code, 400)
+        self.assertEqual(self.adjust(5, 4095 - 480).get_json(), {'new_offset': 4095})
+        self.assertEqual(self.sent, ['m05O4095'])
+
+    def test_adjust_rejects_a_missing_or_non_integer_delta(self):
+        for body in ({}, {'delta': '5'}, {'delta': 1.5}, {'delta': True}):
+            with self.subTest(body=body):
+                res = self.client.post('/modules/5/adjust', json=body)
+                self.assertEqual(res.status_code, 400)
+        self.assertEqual(self.sent, [])
+        self.assertEqual(self.saves, 0)
+
+    # ---- /sync and /calibrate failures ------------------------------------
+
+    def test_sync_without_a_reply_is_a_504(self):
+        self.routes.read_dump = lambda mod_id: None
+        res = self.client.post('/modules/5/sync')
+        self.assertEqual(res.status_code, 504)
+        self.assertEqual(res.get_json()['status'], 'error')
+        self.assertEqual(self.saves, 0)
+
+    def test_sync_stores_the_reply(self):
+        self.routes.read_dump = lambda mod_id: {'homeOffset': 7}
+        res = self.client.post('/modules/9/sync')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(self.settings['modules']['9'], {'homeOffset': 7})
+
+    def test_calibrate_timeout_is_a_504(self):
+        self.routes.calibrate_module = lambda mod_id: None
+        self.assertEqual(self.client.post('/modules/5/calibrate').status_code, 504)
+        self.assertEqual(self.settings['modules']['5']['totalSteps'], 4096)
+
+    def test_calibrate_stores_the_measurement(self):
+        self.routes.calibrate_module = lambda mod_id: 4100
+        res = self.client.post('/modules/5/calibrate')
+        self.assertEqual(res.get_json(), {'status': 'success', 'steps': 4100})
+        self.assertEqual(self.settings['modules']['5']['totalSteps'], 4100)
+
+    def test_calibrate_unprovisioned_module_is_a_404(self):
+        self.routes.calibrate_module = lambda mod_id: self.fail('must not calibrate')
+        self.assertEqual(self.client.post('/modules/9/calibrate').status_code, 404)
+
     def test_adjust_unprovisioned_module_is_a_404_not_a_fake_success(self):
         # This used to return 200 {"status": "failed"}, which the client
         # didn't check and treated as success.

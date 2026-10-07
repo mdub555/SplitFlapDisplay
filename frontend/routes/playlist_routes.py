@@ -1,6 +1,7 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify
 
 from settings.store import settings, save_settings
+from routes.common import error, json_body
 
 bp = Blueprint('playlist_routes', __name__)
 
@@ -9,10 +10,10 @@ bp = Blueprint('playlist_routes', __name__)
 def playlists():
     if request.method == 'GET':
         return jsonify(settings.get('saved_playlists', {}))
-    data = request.json or {}
+    data = json_body()
     name = (data.get('name') or '').strip()
     if not name:
-        return jsonify(status='error', message='Name required'), 400
+        return error('Name required', 400)
     settings.setdefault('saved_playlists', {})[name] = {
         'pages': data.get('pages', []),
         'delay': data.get('delay', 5),

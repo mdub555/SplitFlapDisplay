@@ -17,11 +17,24 @@ COLOR_MAP = {
 }
 
 
-def flap_index(ch: str) -> int:
-    return FLAP_CHARS.find(ch)
+NUM_FLAPS = len(FLAP_CHARS)
 
 
-def flap_char(index: int) -> str:
-    if 0 <= index < len(FLAP_CHARS):
-        return FLAP_CHARS[index]
-    return '?'
+def normalize_text(text: str, raw: bool = False) -> str:
+    """`text` the way the modules take it: uppercased (unless `raw`), colour
+    emoji as their codes, and " as its substitute. Characters with no flap
+    are left as they are."""
+    if not raw:
+        text = text.upper()
+    for emoji, code in COLOR_MAP.items():
+        text = text.replace(emoji, code)
+    return text.replace(QUOTE_CHAR, QUOTE_SUBSTITUTE)
+
+
+def to_flap_char(value):
+    """One typed character, normalized like a page of text, or None unless
+    the result is a single character that has a flap."""
+    if not isinstance(value, str):
+        return None
+    char = normalize_text(value)
+    return char if len(char) == 1 and char in FLAP_CHARS else None

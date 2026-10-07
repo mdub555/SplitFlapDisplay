@@ -1,11 +1,13 @@
-from flask import Blueprint, request, jsonify
 import time
+
+from flask import Blueprint, jsonify
 
 from config import GRID_ROWS, GRID_COLS, NUM_MODULES
 from settings.store import settings, save_settings
 from settings.schema import GLOBAL_FIELDS
 from display.module_protocol import BROADCAST, UNPROVISIONED_ID, Cmd, message
-from display.serial_link import is_connected, parse_buffer, send_raw, ser, serial_lock
+from display.serial_link import is_connected, read_dump, send_raw
+from routes.common import error, json_body
 
 bp = Blueprint('settings_routes', __name__)
 
@@ -24,17 +26,13 @@ def get_config():
 
 @bp.route('/global_fields')
 def global_fields():
-    return jsonify([
-        {'key': f.key, 'label': f.label, 'type': f.type, 'opts': f.opts,
-         'placeholder': f.placeholder, 'default': f.default}
-        for f in GLOBAL_FIELDS
-    ])
+    return jsonify([f.to_json() for f in GLOBAL_FIELDS])
 
 
 @bp.route('/settings', methods=['GET', 'POST'])
 def handle_settings():
     if request.method == 'POST':
-        data = request.json or {}
+        data = json_body()
         global_keys = {f.key for f in GLOBAL_FIELDS}
         settings.update({k: v for k, v in data.items() if k in global_keys})
         save_settings(settings)
@@ -44,7 +42,7 @@ def handle_settings():
 
 @bp.route('/toggle_autohome', methods=['POST'])
 def toggle_autohome():
-    enabled = (request.json or {}).get('enabled', True)
+    enabled = json_body().get('enabled', True)
     settings['auto_home'] = enabled
 
     # Sync with per-module autoHome
@@ -58,38 +56,26 @@ def toggle_autohome():
 
 @bp.route('/provision_module', methods=['POST'])
 def provision_module():
+    """Give the unprovisioned module on the bus an ID: the one in the request,
+    or the first free one."""
     if not is_connected():
-        return jsonify(status='error', message='Hardware not connected'), 503
+        return error('Hardware not connected', 503)
 
-    target_id = (request.json or {}).get('id')
-
+    target_id = json_body().get('id')
     if target_id is not None:
         new_id = int(target_id)
         if str(new_id) in settings['modules']:
-            return jsonify(status='error', message='Module already provisioned'), 400
+            return error('Module already provisioned', 400)
     else:
-        existing = {int(k) for k in settings['modules'].keys()}
+        existing = {int(k) for k in settings['modules']}
         new_id = next((i for i in range(NUM_MODULES) if i not in existing), None)
         if new_id is None:
-            return jsonify(status='error', message='All module slots are already filled'), 400
+            return error('All module slots are already filled', 400)
 
-    # 1. Confirm exactly one unprovisioned module is present
-    dump = None
-    with serial_lock:
-        ser.reset_input_buffer()
-        ser.write(f"{message(UNPROVISIONED_ID, Cmd.DUMP_STATE)}\n".encode())
-        ser.flush()
-        start, buffer = time.time(), ""
-        while time.time() - start < 2.0:
-            if ser.in_waiting:
-                buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
-                dump = parse_buffer(buffer, UNPROVISIONED_ID)
-                if dump is not None:
-                    break
-            time.sleep(0.05)
-
+    # 1. Confirm an unprovisioned module is present
+    dump = read_dump(UNPROVISIONED_ID, timeout=2.0)
     if dump is None:
-        return jsonify(status="error", message="No unprovisioned module found on bus"), 404
+        return error('No unprovisioned module found on bus', 404)
 
     # 2. Assign it the target ID
     send_raw(message(UNPROVISIONED_ID, Cmd.SET_MODULE_ID, new_id))
@@ -99,4 +85,4 @@ def provision_module():
     settings['modules'][str(new_id)] = dump
     save_settings(settings)
 
-    return jsonify(status="success", assigned_id=new_id)
+    return jsonify(status='success', assigned_id=new_id)

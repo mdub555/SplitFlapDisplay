@@ -3,7 +3,7 @@ import time
 
 from config import NUM_MODULES, BAUD_RATE, FRAME_BROADCAST
 from display.state import state
-from display.charset import FLAP_CHARS, COLOR_MAP, QUOTE_CHAR, QUOTE_SUBSTITUTE
+from display.charset import FLAP_CHARS, NUM_FLAPS, normalize_text
 from display.layout import get_animation_order
 from display.module_protocol import BROADCAST, Cmd, message
 from display.serial_link import ser, serial_lock
@@ -12,8 +12,8 @@ from apps.registry import registry
 from settings.store import settings
 
 
-# Seconds for a module to turn one flap position (64 per revolution, about 4 s).
-SECONDS_PER_FLAP = 4.0 / 64.0
+# Seconds for a module to turn one flap position (a revolution takes about 4 s).
+SECONDS_PER_FLAP = 4.0 / NUM_FLAPS
 
 # A frame broadcast gives each module's place in the animation as one
 # printable byte ('!' + rank), so it covers up to 94 modules.
@@ -46,10 +46,7 @@ def send_to_display(text, order=None, raw=False, step_delay_ms=15):
     if not text:
         return 0
 
-    clean_text = text if raw else text.upper()
-    for emoji, char in COLOR_MAP.items():
-        clean_text = clean_text.replace(emoji, char)
-    clean_text = clean_text.replace(QUOTE_CHAR, QUOTE_SUBSTITUTE)
+    clean_text = normalize_text(text, raw)
     # A character with no physical flap (e.g. ';' or "'" on the v8 reels) is
     # ignored by the module, leaving the old character up while our state
     # claimed otherwise. Send a blank instead so state and hardware agree.
@@ -67,10 +64,9 @@ def send_to_display(text, order=None, raw=False, step_delay_ms=15):
     for i in order:
         if i >= len(clean_text):
             continue
-        target_idx = FLAP_CHARS.find(clean_text[i])
-        if target_idx == -1:
-            target_idx = 0
-        dist = 128 if indices[i] == -1 else (target_idx - indices[i]) % 64
+        target_idx = FLAP_CHARS.index(clean_text[i])  # every character has a flap by now
+        # A module whose position is unknown homes first: up to two revolutions.
+        dist = 2 * NUM_FLAPS if indices[i] == -1 else (target_idx - indices[i]) % NUM_FLAPS
         max_dist = max(max_dist, dist)
         indices[i] = target_idx
 
@@ -120,8 +116,8 @@ def _manual_frames():
             frames.append(Frame(
                 text=page.get('text', ''),
                 delay=float(page.get('delay', state.loop_delay)),
-                style=page.get('style', 'ltr'),
-                speed=int(page.get('speed', 15)),
+                style=page.get('style', Frame.style),
+                speed=int(page.get('speed', Frame.speed)),
             ))
         else:
             frames.append(Frame(text=page, delay=state.loop_delay))

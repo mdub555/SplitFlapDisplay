@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 
 from settings.backup import build_backup, restore_backup
+from routes.common import error
 
 bp = Blueprint('backup_routes', __name__)
 
@@ -14,6 +15,6 @@ def backup_settings():
 def restore_settings():
     data = request.json
     if not data:
-        return jsonify(status='error', message='No data'), 400
+        return error('No data', 400)
     hw_updated = restore_backup(data)
     return jsonify(status='success', hardware_updated=hw_updated)
