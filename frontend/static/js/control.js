@@ -156,10 +156,17 @@ function composeBackspace() {
   renderComposer();
 }
 
+// Shows `shown` (a character as the grid shows it) in a compose flap,
+// marking colour tiles, which the stylesheet draws smaller than letters.
+function showInFlap(flap, shown) {
+  flap.textContent = shown === ' ' ? '' : shown;
+  flap.classList.toggle('tile', shown in TILE_CODES);
+}
+
 function renderComposer() {
   cancelPreview();   // an edit ends a preview (preview.js)
   composeFlaps.forEach((flap, i) => {
-    flap.textContent = composed[i] === ' ' ? '' : composed[i];
+    showInFlap(flap, composed[i]);
     flap.classList.toggle('cursor', i === Math.min(composeCursor, composeCells() - 1));
   });
   describeComposer();

@@ -219,6 +219,27 @@
 }
 
 /* ── COMPOSE: the grid you type into ── */
+
+/* The flaps' text is sized from the flap, not the screen: the grid is a size
+   container, so 100cqw is its width, and one flap is that less the gaps,
+   divided by the columns. A letter is 1.3 x the flap's width (about half
+   its height, like the real thing, and still narrower than the flap); a
+   colour tile is an emoji, much wider than a letter, so it's smaller to fit. */
+.compose-wrapper .preview-grid {
+  container-type: inline-size;
+}
+
+.compose-wrapper .flap-unit {
+  --flap-w: calc((100cqw - (var(--grid-cols, 16) - 1) * 3px) / var(--grid-cols, 16));
+  font-size: calc(var(--flap-w) * 1.3);
+  line-height: 1;
+  overflow: hidden;
+}
+
+.compose-wrapper .flap-unit.tile {
+  font-size: calc(var(--flap-w) * .75);
+}
+
 .compose-wrapper {
   position: relative;
   cursor: text;

@@ -71,7 +71,7 @@ function playPreviewPage(pages, n, from) {
       if (t >= startAt[i]) {
         idx = jump ? target[i] : (from[i] + Math.min(steps[i], Math.floor((t - startAt[i]) / stepMs))) % CHAR_MAP.length;
       }
-      flap.textContent = displayChar(CHAR_MAP[idx]);
+      showInFlap(flap, displayChar(CHAR_MAP[idx]));
     });
     if (t < finish) return;
     clearInterval(preview.timer);
