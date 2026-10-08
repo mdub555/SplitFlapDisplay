@@ -48,6 +48,9 @@ const uint8_t DUMP_SLOT_MS = 105;
 bool dumpPending = false;
 uint16_t dumpDelayMs = 0;  // wait before replying, once idle
 uint32_t dumpAtMs = 0;     // millis() to reply at
+// A flap offset dump ('J' with no data) waits for the module to be idle in
+// the same way. It's only ever addressed to this module, so has no slot.
+bool flapOffsetsPending = false;
 
 // Starts a dump: right away for one addressed to this module, or in this
 // module's slot for a broadcast. Unprovisioned modules don't answer a
@@ -63,10 +66,16 @@ void requestDump(bool broadcast) {
 // Call every loop(). Sends a requested dump once the module is idle and its
 // delay has passed.
 void updateDump() {
-  if (!dumpPending) return;
+  if (!dumpPending && !flapOffsetsPending) return;
   if (splitFlap.busy()) {
     dumpAtMs = millis() + dumpDelayMs;  // the wait starts once idle
-  } else if ((int32_t)(millis() - dumpAtMs) >= 0) {
+    return;
+  }
+  if (flapOffsetsPending) {
+    flapOffsetsPending = false;
+    transceiver.dumpFlapOffsets();
+  }
+  if (dumpPending && (int32_t)(millis() - dumpAtMs) >= 0) {
     dumpPending = false;
     transceiver.dump(splitFlap.revolutionCount(), splitFlap.lastDrift());
   }
@@ -249,6 +258,14 @@ void handleCommand(const Command& command) {
 
     case SET_STAGGER_MS:
       EepromStore::saveStaggerMs(command.data.dataInt);
+      break;
+
+    case SET_FLAP_OFFSET:
+      splitFlap.setFlapOffset(command.data.dataInt);
+      break;
+
+    case DUMP_FLAP_OFFSETS:
+      flapOffsetsPending = true;
       break;
 
     default:

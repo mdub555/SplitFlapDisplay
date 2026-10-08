@@ -51,9 +51,10 @@ class SplitFlap {
   // Each one replaces whatever the reel was doing, and cancels an exercise
   // or a queued character.
 
-  // Moves to a flap by index (0–63), using an even division of the revolution.
-  // Retargets a move in progress. If the position is unknown, homes first;
-  // while homing, the index is remembered and moved to once homing finishes.
+  // Moves to a flap by index (0–63): an even division of the revolution,
+  // corrected by the flap's offset (see setFlapOffset()). Retargets a move
+  // in progress. If the position is unknown, homes first; while homing, the
+  // index is remembered and moved to once homing finishes.
   void moveToIndex(uint8_t targetIndex);
 
   // Looks up a character's index in FLAP_CHARS and delegates to moveToIndex().
@@ -112,6 +113,16 @@ class SplitFlap {
   // progress) and the next move homes first. No effect on a home or
   // calibration in progress.
   void setTotalSteps(uint16_t steps);
+
+  // ---- Per-flap correction ----
+
+  // Saves the offset of the flap showing, as stored by EepromStore (steps +
+  // FLAP_OFFSET_ZERO), then moves to the flap's new position. That's a short
+  // move forward for a larger offset, and nearly a full revolution for a
+  // smaller one, since the reel only turns forward. Ignored unless a flap
+  // other than 0 is showing (flap 0 is where homing ends; the home offset
+  // places it).
+  void setFlapOffset(uint8_t offset);
 
   // ---- Status ----
 
@@ -220,6 +231,9 @@ class SplitFlap {
   // Moves to a raw step position (see nudge() and goToRawStep()). Ignored
   // while homing or calibrating.
   void rawMove(uint16_t targetStep);
+
+  // The step position of flap `flapIdx`, including its offset.
+  uint16_t flapStepPos(uint8_t flapIdx) const;
 
   // Starts stepping toward `stepPos`; the move ends on flap `flapIdx`
   // (FLAP_BETWEEN for a raw step position).

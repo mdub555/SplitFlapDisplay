@@ -36,6 +36,7 @@ namespace {
   // -1 removes the trailing null
   const uint8_t NUM_FLAPS = sizeof(FLAP_CHARS) - 1;
   static_assert(NUM_FLAPS == 64, "FLAP_CHARS needs one character per flap (64)");
+  static_assert(NUM_FLAPS == EepromStore::NUM_FLAP_OFFSETS, "EEPROM needs one offset per flap");
 
   // Extra steps allowed past one revolution when searching for home.
   const uint16_t HOME_SEARCH_MARGIN = 500;
@@ -311,6 +312,20 @@ void SplitFlap::setTotalSteps(uint16_t steps) {
 }
 
 // =============================================================================
+// Per-flap correction
+// =============================================================================
+
+void SplitFlap::setFlapOffset(uint8_t offset) {
+  // Only while a flap is showing: during a move it's FLAP_BETWEEN, while
+  // homing FLAP_UNKNOWN.
+  int8_t flapIdx = currentFlapIdx;
+  if (flapIdx <= 0) return;
+  cancelQueued();
+  EepromStore::saveFlapOffset(flapIdx, offset);
+  startMove(flapStepPos(flapIdx), flapIdx);
+}
+
+// =============================================================================
 // Status
 // =============================================================================
 
@@ -350,8 +365,18 @@ void SplitFlap::moveTo(uint8_t targetIndex) {
   // Already showing the right flap — nothing to do
   if (currentFlapIdx == targetIndex) return;
 
-  startMove((uint16_t)(((uint32_t)targetIndex * (uint32_t)EepromStore::getTotalSteps()) / NUM_FLAPS),
-            targetIndex);
+  startMove(flapStepPos(targetIndex), targetIndex);
+}
+
+uint16_t SplitFlap::flapStepPos(uint8_t flapIdx) const {
+  uint16_t total = EepromStore::getTotalSteps();
+  int32_t stepPos = ((uint32_t)flapIdx * total) / NUM_FLAPS +
+                    EepromStore::getFlapOffset(flapIdx) - EepromStore::FLAP_OFFSET_ZERO;
+  // An offset can put a flap past either end of the revolution (more than
+  // once, for a total steps set implausibly low).
+  while (stepPos < 0) stepPos += total;
+  while (stepPos >= total) stepPos -= total;
+  return stepPos;
 }
 
 void SplitFlap::rawMove(uint16_t targetStep) {

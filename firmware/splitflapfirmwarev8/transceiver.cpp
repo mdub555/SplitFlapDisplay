@@ -25,6 +25,7 @@ namespace {
     ARG_INT_NONZERO,      // 1-65535: 0 would remove a step delay entirely, or
                           // break the movement math as total steps
     ARG_INT_BELOW_TOTAL,  // 0 to total steps - 1
+    ARG_INT_BYTE_OR_NONE, // 0-255, or no data, which makes it DUMP_FLAP_OFFSETS
   };
 
   struct CommandSpec {
@@ -33,10 +34,11 @@ namespace {
     ArgKind arg;
   };
 
-  // The letters also used outside COMMANDS: the frame header, and the dump
-  // reply, which is marked with the dump command's letter.
+  // The letters also used outside COMMANDS: the frame header, and the
+  // replies, each marked with the letter of the command it answers.
   const char FRAME_CODE = 'f';
   const char DUMP_CODE = '?';
+  const char FLAP_OFFSETS_CODE = 'J';
 
   // Labels for the dump's two read-only fields. The settings in a dump are
   // labelled with the letter that sets them.
@@ -75,6 +77,7 @@ namespace {
     {'L', SET_RAMP_STEPS,        ARG_INT_BYTE},
     {'W', SET_SETTLE_MS,         ARG_INT_BYTE},
     {'P', SET_STAGGER_MS,        ARG_INT_BYTE},
+    {FLAP_OFFSETS_CODE, SET_FLAP_OFFSET, ARG_INT_BYTE_OR_NONE},
   };
 
   // The COMMANDS entry for the letter `c`, or nullptr if there isn't one.
@@ -88,11 +91,16 @@ namespace {
   // Finishes a numeric command, rejecting it if it had no digits (a truncated
   // "m05S" must not set a 0 µs delay) or its value is out of range.
   bool finishDataInt(Command& command, ArgKind arg, uint16_t value, bool hasDigits) {
-    if (!hasDigits) return false;
+    if (!hasDigits) {
+      if (arg != ARG_INT_BYTE_OR_NONE) return false;
+      command.type = DUMP_FLAP_OFFSETS;
+      return true;
+    }
     uint16_t max = 0xFFFF;
     switch (arg) {
       case ARG_INT_BOOLEAN:     max = 1; break;
-      case ARG_INT_BYTE:        max = 255; break;
+      case ARG_INT_BYTE:
+      case ARG_INT_BYTE_OR_NONE: max = 255; break;
       case ARG_INT_NONZERO:     if (value == 0) return false; break;
       case ARG_INT_BELOW_TOTAL: max = EepromStore::getTotalSteps() - 1; break;
       case ARG_INT_ANY:
@@ -160,6 +168,9 @@ namespace {
                 EepromStore::getModuleId() != EepromStore::UNPROVISIONED_ID) {
               return false;
             }
+            // Flap offsets are per module: every module's offset dump at
+            // once would collide on the bus.
+            if (command.type == SET_FLAP_OFFSET && command.broadcast) return false;
             switch (arg) {
               case ARG_NONE:
                 return true;
@@ -215,6 +226,20 @@ void Transceiver::begin(long baud) {
 }
 
 namespace {
+  // Starts a reply: m, this module's ID (at least two digits), and the
+  // letter of the command it answers.
+  void printReplyHeader(char code) {
+    Serial.print('m');
+    uint8_t id = EepromStore::getModuleId();
+    if (id < 10) Serial.print('0');
+    Serial.print(id);
+    Serial.print(code);
+  }
+
+  void printHexDigit(uint8_t digit) {
+    Serial.print((char)(digit < 10 ? '0' + digit : 'A' - 10 + digit));
+  }
+
   // Starts a dump field: a tab, then the field's label.
   void printFieldLabel(char code) {
     Serial.print('\t');
@@ -232,11 +257,7 @@ namespace {
 }
 
 void Transceiver::dump(uint32_t revolutions, int16_t drift) {
-  Serial.print("m");
-  uint8_t id = EepromStore::getModuleId();
-  if (id < 10) Serial.print("0");
-  Serial.print(id);
-  Serial.print(DUMP_CODE);
+  printReplyHeader(DUMP_CODE);
   printField(SET_OFFSET, EepromStore::getHomeOffset());
   printField(SET_TOTAL_STEPS, EepromStore::getTotalSteps());
   printField(SET_DEBOUNCE_MS, EepromStore::getDebounceMs());
@@ -254,6 +275,16 @@ void Transceiver::dump(uint32_t revolutions, int16_t drift) {
   Serial.print(revolutions);
   printFieldLabel(DRIFT_CODE);
   Serial.println(drift);
+}
+
+void Transceiver::dumpFlapOffsets() {
+  printReplyHeader(FLAP_OFFSETS_CODE);
+  for (uint8_t flap = 0; flap < EepromStore::NUM_FLAP_OFFSETS; flap++) {
+    uint8_t offset = EepromStore::getFlapOffset(flap);
+    printHexDigit(offset >> 4);
+    printHexDigit(offset & 0xF);
+  }
+  Serial.println();
 }
 
 const char* Transceiver::message() const { return buffer; }

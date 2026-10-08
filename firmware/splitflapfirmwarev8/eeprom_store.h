@@ -15,6 +15,14 @@ namespace EepromStore {
   // addressable on its own, and doesn't answer broadcast dumps or frames.
   const uint8_t UNPROVISIONED_ID = 255;
 
+  // One offset is stored per flap on the reel.
+  const uint8_t NUM_FLAP_OFFSETS = 64;
+
+  // A stored flap offset is the offset in steps plus this, so it fits in a
+  // byte without a sign: 128 is no offset, 125 is 3 steps back, 131 is 3
+  // steps forward.
+  const uint8_t FLAP_OFFSET_ZERO = 128;
+
   // Writes the defaults on first boot (with `hardcodedId` as the module ID),
   // then loads the settings into RAM.
   void begin(uint8_t hardcodedId);
@@ -23,7 +31,8 @@ namespace EepromStore {
   bool isInitialized();
 
   // Force write the default values for every setting, with `hardcodedId` as
-  // the module ID. Doesn't touch the revolution counter.
+  // the module ID, and clear the flap offsets. Doesn't touch the revolution
+  // counter.
   void writeDefaults(uint8_t hardcodedId);
 
   void saveHomeOffset(uint16_t offset);
@@ -76,6 +85,13 @@ namespace EepromStore {
   // homing at the same instant.
   void saveStaggerMs(uint8_t ms);
   uint8_t getStaggerMs();
+
+  // A flap's position correction, stored with FLAP_OFFSET_ZERO added (see
+  // above), for flaps that don't quite land where an even division of the
+  // revolution puts them. Read from and written to EEPROM directly (not
+  // cached), as that's as quick as RAM to read and saves 64 bytes of it.
+  void saveFlapOffset(uint8_t flap, uint8_t offset);
+  uint8_t getFlapOffset(uint8_t flap);
 
   // Lifetime count of reel revolutions, for maintenance. Read from and
   // written to EEPROM directly (not cached); SplitFlap keeps the live count

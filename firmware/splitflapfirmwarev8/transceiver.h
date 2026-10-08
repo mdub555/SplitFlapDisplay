@@ -93,6 +93,17 @@
 //         P, Set the power-on stagger: the auto-home waits this many
 //            milliseconds per module ID after power-on (0-255). Takes effect
 //            on the next boot.
+//         J, Flap offsets, for flaps that don't land quite where an even
+//            division of the revolution puts them. Addressed to one module
+//            only; a broadcast is ignored.
+//            With data (0-255): set the offset of the flap showing, in steps
+//            plus 128 (128 = none, 125 = 3 steps back, 131 = 3 forward),
+//            then move to its new position. Ignored unless a flap other than
+//            0 is showing (the home offset 'O' places flap 0).
+//            With no data: reply with every flap's offset, as stored, in two
+//            hex digits per flap from flap 0 (format at
+//            Transceiver::dumpFlapOffsets() below). Sent once the module is
+//            idle, as for '?'.
 //
 // Frame broadcast: "m*f<interval>:<pairs>\n" sets every module at once.
 //   <pairs> has two bytes per module, for IDs 0, 1, 2, ... in order: the
@@ -138,6 +149,8 @@ enum CommandType : uint8_t {
   SET_RAMP_STEPS,         // 'L'
   SET_SETTLE_MS,          // 'W'
   SET_STAGGER_MS,         // 'P'
+  SET_FLAP_OFFSET,        // 'J' with data
+  DUMP_FLAP_OFFSETS,      // 'J' without
 };
 
 struct Command {
@@ -199,6 +212,12 @@ class Transceiver {
   // passed in by the caller. Fields can be read in any order. Typically ~75
   // bytes.
   void dump(uint32_t revolutions, int16_t drift);
+
+  // Sends m<ID>J and then each flap's stored offset (see the 'J' command) as
+  // two uppercase hex digits, from flap 0 to 63:
+  //   m05J8080837D8080...
+  // 133 bytes in all, about 140 ms at 9600 baud.
+  void dumpFlapOffsets();
 
   // The last message poll() parsed, as received (without the '\n'). Only
   // valid until the next call to poll().
