@@ -22,6 +22,21 @@ pip install -r requirements.txt
 python app.py
 ```
 
+That's Flask's development server, which is fine for working on the app
+(it warns that it isn't meant for production). To serve it properly, use
+gunicorn, which the Docker image does:
+
+```
+gunicorn app:app
+```
+
+Run it from `frontend/`; it reads `gunicorn.conf.py` from there. That file
+keeps the app to **one worker process with threads**: the serial port, the
+display state and the background threads live in the app's process, so a
+second worker would fight over the port and run its own playlist. Don't
+raise `workers`, and don't turn on `preload_app` or `max_requests` (the
+file says why). It serves on port 80, or `SPLITFLAP_PORT`.
+
 Set `SPLITFLAP_ROWS` / `SPLITFLAP_COLS` env vars (or edit `config.py`) to
 match your hardware — everything (module count, animation layout, frontend
 grid rendering) derives from those two numbers. Defaults are 4x16. The UI is
@@ -51,7 +66,8 @@ cut mid-save can't leave it half-written.
 container's port 5000. The container keeps settings.json on the
 `splitflap-settings` volume (`SPLITFLAP_CONFIG_PATH=/code/data/settings.json`
 in the Dockerfile), so rebuilding or updating keeps your calibrations,
-playlists and schedule. It runs `python app.py`, not `flask run --debug`.
+playlists and schedule. It serves with gunicorn (see above), not Flask's
+development server.
 
 Containers built before this change kept settings.json inside the container
 itself, where a rebuild loses it: download a backup (Modules → Backup &

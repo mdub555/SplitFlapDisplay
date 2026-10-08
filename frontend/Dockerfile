@@ -34,7 +34,6 @@ RUN mkdir -p /code/data
 
 EXPOSE 5000
 
-# Run the app itself: it starts the playlist, schedule and serial threads and
-# serves with threads (needed for the live updates). Not `flask run --debug`,
-# whose debugger shouldn't be left running on a device that's always on.
-CMD ["python", "app.py"]
+# Serve with gunicorn (settings and the reasons for them in gunicorn.conf.py:
+# one worker process with threads), not Flask's development server.
+CMD ["gunicorn", "app:app"]
