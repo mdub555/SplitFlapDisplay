@@ -29,8 +29,13 @@ let composing = false;     // in the middle of an IME composition
 // Every character a flap shows, as it's shown on screen.
 const COMPOSE_CHARS = new Set(Array.from(CHAR_MAP, ch => displayChar(ch) || ' '));
 
-// Characters phone keyboards type in place of one a flap shows.
-const COMPOSE_SUBSTITUTES = {'\u201c': '"', '\u201d': '"', '\u201e': '"', '\u2764': '\u2665'};
+// Characters typed in place of one a flap shows: phone keyboards' curly
+// quotes and heart, and the black tile, which is the blank flap (it has no
+// colour code of its own, so no flap "shows" it).
+const COMPOSE_SUBSTITUTES = {
+  '\u201c': '"', '\u201d': '"', '\u201e': '"', '\u2764': '\u2665',
+  ...Object.fromEntries(CONFIG.color_tiles.filter(tile => tile.code === ' ').map(tile => [tile.emoji, ' '])),
+};
 
 // `ch` as it goes in a flap, or null if no flap shows it.
 function composeChar(ch) {

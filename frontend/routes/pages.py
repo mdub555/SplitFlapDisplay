@@ -22,7 +22,8 @@ def client_config():
         'num_modules': NUM_MODULES,
         'flap_chars': FLAP_CHARS,
         'display_chars': DISPLAY_CHARS,
-        'color_tiles': [{'emoji': emoji, 'name': name} for emoji, _, name in COLOR_TILES],
+        # With each tile's flap code: the black tile is the blank flap (' ').
+        'color_tiles': [{'emoji': emoji, 'code': code, 'name': name} for emoji, code, name in COLOR_TILES],
         'symbol_tiles': [{'char': char, 'name': name} for char, _, name in SYMBOL_TILES],
         # Each transition with the order it starts the modules in, for the
         # compose grid's preview (Random's is one random order of many).

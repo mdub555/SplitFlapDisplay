@@ -522,6 +522,12 @@ async function main() {
   check('Delete clears the flap under the cursor', rowN(1) === '"O "            ' && cursorAt() === 18);
   click(document.querySelector('#colorPalette .color-btn'));
   check('a colour tile goes in at the cursor', rowN(1) === '"O🟥"            ');
+  click(document.querySelector('#preview .flap-unit[data-cell="16"]'));
+  click(document.querySelector('#colorPalette .color-btn[title="Black"]'));
+  check('the black tile blanks the flap under the cursor and moves on, like a space',
+    rowN(1) === ' O🟥"            ' && cursorAt() === 17);
+  click(document.querySelector('#preview .flap-unit[data-cell="16"]'));
+  typeKeys('"');
   const paste = new window.Event('paste', { bubbles: true, cancelable: true });
   paste.clipboardData = { getData: () => 'AB\nCD' };
   click(document.querySelector('#preview .flap-unit[data-cell="48"]'));
@@ -1088,6 +1094,19 @@ async function main() {
   key('ArrowRight');
   check('typing (or any key in the grid) ends it', !document.getElementById('composeWrapper').classList.contains('previewing') &&
     row0().startsWith('AB'));
+
+  console.log('\n--- The black tile is the blank flap on the Debug page too ---');
+  click(document.getElementById('tab-debug'));
+  document.getElementById('debugCommand').value = 'show_char';
+  change(document.getElementById('debugCommand'));
+  document.getElementById('debugModuleId').value = '5';
+  document.getElementById('debugParam-char').value = '⬛';
+  document.getElementById('debugParam-char').dispatchEvent(new window.Event('input', { bubbles: true }));
+  check('Show character with the black tile sends a blank', document.getElementById('debugPreview').textContent === 'm05- ' &&
+    document.getElementById('debugNote').textContent === 'Flap index 0');
+  document.getElementById('debugParam-char').value = '🟥';
+  document.getElementById('debugParam-char').dispatchEvent(new window.Event('input', { bubbles: true }));
+  check('and a colour tile its code', document.getElementById('debugPreview').textContent === 'm05-r');
 
   console.log('\n--- Every page sent shows in the serial log ---');
   const logStream = MockEventSource.instances.find(s => s.url === '/serial_log/stream');

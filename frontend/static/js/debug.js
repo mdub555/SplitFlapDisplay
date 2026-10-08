@@ -4,7 +4,11 @@
 
 // What a character typed or shown in the UI is sent as: colour emoji, °, ♥
 // and " become their codes on the wire; anything else is sent as typed.
-const WIRE_CHARS = Object.fromEntries(Object.entries(CONFIG.display_chars).map(([code, shown]) => [shown, code]));
+const WIRE_CHARS = {
+  ...Object.fromEntries(Object.entries(CONFIG.display_chars).map(([code, shown]) => [shown, code])),
+  // Every colour tile, the black one (the blank flap, ' ') included.
+  ...Object.fromEntries(CONFIG.color_tiles.map(tile => [tile.emoji, tile.code])),
+};
 const toWireChars = text => Array.from(text).map(ch => WIRE_CHARS[ch] || ch).join('');
 
 const DEBUG_COMMANDS = Object.fromEntries(CONFIG.debug_commands.map(c => [c.key, c]));
