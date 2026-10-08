@@ -34,7 +34,7 @@ const COMPOSE_CHARS = new Set(Array.from(CHAR_MAP, ch => displayChar(ch) || ' ')
 // colour code of its own, so no flap "shows" it).
 const COMPOSE_SUBSTITUTES = {
   '\u201c': '"', '\u201d': '"', '\u201e': '"', '\u2764': '\u2665',
-  ...Object.fromEntries(CONFIG.color_tiles.filter(tile => tile.code === ' ').map(tile => [tile.emoji, ' '])),
+  ...Object.fromEntries(Object.entries(TILE_CODES).filter(([, code]) => code === ' ').map(([emoji]) => [emoji, ' '])),
 };
 
 // `ch` as it goes in a flap, or null if no flap shows it.

@@ -7,7 +7,7 @@
 const WIRE_CHARS = {
   ...Object.fromEntries(Object.entries(CONFIG.display_chars).map(([code, shown]) => [shown, code])),
   // Every colour tile, the black one (the blank flap, ' ') included.
-  ...Object.fromEntries(CONFIG.color_tiles.map(tile => [tile.emoji, tile.code])),
+  ...TILE_CODES,
 };
 const toWireChars = text => Array.from(text).map(ch => WIRE_CHARS[ch] || ch).join('');
 
