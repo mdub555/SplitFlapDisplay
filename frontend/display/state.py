@@ -234,6 +234,13 @@ class DisplayState:
             self.sync_running = False
         self._broadcast()
 
+    def set_hardware_connected(self, connected):
+        with self.lock:
+            if self.hardware_connected == connected:
+                return
+            self.hardware_connected = connected
+        self._broadcast()
+
     def settings_changed(self):
         with self.lock:
             self.settings_version += 1

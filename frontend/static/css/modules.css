@@ -306,3 +306,23 @@
     flex-direction: column;
   }
 }
+
+/* After a restore: what came back, and anything skipped. */
+.restore-report {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  background: var(--success-bg);
+  font-size: .85rem;
+}
+
+.restore-report.warning {
+  border-color: var(--orange);
+  background: var(--warn-bg);
+}
+
+.restore-report ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}

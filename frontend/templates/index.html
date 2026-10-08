@@ -67,7 +67,7 @@
 
   <h2 class="section-label" id="liveDisplayLabel">LIVE DISPLAY
     <span id="simBadge" class="sim-badge" hidden
-          title="The serial port didn't open, so nothing on the display physically moves. Check the USB-RS485 adapter and SPLITFLAP_SERIAL_PORT, then restart.">SIMULATION · NO HARDWARE</span>
+          title="There's no serial port open, so nothing on the display physically moves. Check the USB-RS485 adapter and SPLITFLAP_SERIAL_PORT; it reconnects by itself within a few seconds of the port coming back.">SIMULATION · NO HARDWARE</span>
   </h2>
   <!-- Screen readers get what's on the display as text (live-flap.js), not 64 flaps. -->
   <div class="preview-wrapper live-wrapper" role="img" id="liveDisplay" aria-label="The display is blank">
@@ -283,8 +283,9 @@
 
     <!-- Backup / Restore -->
     <div class="config-section">
-      <h3>Calibration Backup &amp; Restore</h3>
-      <p class="note">Export/import all home offsets, step calibrations, motor directions and the settings for all modules.</p>
+      <h3>Backup &amp; Restore</h3>
+      <p class="note">Everything in one file: each module's home offset, step calibration and motor settings, the settings for all modules, saved playlists, the schedule, and every app and global setting. Restoring merges in the saved playlists and replaces the rest. A backup from before playlists were included restores just the modules.</p>
+      <div class="restore-report" id="restoreReport" role="status" hidden></div>
       <div class="backup-row">
         <button class="btn btn-secondary" data-onclick="downloadBackup">⬇ Download Backup JSON</button>
         <div class="row grow">

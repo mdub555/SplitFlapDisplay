@@ -32,6 +32,31 @@ in simulation mode — the UI works, but nothing physically moves. The page
 says so with a SIMULATION badge next to LIVE DISPLAY (from
 `hardware_connected` in the live state; `/config` reports it too).
 
+The port can come and go while the app runs. If the USB adapter is unplugged,
+the next write or read fails, or a background check every 5 s notices; the
+badge appears, and the app carries on in simulation mode. Once the port is
+back it's reopened within 5 s, the badge goes, and the current page is sent
+again. (A re-plugged adapter can come back under a new name, ttyUSB1 instead
+of ttyUSB0; a `/dev/serial/by-id/...` path for `SPLITFLAP_SERIAL_PORT` stays
+the same.) Nothing that goes wrong while playing stops the playlist loop:
+errors are logged and it carries on.
+
+The web page is served on port 80, or `SPLITFLAP_PORT`. settings.json is
+written atomically (to a temporary file, then moved into place), so a power
+cut mid-save can't leave it half-written.
+
+### Docker
+
+`compose.yaml` builds the image and maps `APP_PORT` (from `.env`) to the
+container's port 5000. The container keeps settings.json on the
+`splitflap-settings` volume (`SPLITFLAP_CONFIG_PATH=/code/data/settings.json`
+in the Dockerfile), so rebuilding or updating keeps your calibrations,
+playlists and schedule. It runs `python app.py`, not `flask run --debug`.
+
+Containers built before this change kept settings.json inside the container
+itself, where a rebuild loses it: download a backup (Modules → Backup &
+Restore) before updating, and restore it afterwards.
+
 The page gets everything the backend already knows (grid size, character
 set, animation styles, the firmware settings and module toggles with their
 labels) when it's rendered, as `CONFIG` (see `routes/pages.py`), so the
@@ -114,6 +139,15 @@ implement `frames()`; the update-order and speed settings are built for it.
   individual retry). A failed module stays orange, and its inspector says
   "Sync failed", until it next syncs; a single module's Sync EEPROM counts
   too. The status is kept by the server, so every open page shows it.
+- **Backups hold everything**: Download Backup (version 4) has the modules,
+  the settings for all modules, saved playlists, the schedule, and every app
+  and global setting. Restoring checks each part the way saving it from the
+  page would; anything that doesn't check out is skipped and listed, and
+  the rest is still restored. Saved playlists are merged in by name. An
+  older (version 3) backup restores just the modules, as before.
+- **Timezone** is a list of real timezones, so a typo can't break every
+  clock. An unknown name already in settings.json is shown as "not
+  recognised" until it's changed, and the apps use US/Eastern meanwhile.
 - **Phone install**: the page has a web app manifest
   (`/manifest.webmanifest`) and icons (`static/icons/`, drawn by
   `tools/make_icons.py`), so Add to Home Screen gives it an icon and opens

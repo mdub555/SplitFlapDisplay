@@ -59,7 +59,10 @@ class SettingField:
             raise ValueError(f'{self.label} must be text')
         value = str(value)
         if self.type == 'select' and self.opts and value not in self.opts:
-            raise ValueError(f'{self.label} must be one of: {", ".join(self.opts)}')
+            # A short list is worth spelling out; a long one (timezones) isn't.
+            if len(self.opts) <= 10:
+                raise ValueError(f'{self.label} must be one of: {", ".join(self.opts)}')
+            raise ValueError(f'{self.label}: "{value}" isn\'t one of the choices')
         return value
 
 

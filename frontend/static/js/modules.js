@@ -497,15 +497,32 @@ function uploadBackup(input) {
       showToast('Invalid JSON file', 'error');
       return;
     }
-    if (!confirm('Restore calibration data and push to all modules?')) return;
+    if (!confirm('Restore this backup? Module settings are sent to every module.')) return;
     status.textContent = 'Restoring…';
     api.restoreSettings(data).then(result => {
       status.textContent = result ? '✓ Done' : '✗ Error';
       if (!result) return;
-      showToast('Restore complete');
+      showRestoreReport(result);
+      showToast(result.skipped.length ? 'Restored, with some parts skipped' : 'Restore complete',
+                result.skipped.length ? 'warn' : 'success');
       loadModulesPage();
+      loadSavedPlaylists();
     });
   });
+}
+
+// What a restore brought back, and what it left out (and why).
+function showRestoreReport(result) {
+  const report = byId('restoreReport');
+  const restored = result.restored.length ? result.restored.join(', ') : 'nothing';
+  const lines = [el('div', {}, `Restored: ${restored}.${result.hardware_updated ? ' Sent to the modules.' : ''}`)];
+  if (result.skipped.length) {
+    lines.push(el('div', {}, 'Skipped, because they didn\'t check out:'),
+               el('ul', {}, ...result.skipped.map(item => el('li', {}, item))));
+  }
+  report.replaceChildren(...lines);
+  report.classList.toggle('warning', result.skipped.length > 0);
+  report.hidden = false;
 }
 
 registerActions({

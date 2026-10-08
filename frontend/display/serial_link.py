@@ -12,17 +12,84 @@ from display.state import state
 
 serial_lock = threading.Lock()
 
-try:
-    ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.5)
+# The open port, or None when there isn't one (simulation mode). It can come
+# and go while the app runs: a failed write or read drops it (the USB adapter
+# was unplugged, say), and keep_connected() opens it again once it's back.
+# Always use it through this module, never a copy of it taken at import.
+ser = None
+
+# Errors that mean the port has gone, rather than a bad message.
+PORT_ERRORS = (serial.SerialException, OSError)
+
+
+def _open():
+    """Tries to open the port. Call with serial_lock held."""
+    global ser
+    try:
+        ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.5)
+    except Exception as e:
+        ser = None
+        return e
     logging.info(f"Serial connected on {SERIAL_PORT}")
-except Exception as e:
+    state.log_serial(f"SERIAL CONNECTED: {SERIAL_PORT}")
+    # Whatever was sent while the port was gone never arrived: resend the page.
+    state.last_sent_page = None
+    state.set_hardware_connected(True)
+    return None
+
+
+def _lost(error):
+    """The port stopped working: let it go until it can be opened again.
+    Call with serial_lock held."""
+    global ser
+    try:
+        ser.close()
+    except Exception:
+        pass
     ser = None
-    logging.error(f"Serial failed. Simulation Mode. Reason: {e}")
-state.hardware_connected = ser is not None
+    logging.error(f"Serial port lost: {error}. Retrying in the background.")
+    state.log_serial(f"SERIAL LOST: {error}")
+    state.set_hardware_connected(False)
+
+
+_startup_error = _open()
+if _startup_error:
+    logging.error(f"Serial failed. Simulation Mode until it opens. Reason: {_startup_error}")
 
 
 def is_connected() -> bool:
     return ser is not None
+
+
+def write_serial(data: str) -> bool:
+    """Writes `data` to the bus, if there's a port. Call with serial_lock
+    held. False if there's no port, or the write failed (and the port is now
+    treated as gone), so the caller can skip waiting for the bus."""
+    if ser is None:
+        return False
+    try:
+        ser.write(data.encode())
+        ser.flush()
+        return True
+    except PORT_ERRORS as e:
+        _lost(e)
+        return False
+
+
+def keep_connected(interval=5.0):
+    """Runs for ever (in its own thread, see app.py): reopens the port when
+    it's missing, and notices when an open port has gone, even while nothing
+    is being sent, so the page shows it."""
+    while True:
+        time.sleep(interval)
+        with serial_lock:
+            if ser is None:
+                _open()
+                continue
+            try:
+                ser.in_waiting   # raises once the device has gone away
+            except PORT_ERRORS as e:
+                _lost(e)
 
 
 def send_raw(cmd: str):
@@ -30,42 +97,46 @@ def send_raw(cmd: str):
     if not cmd.endswith('\n'):
         cmd += '\n'
     with serial_lock:
-        if ser:
-            ser.write(cmd.encode())
-            ser.flush()
+        if ser is None:
+            state.log_serial(f"SIMULATED SENT: {cmd.strip()}")
+        elif write_serial(cmd):
             state.log_serial(f"SENT: {cmd.strip()}")
             time.sleep(0.02)
         else:
-            state.log_serial(f"SIMULATED SENT: {cmd.strip()}")
+            state.log_serial(f"NOT SENT (serial lost): {cmd.strip()}")
 
 
 def read_dump(mod_id: int, timeout: float = 5.0):
     """m<ID>? — request and parse a module's dump (its settings, revolution
     count and drift; see DUMP_FIELDS in module_protocol). Returns a dict or
-    None on timeout/parse failure."""
-    if not ser:
-        return None
+    None on timeout/parse failure, or if the port is missing or goes."""
     with serial_lock:
-        ser.reset_input_buffer()
-        request = message(mod_id, Cmd.DUMP_STATE)
-        ser.write(f"{request}\n".encode())
-        ser.flush()
-        state.log_serial(f"SENT: {request}")
-        start = time.time()
-        buffer = ""
-        while time.time() - start < timeout:
-            if ser.in_waiting > 0:
-                try:
+        if ser is None:
+            return None
+        try:
+            ser.reset_input_buffer()
+            request = message(mod_id, Cmd.DUMP_STATE)
+            ser.write(f"{request}\n".encode())
+            ser.flush()
+            state.log_serial(f"SENT: {request}")
+            start = time.time()
+            buffer = ""
+            while time.time() - start < timeout:
+                if ser.in_waiting > 0:
                     chunk = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
                     buffer += chunk
-                    dump = parse_buffer(buffer, mod_id)
+                    try:
+                        dump = parse_buffer(buffer, mod_id)
+                    except Exception as e:
+                        state.log_serial(f"MONITOR ERROR: {e}")
+                        logging.error(f"Parse error reading module {mod_id} dump: {e}")
+                        dump = None
                     if dump is not None:
                         state.log_serial(f"RECV: {buffer}")
                         return dump
-                except Exception as e:
-                    state.log_serial(f"MONITOR ERROR: {e}")
-                    logging.error(f"Parse error reading module {mod_id} dump: {e}")
-            time.sleep(0.05)
+                time.sleep(0.05)
+        except PORT_ERRORS as e:
+            _lost(e)
     return None
 
 
@@ -75,27 +146,31 @@ def read_all_dumps(max_id: int, margin: float = 0.5, on_reply=None):
     listens until module `max_id`'s slot has passed, plus `margin`. Returns
     {mod_id: dump} for every reply received; modules that were busy (they
     answer after finishing) or didn't answer are missing. `on_reply(mod_id,
-    dump)`, if given, is called for each reply as soon as it arrives."""
-    if not ser:
-        return {}
+    dump)`, if given, is called for each reply as soon as it arrives. If the
+    port goes part-way through, the replies so far are returned."""
+    buffer = ""
     with serial_lock:
-        ser.reset_input_buffer()
-        request = message(BROADCAST, Cmd.DUMP_STATE)
-        ser.write(f"{request}\n".encode())
-        ser.flush()
-        state.log_serial(f"SENT: {request}")
-        deadline = time.time() + (max_id + 1) * DUMP_SLOT_S + margin
-        buffer = ""
-        reported = set()
-        while time.time() < deadline:
-            if ser.in_waiting > 0:
-                buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
-                if on_reply:
-                    for mod_id, dump in parse_all_dumps(buffer).items():
-                        if mod_id not in reported:
-                            reported.add(mod_id)
-                            on_reply(mod_id, dump)
-            time.sleep(0.02)
+        if ser is None:
+            return {}
+        try:
+            ser.reset_input_buffer()
+            request = message(BROADCAST, Cmd.DUMP_STATE)
+            ser.write(f"{request}\n".encode())
+            ser.flush()
+            state.log_serial(f"SENT: {request}")
+            deadline = time.time() + (max_id + 1) * DUMP_SLOT_S + margin
+            reported = set()
+            while time.time() < deadline:
+                if ser.in_waiting > 0:
+                    buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+                    if on_reply:
+                        for mod_id, dump in parse_all_dumps(buffer).items():
+                            if mod_id not in reported:
+                                reported.add(mod_id)
+                                on_reply(mod_id, dump)
+                time.sleep(0.02)
+        except PORT_ERRORS as e:
+            _lost(e)
     if buffer:
         state.log_serial(f"RECV: {buffer}")
     return parse_all_dumps(buffer)

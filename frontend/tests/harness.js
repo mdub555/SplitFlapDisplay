@@ -199,6 +199,10 @@ window.fetch = async (url, options = {}) => {
     return ok({ status: 'success', synced: [0], failed: [3],
       settings: { modules: { '0': { homeOffset: 2832, totalSteps: 4096 }, '3': { homeOffset: 480, totalSteps: 4096 } } } });
   }
+  if (url === '/restore_settings') {
+    return ok({ status: 'success', hardware_updated: false, restored: ['2 modules', 'the schedule'],
+                skipped: ['Timezone must be one of: ...'] });
+  }
   if (url === '/home_all') {
     return ok({ status: 'Homing All' });
   }

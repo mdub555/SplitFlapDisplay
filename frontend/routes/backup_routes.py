@@ -16,5 +16,6 @@ def restore_settings():
     data = request.json
     if not data:
         return error('No data', 400)
-    hw_updated = restore_backup(data)
-    return jsonify(status='success', hardware_updated=hw_updated)
+    if not isinstance(data, dict):
+        return error('Not a backup file', 400)
+    return jsonify(status='success', **restore_backup(data))

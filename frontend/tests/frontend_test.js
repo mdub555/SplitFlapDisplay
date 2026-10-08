@@ -946,6 +946,28 @@ async function main() {
   check('every switch is labelled by its name', [...document.querySelectorAll('input[role="switch"]')].every(input =>
     document.querySelector(`label[for="${input.id}"]`) || input.closest('.toggle-row').querySelector('label.field-label')));
 
+  console.log('\n--- Unrecognised choices and the restore report ---');
+  const tzBox = document.createElement('div');
+  document.body.append(tzBox);
+  tzBox.append(window.buildField({ key: 'tz', label: 'Timezone', type: 'select', opts: ['UTC', 'US/Eastern'] }, 'EST', 'tzf_'));
+  const tzSelect = document.getElementById('tzf_tz');
+  check('a stored value that is not a choice is shown as not recognised, not swapped for the first choice',
+    tzSelect.value === 'EST' && tzSelect.selectedOptions[0].textContent === 'EST (not recognised)');
+  tzBox.remove();
+
+  click(document.getElementById('tab-modules'));
+  await sleep(30);
+  const backupInput = document.getElementById('backupFile');
+  const file = { text: async () => JSON.stringify({ version: 4, modules: {} }) };
+  Object.defineProperty(backupInput, 'files', { value: [file], configurable: true });
+  window.confirm = () => true;
+  change(backupInput);
+  await sleep(40);
+  const report = document.getElementById('restoreReport');
+  check('a restore says what came back and what was skipped, and why',
+    !report.hidden && report.textContent.includes('Restored: 2 modules, the schedule.') &&
+    report.querySelector('li').textContent === 'Timezone must be one of: ...' && report.classList.contains('warning'));
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

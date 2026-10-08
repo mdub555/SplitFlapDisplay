@@ -6,7 +6,7 @@ from display.state import state
 from display.charset import FLAP_CHARS, NUM_FLAPS, normalize_text
 from display.layout import get_animation_order
 from display.module_protocol import BROADCAST, FRAME_MAX_MODULES, Cmd, message
-from display.serial_link import ser, serial_lock
+from display.serial_link import serial_lock, write_serial
 from apps.base import Frame
 from apps.registry import registry
 from settings.store import settings
@@ -71,19 +71,16 @@ def send_to_display(text, order=None, raw=False, step_delay_ms=15):
     if FRAME_BROADCAST and NUM_MODULES <= FRAME_MAX_MODULES and interval_ms <= 255:
         # The modules cascade on their own; we only wait for the last one.
         cascade_s = (len(order) - 1) * interval_ms / 1000.0
-        if ser:
-            with serial_lock:
-                ser.write(frame_message(clean_text, order, interval_ms).encode())
-                ser.flush()
+        with serial_lock:
+            write_serial(frame_message(clean_text, order, interval_ms))
     else:
         cascade_s = 0  # sending one message at a time is the cascade
         with serial_lock:
             for i in order:
                 if i >= len(clean_text):
                     continue
-                if ser:
-                    ser.write(f"{message(i, Cmd.DISPLAY_CHAR, clean_text[i])}\n".encode())
-                    ser.flush()
+                # No port (or it just went): don't wait out the bus for nothing.
+                if write_serial(f"{message(i, Cmd.DISPLAY_CHAR, clean_text[i])}\n"):
                     time.sleep(step_delay_ms / 1000.0)
 
     state.set_display(clean_text, indices)
@@ -120,38 +117,49 @@ def _manual_frames():
 
 
 def playlist_loop():
+    """Plays whatever's active, for ever. Nothing that goes wrong while
+    playing may end it (it would silently freeze the display until a
+    restart), so an error is logged and the loop carries on."""
     cache = {}
-
     while True:
-        app = registry.get(state.active_app) if state.active_app else None
-
         try:
-            frames = app.get_pages(settings, cache) if app else _manual_frames()
-        except Exception as e:
-            logging.error(f"App '{state.active_app}' get_pages() failed: {e}")
-            frames = []
-
-        if not frames:
+            _play_once(cache)
+        except Exception:
+            logging.exception('Playlist loop error; carrying on')
             time.sleep(1)
-            continue
 
-        for index, frame in enumerate(frames):
-            if state.stop_event.is_set():
-                break
-            if not app:
-                state.set_playlist_page(index)
 
-            order = get_animation_order(frame.style)
-            if frame.raw or frame.text != state.last_sent_page:
-                busy_s = send_to_display(frame.text, order, raw=frame.raw, step_delay_ms=frame.speed)
-                state.last_sent_page = frame.text
-            else:
-                busy_s = 0
+def _play_once(cache):
+    """One pass through the active app's or playlist's pages."""
+    app = registry.get(state.active_app) if state.active_app else None
 
-            if not wait(busy_s, state.stop_event, poll=0.1):
-                break
-            if not wait(frame.delay if frame.delay is not None else 5, state.stop_event):
-                break
+    try:
+        frames = app.get_pages(settings, cache) if app else _manual_frames()
+    except Exception as e:
+        logging.error(f"App '{state.active_app}' get_pages() failed: {e}")
+        frames = []
 
+    if not frames:
+        time.sleep(1)
+        return
+
+    for index, frame in enumerate(frames):
         if state.stop_event.is_set():
-            state.clear_stop()
+            break
+        if not app:
+            state.set_playlist_page(index)
+
+        order = get_animation_order(frame.style)
+        if frame.raw or frame.text != state.last_sent_page:
+            busy_s = send_to_display(frame.text, order, raw=frame.raw, step_delay_ms=frame.speed)
+            state.last_sent_page = frame.text
+        else:
+            busy_s = 0
+
+        if not wait(busy_s, state.stop_event, poll=0.1):
+            break
+        if not wait(frame.delay if frame.delay is not None else 5, state.stop_event):
+            break
+
+    if state.stop_event.is_set():
+        state.clear_stop()

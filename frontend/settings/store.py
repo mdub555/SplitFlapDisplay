@@ -48,8 +48,18 @@ def load_settings():
 
 
 def save_settings(data):
-    with open(CONFIG_PATH, 'w') as f:
+    """Writes settings.json atomically: to a temporary file first, then moved
+    into place, so a power cut part-way through leaves the old file whole
+    instead of a half-written one (which would load as defaults and lose
+    every calibration)."""
+    folder = os.path.dirname(CONFIG_PATH) or '.'
+    os.makedirs(folder, exist_ok=True)
+    temp = f'{CONFIG_PATH}.tmp'
+    with open(temp, 'w') as f:
         json.dump(data, f, indent=4)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(temp, CONFIG_PATH)
     # Tell every open page, so one showing the old settings reloads them.
     state.settings_changed()
 

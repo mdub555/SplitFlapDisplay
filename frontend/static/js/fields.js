@@ -18,8 +18,14 @@ function buildField(field, value, idPrefix, wrapperClass = 'field') {
       el('label', {class: 'switch'}, el('input', {type: 'checkbox', role: 'switch', id, checked: on}), el('span', {class: 'slider'})));
   }
   if (field.type === 'select') {
+    const opts = field.opts || [];
+    // A stored value that isn't one of the choices (say, a timezone typed in
+    // before it was a list) is shown as it is, rather than silently swapped
+    // for the first choice; saving it is refused until it's changed.
+    const unknown = current !== '' && !opts.includes(current)
+      ? [el('option', {value: current, selected: true}, `${current} (not recognised)`)] : [];
     input = el('select', {class: 'input', id},
-      ...(field.opts || []).map(opt => el('option', {value: opt, selected: opt === current}, opt)));
+      ...unknown, ...opts.map(opt => el('option', {value: opt, selected: opt === current}, opt)));
   } else if (field.type === 'textarea') {
     input = el('textarea', {class: 'input input-code', id, rows: 8, placeholder: field.placeholder || '', value: current});
   } else {

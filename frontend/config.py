@@ -14,6 +14,9 @@ if GRID_ROWS < 1 or GRID_COLS < 1:
                      f'SPLITFLAP_COLS must each be at least 1.')
 
 SERIAL_PORT = os.environ.get('SPLITFLAP_SERIAL_PORT', '/dev/ttyUSB0')
+
+# The port the web page is served on.
+PORT = int(os.environ.get('SPLITFLAP_PORT', 80))
 BAUD_RATE = int(os.environ.get('SPLITFLAP_BAUD', 9600))
 
 # Send each page as one frame broadcast (m*f...) instead of one message per
