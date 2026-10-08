@@ -34,7 +34,9 @@ const int8_t FLAP_BETWEEN = -2;  // the step position is known, but not on a fla
 
 class SplitFlap {
  public:
-  SplitFlap(DebugSerial* debugSerial);
+  // constexpr, so the global SplitFlap is built at compile time rather than
+  // by start-up code storing each member (which costs far more flash).
+  constexpr SplitFlap(DebugSerial* debugSerial) : debug(debugSerial) {}
 
   // ---- Setup and the update loop ----
 

@@ -65,8 +65,6 @@ namespace {
 // Setup and the update loop
 // =============================================================================
 
-SplitFlap::SplitFlap(DebugSerial* debugSerial) : debug(debugSerial) {}
-
 void SplitFlap::begin() {
   revolutions = savedRevolutions = EepromStore::getRevolutions();
   autoHomePending = EepromStore::autoHomeEnabled();
@@ -152,8 +150,8 @@ void SplitFlap::afterStep(bool edge) {
         // A negative drift means the edge came early and the snap moved the
         // position forward by -drift. If that jumped over the target, the
         // move has arrived; recomputing would wrap round a whole revolution.
-        bool jumpedTarget = drift < 0 && stepsRemaining <= (uint16_t)-drift;
-        stepsRemaining = jumpedTarget ? 0 : stepsToTarget(targetStepPos);
+        uint16_t remaining = stepsToTarget(targetStepPos);
+        stepsRemaining = drift < 0 && remaining > stepsRemaining ? 0 : remaining;
       }
       break;
     case PHASE_OFFSET:
@@ -182,14 +180,13 @@ void SplitFlap::afterSeekStep(bool edge) {
     }
     return;
   }
-  // A revolution plus a margin, saturating at 65535 rather than wrapping
-  // when total steps is near the top of its range. A calibration searches
-  // at least the longest revolution it accepts, since it may be measuring
+  // A revolution plus a margin, compared without adding them so it can't
+  // wrap, and giving up at the last count before stepsTaken would wrap when
+  // total steps is near the top of its range. A calibration searches the
+  // longest revolution it accepts instead, since it may be measuring
   // because total steps is wrong (say, 2048 for a 4096-step reel).
-  uint16_t total = EepromStore::getTotalSteps();
-  if (calibrating && total < CALIBRATION_MAX_STEPS) total = CALIBRATION_MAX_STEPS;
-  uint16_t limit = total > 0xFFFF - HOME_SEARCH_MARGIN ? 0xFFFF : total + HOME_SEARCH_MARGIN;
-  if (stepsTaken >= limit) {
+  uint16_t total = calibrating ? CALIBRATION_MAX_STEPS : EepromStore::getTotalSteps();
+  if (stepsTaken >= total && (stepsTaken - total >= HOME_SEARCH_MARGIN || stepsTaken == 0xFFFF)) {
     failHoming(SPLITFLAP_HOME_NOT_FOUND);
   }
 }
@@ -514,8 +511,12 @@ void SplitFlap::onHomeEdge() {
   uint16_t total = EepromStore::getTotalSteps();
   // Where the home edge should be, given the home offset. An offset of 0
   // puts the edge exactly on flap 0.
-  uint16_t expected = total - EepromStore::getHomeOffset();
-  if (expected >= total) expected = 0;
+  // An offset of a revolution or more (after total steps was lowered) lands
+  // where its remainder does. Subtracting rather than %, which would link in
+  // a division routine.
+  uint16_t offset = EepromStore::getHomeOffset();
+  while (offset >= total) offset -= total;
+  uint16_t expected = offset ? total - offset : 0;
   if (currentFlapIdx != FLAP_UNKNOWN) {
     // How far the tracked position is past where the edge should be, in
     // the range -total/2..total/2. Skipped steps make this positive. Only

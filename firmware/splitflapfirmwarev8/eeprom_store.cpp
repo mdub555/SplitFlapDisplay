@@ -59,6 +59,7 @@ namespace {
   const uint16_t ADDR_CONFIG      = 1;                     // sizeof(Config) bytes — the settings
   const uint16_t ADDR_REVOLUTIONS = 1 + sizeof(Config);    // 4 bytes — lifetime revolution count
   const uint16_t ADDR_FLAP_OFFSETS = ADDR_REVOLUTIONS + 4; // NUM_FLAP_OFFSETS bytes — one per flap
+  const uint16_t ADDR_MODULE_ID   = ADDR_CONFIG + offsetof(Config, moduleId);  // within the settings
   static_assert(ADDR_FLAP_OFFSETS + EepromStore::NUM_FLAP_OFFSETS <= EEPROM_SIZE,
                 "The settings don't fit in EEPROM");
 
@@ -82,17 +83,18 @@ namespace {
 namespace EepromStore {
 void begin(uint8_t hardcodedId) {
   uint8_t init = EEPROM.read(ADDR_INIT);
-  if (init == INIT_RESETTING) {
-    // A settings reset was cut short. The ID it was keeping is intact, as
-    // the reset never changes that byte.
-    EEPROM.get(ADDR_CONFIG, config);
-    writeDefaults(config.moduleId);
-  } else if (init != INIT_VALUE) {
-    // First boot. The counter is only cleared here: it survives a settings
-    // reset. It and the ID go first, so if the power is cut while the
-    // defaults are written, the next boot finishes them as a reset.
-    saveRevolutions(0);
-    EEPROM.update(ADDR_CONFIG + offsetof(Config, moduleId), hardcodedId);
+  if (init != INIT_VALUE) {
+    if (init == INIT_RESETTING) {
+      // A settings reset was cut short: finish it, keeping the ID, which a
+      // reset never changes. (On a first boot cut short, it's whatever was
+      // there: unprovisioned on a new chip.)
+      hardcodedId = EEPROM.read(ADDR_MODULE_ID);
+    } else {
+      // First boot. The counter is only cleared here: it survives a
+      // settings reset. Cleared first, so if the power is cut while the
+      // defaults are written, the next boot can finish them as a reset.
+      saveRevolutions(0);
+    }
     writeDefaults(hardcodedId);
   }
   EEPROM.get(ADDR_CONFIG, config);
@@ -109,7 +111,7 @@ void writeDefaults(uint8_t hardcodedId) {
     saveFlapOffset(flap, FLAP_OFFSET_ZERO);
   }
   // Last, to mark the defaults complete.
-  EEPROM.write(ADDR_INIT, INIT_VALUE);
+  EEPROM.update(ADDR_INIT, INIT_VALUE);
 }
 
 bool isInitialized() {
@@ -119,13 +121,7 @@ bool isInitialized() {
 void saveHomeOffset(uint16_t offset) { config.homeOffset = offset; save(); }
 uint16_t getHomeOffset() { return config.homeOffset; }
 
-void saveTotalSteps(uint16_t steps) {
-  config.totalSteps = steps;
-  // An offset of a revolution or more lands where its remainder does, and
-  // keeping it below the total keeps the home edge's position in range.
-  config.homeOffset %= steps;
-  save();
-}
+void saveTotalSteps(uint16_t steps) { config.totalSteps = steps; save(); }
 uint16_t getTotalSteps() { return config.totalSteps; }
 
 void saveModuleId(uint8_t id) { config.moduleId = id; save(); }

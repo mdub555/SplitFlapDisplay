@@ -74,7 +74,7 @@
 //         T, Set the number of steps in a full rotation. data must be a number.
 //            A changed value stops any move and marks the position unknown,
 //            so the next move homes first. A home offset of a revolution or
-//            more is wrapped to the same place within the new revolution
+//            more lands where its remainder does
 //         D, Set the debounce delay for the home sensor, in milliseconds
 //            (0-65535): how long the contact has to have been open before
 //            it closing counts as the home edge.
@@ -165,13 +165,16 @@ struct Command {
     char dataChar;
     uint16_t dataInt;
   };
-  Data data = {'0'};
+  Data data = {};
   uint16_t frameDelayMs = 0;  // FRAME: wait before moving to dataChar
 };
 
+// Every member has an initializer, so the global Transceiver is built at
+// compile time rather than by start-up code (which costs flash), and all of
+// them are 0 so it takes no flash at all.
 class Transceiver {
  private:
-  char buffer[BUFFER_SIZE];
+  char buffer[BUFFER_SIZE] = {};
   uint8_t bufferLen = 0;
   uint32_t lastSerialTime = 0;
 
@@ -180,7 +183,7 @@ class Transceiver {
   bool inFrame = false;
   uint16_t framePos = 0;       // bytes of pairs received so far
   uint8_t frameInterval = 0;   // ms per rank
-  char frameChar = ' ';        // this module's character, once received
+  char frameChar = 0;          // this module's character, once received
   uint8_t frameRank = 0;       // and its rank
   bool frameHit = false;       // both of this module's bytes received
 

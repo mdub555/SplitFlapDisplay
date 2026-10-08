@@ -439,10 +439,18 @@ TEST(Motion, AnEarlyEdgeThatJumpsOverTheTargetEndsTheMove) {
   EXPECT_EQ(splitFlap().lastDrift(), -10);
 }
 
-TEST(Motion, NewTotalStepsWrapsAHomeOffsetPastTheRevolution) {
+TEST(Motion, AHomeOffsetPastTheRevolutionLandsWhereItsRemainderDoes) {
   bootWithId(5);
-  sendAndSettle("m5T400");
-  EXPECT_EQ(EepromStore::getHomeOffset(), OFFSET % 400);
+  reel.stepsPerRev = 400;
+  reel.contactSteps = 20;
+  reel.position = 300;
+  sendAndSettle("m5T400");  // the home offset (480) is now more than a revolution
+  home();
+  EXPECT_EQ(reel.position, OFFSET % 400);
+  sendAndSettle("m5+32");
+  sendAndSettle("m5+0");  // crosses the home edge, 80 steps before flap 0
+  EXPECT_EQ(splitFlap().lastDrift(), 0);
+  EXPECT_EQ(reel.position, OFFSET % 400);
 }
 
 // ---- The home sensor ----
