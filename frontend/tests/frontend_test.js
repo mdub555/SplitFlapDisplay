@@ -82,7 +82,7 @@ async function main() {
 
   console.log('\n--- Running an app via delegated click ---');
   calls.length = 0;
-  click(weatherCard);
+  click(weatherCard.querySelector('.app-run'));
   await sleep(20);
   check('runApp posted to /run_app', calls.some(c => c.url === '/run_app' && c.method === 'POST'));
   check('run_app body carries the right app key', calls.some(c => c.url === '/run_app' && JSON.parse(c.body).app === 'weather'));
@@ -851,6 +851,100 @@ async function main() {
   click(installBtn);
   await sleep(10);
   check('it opens the browser\'s install prompt, then goes', prompted && installBtn.hidden);
+
+  console.log('\n--- Accessibility ---');
+  const keydown = (target, k, opts = {}) =>
+    target.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...opts }));
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  click(document.getElementById('tab-control'));
+  check('tabs say which is selected, and only it is in the Tab order',
+    tabs.map(t => `${t.getAttribute('aria-selected')}/${t.tabIndex}`).join() === 'true/0,false/-1,false/-1,false/-1');
+  check('each tab has a plain name and controls its page',
+    tabs.map(t => t.getAttribute('aria-label')).join() === 'Control,Apps,Modules,Debug' &&
+    tabs.every(t => document.getElementById(t.getAttribute('aria-controls')).getAttribute('role') === 'tabpanel'));
+  tabs[0].focus();
+  keydown(tabs[0], 'ArrowLeft');
+  check('ArrowLeft from the first tab wraps to the last, and opens it',
+    document.activeElement === tabs[3] && document.getElementById('page-debug').classList.contains('active'));
+  keydown(tabs[3], 'Home');
+  check('Home goes back to the first tab', document.activeElement === tabs[0] && tabs[0].getAttribute('aria-selected') === 'true');
+
+  live.emit(snapshot({ is_homed: true, state: 'HELLO'.padEnd(16) + ' '.repeat(16) + 'WORLD'.padEnd(32) }));
+  check('screen readers get the display as text, row by row',
+    document.getElementById('liveDisplay').getAttribute('aria-label') === 'The display shows: HELLO / WORLD');
+  live.emit(snapshot({ is_homed: false, state: ' '.repeat(64) }));
+  check('and hear when it needs homing',
+    document.getElementById('liveDisplay').getAttribute('aria-label') === 'Homing required. The display is blank');
+  check('the flaps themselves are hidden from them', document.getElementById('liveGrid').getAttribute('aria-hidden') === 'true');
+
+  click(document.querySelector('[data-onclick="clearDisplay"]'));
+  click(document.querySelector('#preview .flap-unit[data-cell="17"]'));
+  typeKeys('hi');
+  check('the composer says where the cursor is and what the row says',
+    document.getElementById('composeWhere').textContent === 'Row 2 of 4, column 4. Row 2: HI');
+
+  {
+    window.showToast('Boom', 'error');
+    window.showToast('Fine');
+    const toasts = [...document.querySelectorAll('#toastContainer .toast')].slice(-2);
+    check('an error toast interrupts; others are read politely',
+      toasts[0].getAttribute('role') === 'alert' && !toasts[1].hasAttribute('role') &&
+      document.getElementById('toastContainer').getAttribute('aria-live') === 'polite');
+  }
+
+  check('playlist buttons name the page they act on',
+    !!document.querySelector('#playlistList [aria-label="Move page 1 down"]') &&
+    !!document.querySelector('#playlistList [aria-label="Page 1 delay in seconds"]') &&
+    document.querySelector('#playlistList .drag-handle').getAttribute('aria-hidden') === 'true');
+  calls.length = 0;
+  const firstDown = document.querySelector('#playlistList [aria-label="Move page 1 down"]');
+  click(firstDown);
+  check('moving a page keeps focus on its button in the new place',
+    document.activeElement === document.querySelector('#playlistList [aria-label="Move page 2 down"]'));
+
+  click(document.getElementById('tab-modules'));
+  await sleep(30);
+  const modCell = id => document.querySelector(`#modMatrix .mod-cell[data-id="${id}"]`);
+  click(modCell(0));
+  check('module cells are buttons; only the selected one is in the Tab order',
+    modCell(0).tagName === 'BUTTON' && modCell(0).tabIndex === 0 && modCell(1).tabIndex === -1 &&
+    modCell(0).getAttribute('aria-current') === 'true');
+  check('a cell says its state', modCell(1).getAttribute('aria-label') === 'Module 01, not set up' &&
+    modCell(3).getAttribute('aria-label') === 'Module 03');
+  keydown(modCell(0), 'ArrowDown');
+  check('arrow keys move the selection round the grid', globalVar('selectedModule') === 16 && document.activeElement === modCell(16));
+  keydown(modCell(16), 'ArrowLeft');
+  keydown(modCell(15), 'Home');
+  check('Home goes to the first module', globalVar('selectedModule') === 0 && document.activeElement === modCell(0));
+
+  click(document.getElementById('tab-apps'));
+  await sleep(30);
+  const gearBtn = document.querySelector('.app-card[data-app="weather"] .app-gear');
+  check('the settings button is named for its app, beside the run button (not inside it)',
+    gearBtn.getAttribute('aria-label') === 'Weather settings' && !gearBtn.closest('.app-run'));
+  live.emit(snapshot({ active_app: 'weather' }));
+  check('the running app says so to screen readers',
+    document.querySelector('.app-card[data-app="weather"] .app-run').textContent.includes('(running)'));
+  gearBtn.focus();
+  click(gearBtn);
+  await sleep(30);
+  const modal = document.getElementById('appSettingsModal');
+  check('the settings dialog takes focus and makes the page behind inert',
+    modal.contains(document.activeElement) && document.querySelector('.container').inert === true);
+  const modalButtons = [...modal.querySelectorAll('button')];
+  modalButtons[modalButtons.length - 1].focus();
+  keydown(modalButtons[modalButtons.length - 1], 'Tab');
+  check('Tab from its last control goes round to its first', document.activeElement === document.getElementById('asf_zip_code'));
+  keydown(document.activeElement, 'Escape');
+  check('Escape closes it and puts focus back on the ⚙️ button',
+    modal.style.display === 'none' && document.activeElement === gearBtn && !document.querySelector('.container').inert);
+  click(gearBtn);
+  await sleep(30);
+  modal.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  check('a click on the backdrop closes it too', modal.style.display === 'none');
+
+  check('every switch is labelled by its name', [...document.querySelectorAll('input[role="switch"]')].every(input =>
+    document.querySelector(`label[for="${input.id}"]`) || input.closest('.toggle-row').querySelector('label.field-label')));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

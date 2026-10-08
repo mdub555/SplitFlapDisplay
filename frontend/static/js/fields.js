@@ -15,7 +15,7 @@ function buildField(field, value, idPrefix, wrapperClass = 'field') {
     const on = current === true || current === 'true';
     return el('div', {class: `${wrapperClass} toggle-row`},
       el('label', {class: 'field-label', htmlFor: id}, field.label),
-      el('label', {class: 'switch'}, el('input', {type: 'checkbox', id, checked: on}), el('span', {class: 'slider'})));
+      el('label', {class: 'switch'}, el('input', {type: 'checkbox', role: 'switch', id, checked: on}), el('span', {class: 'slider'})));
   }
   if (field.type === 'select') {
     input = el('select', {class: 'input', id},

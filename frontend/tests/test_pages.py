@@ -40,7 +40,7 @@ class PageTest(unittest.TestCase):
         # The attributes must come out as attributes, not escaped text.
         for key in MODULE_TOGGLES:
             with self.subTest(key=key):
-                self.assertRegex(self.html, rf'id="modToggle-{key}" data-onchange="toggleModuleSetting" '
+                self.assertRegex(self.html, rf'id="modToggle-{key}"[^>]* data-onchange="toggleModuleSetting" '
                                             rf'data-setting="{key}"')
 
     def test_config_carries_what_the_scripts_read(self):

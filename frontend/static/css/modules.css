@@ -42,44 +42,50 @@
 
 .mod-cell {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   padding: 9px 0;
   text-align: center;
   cursor: pointer;
   font-family: monospace;
   font-size: .85rem;
   border-radius: 3px;
-  color: var(--text-dim);
+  color: var(--text);
   transition: .1s;
 }
 
+/* Not set up yet: fainter, and dashed so it doesn't rely on colour alone. */
 .mod-cell.unprovisioned {
-  color: #666;
+  color: var(--text-faint);
+  border-style: dashed;
 }
 
 .mod-cell:hover {
-  background: var(--border-strong);
+  background: var(--hover);
   color: var(--text-bright);
 }
 
 .mod-cell.active {
-  background: var(--accent);
-  color: var(--text-bright);
+  background: var(--btn-primary);
+  color: var(--on-color);
   border-color: var(--text-bright);
+  border-style: solid;
   font-weight: bold;
 }
 
 /* Sync results (see noticeSyncState in modules.js): a success flashes green
    and fades back; a failure stays orange until the module next syncs. */
 .mod-cell.sync-failed {
-  background: #3a2410;
+  background: var(--warn-bg-strong);
   border-color: var(--orange);
+  border-style: solid;
+  box-shadow: inset 0 0 0 1px var(--orange);   /* a heavier edge, not only a colour */
   color: var(--orange);
+  font-weight: bold;
 }
 
 .mod-cell.active.sync-failed {
-  background: var(--accent);
-  color: var(--text-bright);
+  background: var(--btn-primary);
+  color: var(--on-color);
   box-shadow: inset 0 0 0 2px var(--orange);
 }
 
@@ -89,9 +95,9 @@
 
 @keyframes sync-flash {
   from {
-    background: var(--green);
-    border-color: var(--green);
-    color: var(--text-bright);
+    background: var(--btn-success);
+    border-color: var(--btn-success);
+    color: var(--on-color);
   }
 }
 
@@ -101,7 +107,7 @@
   padding: 10px 12px;
   border: 1px solid var(--orange);
   border-radius: 6px;
-  background: #2a1d10;
+  background: var(--warn-bg);
   font-size: .85rem;
   color: var(--text-soft);
 }
@@ -193,17 +199,17 @@
 }
 
 .btn-adj:hover {
-  background: var(--border-input);
+  filter: brightness(1.25);
 }
 
 .btn-adj.neg {
-  background: #422;
-  border: 1px solid #633;
+  background: var(--adj-neg);
+  border: 1px solid var(--adj-neg-border);
 }
 
 .btn-adj.pos {
-  background: #242;
-  border: 1px solid #363;
+  background: var(--adj-pos);
+  border: 1px solid var(--adj-pos-border);
 }
 
 .adj-label {
@@ -216,7 +222,7 @@
 
 .adj-hint {
   text-align: center;
-  color: #666;
+  color: var(--text-faint);
   font-size: .75rem;
   margin-top: -6px;
 }

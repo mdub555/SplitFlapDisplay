@@ -3,6 +3,7 @@
 // this only edits it.
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];   // as Python's weekday()
+const DAY_FULL_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const NEW_SLOT = {days: [0, 1, 2, 3, 4], start: '07:00', end: '09:00', target: ''};
 let schedulePlaylists = {};   // the saved playlists, for the target lists
 
@@ -35,17 +36,19 @@ function targetSelect(selected, blank, props = {}) {
 
 function buildScheduleEntry(entry) {
   const button = (text, action, title, cls = 'btn btn-secondary btn-sm', dir) =>
-    el('button', {class: cls, title, dataset: {onclick: action, ...(dir !== undefined && {dir})}}, text);
-  return el('div', {class: 'schedule-entry'},
-    el('div', {class: 'schedule-days'}, ...DAY_NAMES.map((name, day) =>
+    el('button', {class: cls, title, ariaLabel: title, dataset: {onclick: action, ...(dir !== undefined && {dir})}}, text);
+  return el('div', {class: 'schedule-entry', role: 'group', ariaLabel: 'Time slot'},
+    el('div', {class: 'schedule-days', role: 'group', ariaLabel: 'Days'}, ...DAY_NAMES.map((name, day) =>
       el('label', {class: 'day-chip'},
-        el('input', {type: 'checkbox', checked: entry.days.includes(day), dataset: {day}}),
-        el('span', {}, name)))),
+        el('input', {type: 'checkbox', checked: entry.days.includes(day), ariaLabel: DAY_FULL_NAMES[day], dataset: {day}}),
+        el('span', {ariaHidden: 'true'}, name)))),
     el('div', {class: 'row row-tight schedule-times'},
-      el('input', {type: 'time', class: 'input', value: entry.start, dataset: {time: 'start'}, title: 'Start time'}),
-      '–',
-      el('input', {type: 'time', class: 'input', value: entry.end, dataset: {time: 'end'}, title: 'End time'})),
-    targetSelect(entry.target, 'Choose what to show…', {dataset: {target: ''}}),
+      el('input', {type: 'time', class: 'input', value: entry.start, dataset: {time: 'start'},
+                   title: 'Start time', ariaLabel: 'Start time'}),
+      el('span', {ariaHidden: 'true'}, '–'),
+      el('input', {type: 'time', class: 'input', value: entry.end, dataset: {time: 'end'},
+                   title: 'End time', ariaLabel: 'End time'})),
+    targetSelect(entry.target, 'Choose what to show…', {dataset: {target: ''}, ariaLabel: 'What to show'}),
     el('div', {class: 'row row-tight'},
       button('▲', 'moveScheduleEntry', 'Check this slot earlier', undefined, -1),
       button('▼', 'moveScheduleEntry', 'Check this slot later', undefined, 1),
@@ -93,7 +96,9 @@ function saveSchedule() {
 }
 
 function addScheduleEntry() {
-  byId('scheduleEntries').append(buildScheduleEntry(NEW_SLOT));
+  const slot = buildScheduleEntry(NEW_SLOT);
+  byId('scheduleEntries').append(slot);
+  slot.querySelector('[data-day]').focus();
 }
 
 function moveScheduleEntry(button) {
@@ -103,10 +108,14 @@ function moveScheduleEntry(button) {
   } else if (row.nextElementSibling) {
     row.nextElementSibling.after(row);
   }
+  button.focus();   // moving it in the page can drop focus
 }
 
 function removeScheduleEntry(button) {
-  button.closest('.schedule-entry').remove();
+  const row = button.closest('.schedule-entry');
+  const next = row.nextElementSibling || row.previousElementSibling;
+  row.remove();
+  (next ? next.querySelector('[data-onclick="removeScheduleEntry"]') : document.querySelector('[data-onclick="addScheduleEntry"]')).focus();
 }
 
 registerActions({ saveSchedule, addScheduleEntry, moveScheduleEntry, removeScheduleEntry });

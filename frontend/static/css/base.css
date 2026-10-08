@@ -3,38 +3,139 @@
    and debug.css. */
 
 :root {
+  /* Native controls (selects, date pickers, scrollbars) follow the theme. */
+  color-scheme: dark;
+
   /* Surfaces, from the page background up */
   --bg: #121212;
   --panel: #1e1e1e;          /* sections and cards */
   --surface-dark: #1a1a1a;   /* panels inside a section */
   --surface: #2a2a2a;        /* rows and cells inside a panel */
+  --surface-row: #222;       /* saved playlists, dropdown options */
+  --hover: #252525;          /* a tab or card under the pointer */
   --inset: #000;             /* stat boxes and option lists */
-  --terminal: #080808;       /* the compose lines */
+  --terminal: #080808;       /* code-like boxes */
   --input-bg: #111;
-  --flap-bg: #111;
+  --overlay: rgba(0, 0, 0, .82);
+  --shadow: rgba(0, 0, 0, .5);
 
   /* Borders */
   --border: #333;
   --border-strong: #444;
-  --border-input: #555;
+  --border-input: #6b6b6b;
 
-  /* Text, from strongest to faintest */
+  /* Text, from strongest to faintest. All of them pass WCAG AA (4.5:1) on
+     the panels and rows they're used on. */
   --text-bright: #fff;
   --text: #e0e0e0;
   --text-soft: #ddd;
-  --text-dim: #aaa;
-  --text-muted: #888;
-  --text-faint: #777;
+  --text-dim: #b0b0b0;
+  --text-muted: #9a9a9a;
+  --text-faint: #959595;
 
-  /* Accents */
-  --accent: #007bff;
-  --accent-hover: #0056b3;
-  --green: #28a745;
-  --orange: #fd7e14;
-  --red: #dc3545;
+  /* Accents, as text and borders */
+  --accent: #5a9cfe;
+  --accent-hover: #0a58ca;
+  --green: #3fb950;
+  --orange: #fd8c3c;
+  --red: #ff6b78;
   --display-green: #0f0;     /* digits and text in the "display" style */
 
+  /* Filled buttons and selected things: white text on them passes AA. */
+  --on-color: #fff;
+  --btn-primary: #0b5ed7;
+  --btn-success: #1e7e34;
+  --btn-warning: #b35309;
+  --btn-danger: #c82333;
+  --btn-secondary: #444;
+  --btn-secondary-text: #fff;
+  --btn-ghost: #333;
+
+  /* Tinted backgrounds for states */
+  --success-bg: #1a2a1a;
+  --danger-bg: #2a1a1a;
+  --warn-bg: #2a2210;
+  --warn-bg-strong: #3a2410;
+  --adj-neg: #422;
+  --adj-neg-border: #633;
+  --adj-pos: #242;
+  --adj-pos-border: #363;
+
+  /* The serial log */
+  --log-bg: #0a0a0a;
+  --log-sent: #5cc761;
+  --log-recv: #58a6ff;
+
+  /* The display itself stays dark in both themes, like the real thing. */
+  --display-case: #000;
+  --display-case-border: #444;
+  --display-flap: #111;
+  --display-flap-border: #333;
+  --display-text: #fff;
+  --display-split: #000;
+  --display-overlay: rgba(0, 0, 0, .85);
+  --display-shadow: rgba(0, 0, 0, .5);
+
+  --focus: #6ea8fe;          /* the keyboard focus ring */
+
   --mono: 'Courier New', monospace;
+}
+
+/* Light mode, when the system asks for it. Only the theme's colours change;
+   the display keeps its own. */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --bg: #f2f3f5;
+    --panel: #fff;
+    --surface-dark: #f7f8fa;
+    --surface: #eceef1;
+    --surface-row: #f7f8fa;
+    --hover: #e9ecef;
+    --inset: #f4f5f7;
+    --terminal: #f4f5f7;
+    --input-bg: #fff;
+    --overlay: rgba(20, 24, 31, .55);
+    --shadow: rgba(20, 24, 31, .18);
+
+    --border: #d6d9de;
+    --border-strong: #c4c8ce;
+    --border-input: #8a919c;
+
+    --text-bright: #111;
+    --text: #1f2328;
+    --text-soft: #2b2f36;
+    --text-dim: #424a55;
+    --text-muted: #555d69;
+    --text-faint: #5e6672;
+
+    --accent: #0b5ed7;
+    --accent-hover: #094db1;
+    --green: #157030;
+    --orange: #a64b00;
+    --red: #c82333;
+    --display-green: #137a2a;
+
+    --btn-secondary: #dfe2e6;
+    --btn-secondary-text: #1f2328;
+    --btn-ghost: #eceef1;
+
+    --success-bg: #e6f4ea;
+    --danger-bg: #fbe9eb;
+    --warn-bg: #fdf0e2;
+    --warn-bg-strong: #fde3c8;
+    --adj-neg: #fbe3e5;
+    --adj-neg-border: #e9a9b0;
+    --adj-pos: #e3f3e7;
+    --adj-pos-border: #9fd2ac;
+
+    --log-bg: #fbfbfc;
+    --log-sent: #157030;
+    --log-recv: #0b5ed7;
+
+    --focus: #0b5ed7;
+  }
 }
 
 * {
@@ -132,7 +233,7 @@ h3 {
   text-align: center;
   color: var(--text-muted);
   font-size: .8rem;
-  margin-bottom: 4px;
+  margin: 0 0 4px;
   font-weight: bold;
   letter-spacing: 1px;
 }
@@ -158,7 +259,7 @@ h3 {
 }
 
 .empty-note {
-  color: #666;
+  color: var(--text-faint);
   font-style: italic;
   font-size: .85rem;
 }
@@ -194,13 +295,13 @@ h3 {
 }
 
 .tab-btn:hover {
-  background: #252525;
+  background: var(--hover);
   color: var(--text-bright);
 }
 
 .tab-btn.active {
-  background: var(--accent);
-  color: var(--text-bright);
+  background: var(--btn-primary);
+  color: var(--on-color);
 }
 
 .tab-label-short {
@@ -239,7 +340,7 @@ h3 {
 }
 
 .stream-status {
-  background: #2a1a1a;
+  background: var(--danger-bg);
   border: 1px solid var(--red);
   font-size: .9rem;
   font-weight: 600;
@@ -247,7 +348,7 @@ h3 {
 }
 
 .active-app-banner {
-  background: #1a2a1a;
+  background: var(--success-bg);
   border: 1px solid var(--green);
   --dot: var(--green);
 }
@@ -258,7 +359,7 @@ h3 {
   margin-left: 8px;
   padding: 1px 8px;
   border-radius: 4px;
-  background: #2a2210;
+  background: var(--warn-bg);
   border: 1px solid var(--orange);
   color: var(--orange);
   font-size: .7rem;
@@ -286,8 +387,8 @@ h3 {
 }
 
 .aab-stop {
-  background: var(--red);
-  color: var(--text-bright);
+  background: var(--btn-danger);
+  color: var(--on-color);
   border: none;
   border-radius: 6px;
   padding: 6px 14px;
@@ -305,7 +406,7 @@ h3 {
   cursor: pointer;
   transition: .2s;
   font-size: 1rem;
-  color: var(--text-bright);
+  color: var(--on-color);
 }
 
 .btn:active {
@@ -313,28 +414,34 @@ h3 {
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: var(--btn-primary);
 }
 
 .btn-success {
-  background: var(--green);
+  background: var(--btn-success);
 }
 
 .btn-warning {
-  background: var(--orange);
+  background: var(--btn-warning);
 }
 
 .btn-danger {
-  background: var(--red);
+  background: var(--btn-danger);
 }
 
 .btn-secondary {
-  background: var(--border-strong);
+  background: var(--btn-secondary);
+  color: var(--btn-secondary-text);
+}
+
+.btn:disabled {
+  opacity: .55;
+  cursor: not-allowed;
 }
 
 /* A less prominent action. */
 .btn-ghost {
-  background: var(--border);
+  background: var(--btn-ghost);
   color: var(--text-dim);
   border: 1px solid var(--border-input);
 }
@@ -368,7 +475,8 @@ h3 {
 
 .input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--focus);
+  box-shadow: 0 0 0 1px var(--focus);
 }
 
 .input:disabled {
@@ -405,7 +513,7 @@ h3 {
 }
 
 select.input option {
-  background: #222;
+  background: var(--surface-row);
 }
 
 /* A short label with its input inline, e.g. "Default delay [5] s". */
@@ -448,7 +556,7 @@ select.input option {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--border-strong);
+  background: var(--border-input);
   transition: .4s;
   border-radius: 20px;
 }
@@ -460,13 +568,18 @@ select.input option {
   width: 14px;
   left: 3px;
   bottom: 3px;
-  background: var(--text-bright);
+  background: #fff;
   transition: .4s;
   border-radius: 50%;
 }
 
 input:checked + .slider {
-  background: var(--green);
+  background: var(--btn-success);
+}
+
+.switch input:focus-visible + .slider {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 input:checked + .slider:before {
@@ -504,8 +617,10 @@ input:checked + .slider:before {
 }
 
 .toast {
-  background: var(--border);
+  background: var(--panel);
   color: var(--text-bright);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px var(--shadow);
   padding: 12px 18px;
   border-radius: 8px;
   font-size: .9rem;
@@ -558,4 +673,51 @@ input:checked + .slider:before {
   display: flex;
   justify-content: center;
   margin-top: 8px;
+}
+
+/* ── ACCESSIBILITY ── */
+
+/* One clear focus ring for everything reached by keyboard. Inputs keep
+   their own focus border too. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Text for screen readers only. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Less movement for anyone who asks for it: no sliding, pulsing or
+   scaling. (The live display jumps straight to each character instead of
+   flipping; see live-flap.js.) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .btn:active,
+  .app-card:hover,
+  .color-btn:hover {
+    transform: none;
+  }
+
+  /* A colour fading, not movement: it stays, so a sync's results show. */
+  .mod-cell.sync-flash {
+    animation-duration: 1.2s !important;
+  }
 }

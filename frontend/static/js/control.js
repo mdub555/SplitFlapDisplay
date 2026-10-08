@@ -156,7 +156,19 @@ function renderComposer() {
     flap.textContent = composed[i] === ' ' ? '' : composed[i];
     flap.classList.toggle('cursor', i === Math.min(composeCursor, composeCells() - 1));
   });
+  describeComposer();
   saveDraft();
+}
+
+// For screen readers (the grid itself is hidden from them): where the cursor
+// is, and what that row says.
+function describeComposer() {
+  const at = Math.min(composeCursor, composeCells() - 1);
+  const row = Math.floor(at / GRID_COLS);
+  const text = composed.slice(row * GRID_COLS, (row + 1) * GRID_COLS).join('').trim();
+  const where = composeCursor >= composeCells() ? 'End of the page'
+    : `Row ${row + 1} of ${GRID_ROWS}, column ${at % GRID_COLS + 1}`;
+  byId('composeWhere').textContent = `${where}. Row ${row + 1}: ${text || 'blank'}`;
 }
 
 // The composed page as one string of GRID_ROWS x GRID_COLS characters.
@@ -194,7 +206,7 @@ function centerLines() {
 // goes in at the cursor.
 function buildColorPalette() {
   const tileButton = (text, name, cls) => {
-    const btn = el('button', {class: cls, title: name}, text);
+    const btn = el('button', {class: cls, title: name, ariaLabel: `Type ${name}`}, text);
     btn.addEventListener('mousedown', e => e.preventDefault());   // keep the grid focused
     btn.addEventListener('click', () => { typeText(text); focusComposer(); });
     return btn;
@@ -275,19 +287,25 @@ function pageControl(icon, control, field, unit) {
 }
 
 function buildPlaylistRow(item, idx) {
-  const button = (text, action, title, cls = 'btn btn-secondary btn-sm', dir) =>
-    el('button', {class: cls, title, dataset: {onclick: action, ...(dir !== undefined && {dir})}}, text);
+  const page = `page ${idx + 1}`;
+  // Each button's name says which page it acts on, for screen readers.
+  const button = (text, action, label, cls = 'btn btn-secondary btn-sm', dir) => {
+    label = label.replace('{page}', page);
+    return el('button', {class: cls, title: label, ariaLabel: label,
+                         dataset: {onclick: action, ...(dir !== undefined && {dir})}}, text);
+  };
 
+  // Dragging is for a pointer; the ▲ ▼ buttons do the same from a keyboard.
   const header = el('div', {class: 'playlist-item-header'},
-    el('span', {class: 'drag-handle', title: 'Drag to reorder'}, '⠿'),
-    el('span', {class: 'playlist-item-title'}, `Page ${idx + 1}`),
+    el('span', {class: 'drag-handle', title: 'Drag to reorder', ariaHidden: 'true'}, '⠿'),
+    el('span', {class: 'playlist-item-title', id: `playlistPage${idx}`}, `Page ${idx + 1}`),
     el('div', {class: 'row row-tight'},
-      button('▲', 'movePlaylist', 'Move up', undefined, -1),
-      button('▼', 'movePlaylist', 'Move down', undefined, 1),
-      button('▶', 'pushPlaylistPage', 'Show just this page now'),
-      button('⧉', 'duplicatePlaylistPage', 'Duplicate'),
-      button('EDIT', 'editPlaylist', 'Edit in the grid'),
-      button('DEL', 'removeFromPlaylist', 'Remove', 'btn btn-danger btn-sm')));
+      button('▲', 'movePlaylist', 'Move {page} up', undefined, -1),
+      button('▼', 'movePlaylist', 'Move {page} down', undefined, 1),
+      button('▶', 'pushPlaylistPage', 'Show just {page} now'),
+      button('⧉', 'duplicatePlaylistPage', 'Duplicate {page}'),
+      button('EDIT', 'editPlaylist', 'Edit {page} in the grid'),
+      button('DEL', 'removeFromPlaylist', 'Remove {page}', 'btn btn-danger btn-sm')));
 
   // One line per display row. Spaces become non-breaking so a run of them
   // keeps its width.
@@ -298,15 +316,19 @@ function buildPlaylistRow(item, idx) {
     preview.append(chars.slice(r * GRID_COLS, (r + 1) * GRID_COLS).join('').replace(/ /g, ' '));
   }
 
-  const numberInput = (value, min, max, step) =>
-    el('input', {type: 'number', class: 'input input-num input-sm', value, min, max, step});
-  const styleSelect = el('select', {class: 'input input-sm'}, ...styleOptions(item.style || PAGE_DEFAULTS.style));
+  const numberInput = (value, min, max, step, label) =>
+    el('input', {type: 'number', class: 'input input-num input-sm', value, min, max, step, ariaLabel: label});
+  const styleSelect = el('select', {class: 'input input-sm', ariaLabel: `Page ${idx + 1} transition`},
+    ...styleOptions(item.style || PAGE_DEFAULTS.style));
   const controls = el('div', {class: 'playlist-item-controls'},
-    pageControl('⏱', numberInput(item.delay || PAGE_DEFAULTS.delay, '0.5', '60', '0.5'), 'delay', 's'),
+    pageControl('⏱', numberInput(item.delay || PAGE_DEFAULTS.delay, '0.5', '60', '0.5',
+                                 `Page ${idx + 1} delay in seconds`), 'delay', 's'),
     pageControl('↔', styleSelect, 'style'),
-    pageControl('⚡', numberInput(item.speed || PAGE_DEFAULTS.speed, '0', '500', '5'), 'speed', 'ms'));
+    pageControl('⚡', numberInput(item.speed || PAGE_DEFAULTS.speed, '0', '500', '5',
+                                 `Page ${idx + 1} speed in milliseconds per module`), 'speed', 'ms'));
 
-  return el('div', {class: 'playlist-item', dataset: {idx}}, header, preview, controls);
+  return el('div', {class: 'playlist-item', role: 'group', ariaLabelledby: `playlistPage${idx}`, dataset: {idx}},
+    header, preview, controls);
 }
 
 function renderPlaylist() {
@@ -369,19 +391,31 @@ function movePage(from, to) {
   changePlaylist(pages => pages.splice(to, 0, ...pages.splice(from, 1)));
 }
 
+// After the list is redrawn, focus `selector` in row `idx` (or, if that row
+// is gone, the Add button), so keyboard users don't lose their place.
+function focusPlaylistRow(idx, selector) {
+  const row = byId('playlistList').querySelector(`.playlist-item[data-idx="${idx}"]`);
+  (row && row.querySelector(selector) || byId('saveMsgBtn')).focus();
+}
+
 function movePlaylist(button) {
   const idx = rowIndex(button);
-  movePage(idx, idx + parseInt(button.dataset.dir, 10));
+  const dir = button.dataset.dir;
+  const to = idx + parseInt(dir, 10);
+  movePage(idx, to);
+  focusPlaylistRow(to >= 0 && to < playlist.length ? to : idx, `[data-onclick="movePlaylist"][data-dir="${dir}"]`);
 }
 
 function removeFromPlaylist(button) {
   const idx = rowIndex(button);
   changePlaylist(pages => pages.splice(idx, 1));
+  focusPlaylistRow(Math.min(idx, playlist.length - 1), '[data-onclick="removeFromPlaylist"]');
 }
 
 function duplicatePlaylistPage(button) {
   const idx = rowIndex(button);
   changePlaylist(pages => pages.splice(idx + 1, 0, {...pages[idx]}));
+  focusPlaylistRow(idx + 1, '[data-onclick="duplicatePlaylistPage"]');
 }
 
 // Shows one page of the playlist on the display now, on its own.
@@ -463,9 +497,12 @@ function buildSavedPlaylistRow(name, item) {
   return el('div', {class: `saved-pl-item${name === loadedPlaylist ? ' loaded' : ''}`, dataset: {name}},
     el('span', {class: 'saved-pl-name'}, name),
     el('span', {class: 'saved-pl-meta'}, playlistSummary(item)),
-    el('button', {class: 'btn btn-secondary btn-sm', dataset: {onclick: 'loadSavedPlaylist'}}, 'Edit'),
-    el('button', {class: 'btn btn-success btn-sm', dataset: {onclick: 'runSavedPlaylist'}}, 'Run'),
-    el('button', {class: 'btn btn-danger btn-sm', dataset: {onclick: 'deleteSavedPlaylist'}}, '✕'));
+    el('button', {class: 'btn btn-secondary btn-sm', ariaLabel: `Edit ${name}`,
+                  dataset: {onclick: 'loadSavedPlaylist'}}, 'Edit'),
+    el('button', {class: 'btn btn-success btn-sm', ariaLabel: `Run ${name}`,
+                  dataset: {onclick: 'runSavedPlaylist'}}, 'Run'),
+    el('button', {class: 'btn btn-danger btn-sm', ariaLabel: `Delete ${name}`, title: 'Delete',
+                  dataset: {onclick: 'deleteSavedPlaylist'}}, '✕'));
 }
 
 // "3 pages · 5 s each", or "3 pages · 2–8 s" when the pages differ.

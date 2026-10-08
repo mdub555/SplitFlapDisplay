@@ -48,14 +48,44 @@ function renderModuleGrid() {
   // Laid out like the display; phones wrap it narrower (see modules.css).
   grid.style.setProperty('--cols', GRID_COLS);
   grid.style.setProperty('--phone-cols', phoneColumns(GRID_COLS));
-  grid.replaceChildren(...Array.from({length: NUM_MODULES}, (_, i) => el('div', {
+  // Buttons, with only the selected one in the Tab order: the arrow keys
+  // move between them (see moduleGridKeydown).
+  grid.replaceChildren(...Array.from({length: NUM_MODULES}, (_, i) => el('button', {
+    type: 'button',
     class: `mod-cell${i === selectedModule ? ' active' : ''}${moduleSettings(i) ? '' : ' unprovisioned'}`,
+    tabIndex: i === selectedModule ? 0 : -1,
+    ariaCurrent: i === selectedModule ? 'true' : null,
     dataset: {onclick: 'selectModuleAction', id: i},
   }, formatModuleId(i))));
   grid.querySelectorAll('.mod-cell').forEach(cell =>
     cell.addEventListener('animationend', () => cell.classList.remove('sync-flash')));
   paintSyncState();
 }
+
+// What a screen reader says for module `id`'s button.
+function moduleCellLabel(id) {
+  return `Module ${formatModuleId(id)}${moduleSettings(id) ? '' : ', not set up'}${syncFailed(id) ? ', sync failed' : ''}`;
+}
+
+// Arrow keys move the selection round the grid as it's laid out (it wraps
+// narrower on a phone); Home and End go to the first and last module.
+function moduleGridKeydown(e) {
+  const cell = e.target.closest('.mod-cell');
+  if (!cell) return;
+  const grid = byId('modMatrix');
+  const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length || GRID_COLS;
+  const id = Number(cell.dataset.id);
+  const to = {
+    ArrowRight: id + 1, ArrowLeft: id - 1, ArrowDown: id + cols, ArrowUp: id - cols,
+    Home: 0, End: NUM_MODULES - 1,
+  }[e.key];
+  if (to === undefined) return;
+  e.preventDefault();
+  if (to < 0 || to >= NUM_MODULES) return;
+  selectModule(to);
+  grid.querySelector(`.mod-cell[data-id="${to}"]`).focus();
+}
+byId('modMatrix').addEventListener('keydown', moduleGridKeydown);
 
 // --- Sync progress ----------------------------------------------------------
 //
@@ -93,6 +123,7 @@ function paintSyncState() {
   byId('modMatrix').querySelectorAll('.mod-cell').forEach(cell => {
     const id = Number(cell.dataset.id);
     cell.classList.toggle('sync-failed', syncFailed(id));
+    cell.setAttribute('aria-label', moduleCellLabel(id));
     const started = syncFlashes[id];
     cell.classList.remove('sync-flash');
     if (started === undefined || now - started >= SYNC_FLASH_MS) {
@@ -134,7 +165,10 @@ function selectModule(id) {
 }
 
 function selectModuleAction(cell) {
-  selectModule(parseInt(cell.dataset.id, 10));
+  const id = parseInt(cell.dataset.id, 10);
+  selectModule(id);
+  // The grid was redrawn: keep focus on the module just picked.
+  byId('modMatrix').querySelector(`.mod-cell[data-id="${id}"]`).focus();
 }
 
 // The shared firmware settings as the selected module reported them in its

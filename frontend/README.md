@@ -123,6 +123,28 @@ implement `frames()`; the update-order and speed settings are built for it.
   defaults and name) is kept in the browser's localStorage, so a reload
   doesn't lose it. It's per browser and best-effort; nothing depends on it.
 
+## Themes and accessibility
+
+- **Light and dark** follow the system setting (`prefers-color-scheme`).
+  Every colour is a variable at the top of `static/css/base.css`; light mode
+  overrides them in one block. The display boxes (live display, compose
+  grid, symbol tiles) keep their own fixed colours and stay dark in both,
+  like the real hardware. Text and controls meet WCAG AA contrast in both
+  themes; if you change a colour, check it still does.
+- **Keyboard**: everything works without a mouse. The tabs and the module
+  grid each take one Tab stop and are moved round with the arrow keys
+  (plus Home/End); the settings dialog keeps focus inside it and closes with
+  Escape; reordering playlist pages or schedule slots keeps focus in place.
+  Dragging a page is for pointers; its ▲ ▼ buttons do the same by keyboard.
+- **Screen readers**: the live display is read as its text, row by row,
+  rather than as 64 flaps; the compose grid says where the cursor is and
+  what that row says; buttons that are only a symbol (▲, ⧉, ✕, ⚙️, module
+  cells) have names that say what they act on; toasts are read out, and
+  errors interrupt. Pages are an ARIA tab list.
+- **Reduced motion** (`prefers-reduced-motion`): no flipping, pulsing or
+  sliding. The live display jumps straight to each character. The green
+  sync flash still fades, since it's a colour change, not movement.
+
 ## Frontend architecture notes
 
 Inline `onclick="..."` / `onchange="..."` attributes were removed in favor of

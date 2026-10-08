@@ -6,7 +6,9 @@
 <title>Split-Flap OS</title>
 <!-- Adding the page to a phone's home screen opens it like an app, full screen. -->
 <link rel="manifest" href="{{ url_for('pages.manifest') }}">
-<meta name="theme-color" content="#121212">
+<meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f3f5" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="dark light">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Split-Flap">
@@ -25,10 +27,11 @@
 {% macro toggle_row(input_id, name, hint='', attrs={}) %}
   <div class="toggle-row">
     <div>
-      <span class="toggle-name">{{ name }}</span>
-      {% if hint %}<span class="hint">{{ hint }}</span>{% endif %}
+      <label class="toggle-name" for="{{ input_id }}">{{ name }}</label>
+      {% if hint %}<span class="hint" id="{{ input_id }}-hint">{{ hint }}</span>{% endif %}
     </div>
-    <label class="switch"><input type="checkbox" id="{{ input_id }}"{{ attrs | xmlattr }}><span class="slider"></span></label>
+    <label class="switch"><input type="checkbox" role="switch" id="{{ input_id }}"
+      {%- if hint %} aria-describedby="{{ input_id }}-hint"{% endif %}{{ attrs | xmlattr }}><span class="slider"></span></label>
   </div>
 {% endmacro %}
 
@@ -43,60 +46,68 @@
   </div>
 {% endmacro %}
 
-<div class="container">
+<main class="container">
+  <h1 class="sr-only">Split-Flap OS</h1>
 
   <!-- Shown only while the live-state stream (SSE) is disconnected — the
        browser retries automatically, this is just so a dropped connection
        is visibly different from "genuinely nothing is happening." -->
-  <div id="streamStatus" class="stream-status">
-    <div class="pulse-dot"></div>
+  <div id="streamStatus" class="stream-status" role="status">
+    <div class="pulse-dot" aria-hidden="true"></div>
     <span>Reconnecting to display…</span>
   </div>
 
   <!-- LIVE DISPLAY: above the tabs, so it shows on every page -->
   <!-- What's playing (an app or a playlist), with a way to stop it. -->
   <div id="live-banner" class="active-app-banner">
-    <div class="pulse-dot"></div>
+    <div class="pulse-dot" aria-hidden="true"></div>
     <span class="aab-label" id="liveBannerText"></span>
     <button class="aab-stop" data-onclick="stopApp">⏹ STOP</button>
   </div>
 
-  <div class="section-label">LIVE DISPLAY
+  <h2 class="section-label" id="liveDisplayLabel">LIVE DISPLAY
     <span id="simBadge" class="sim-badge" hidden
           title="The serial port didn't open, so nothing on the display physically moves. Check the USB-RS485 adapter and SPLITFLAP_SERIAL_PORT, then restart.">SIMULATION · NO HARDWARE</span>
-  </div>
-  <div class="preview-wrapper live-wrapper">
-    <div class="preview-grid" id="liveGrid"></div>
-    <div class="homing-overlay" id="homingOverlay">HOMING REQUIRED</div>
+  </h2>
+  <!-- Screen readers get what's on the display as text (live-flap.js), not 64 flaps. -->
+  <div class="preview-wrapper live-wrapper" role="img" id="liveDisplay" aria-label="The display is blank">
+    <div class="preview-grid" id="liveGrid" aria-hidden="true"></div>
+    <div class="homing-overlay" id="homingOverlay" aria-hidden="true">HOMING REQUIRED</div>
   </div>
 
   <!-- TAB BAR -->
-  <div class="tab-bar">
-    {% for tab, full, short, action in [
-         ('control', 'CONTROL', 'CTRL', 'switchTab'),
-         ('apps', 'APPS', 'APPS', 'switchTab'),
-         ('modules', 'MODULES', 'MODS', 'switchTab'),
-         ('debug', 'DEBUG', 'DBG', 'switchTab')] %}
-    <button id="tab-{{ tab }}" class="tab-btn{% if loop.first %} active{% endif %}"
-            data-onclick="{{ action }}" data-tab="{{ tab }}">
-      <span class="tab-label-full">{{ full | safe }}</span><span class="tab-label-short">{{ short }}</span>
+  <!-- Tabs: arrow keys move between them (tabs.js). -->
+  <div class="tab-bar" role="tablist" aria-label="Pages">
+    {% for tab, full, short, name in [
+         ('control', 'CONTROL', 'CTRL', 'Control'),
+         ('apps', 'APPS', 'APPS', 'Apps'),
+         ('modules', 'MODULES', 'MODS', 'Modules'),
+         ('debug', 'DEBUG', 'DBG', 'Debug')] %}
+    <button id="tab-{{ tab }}" class="tab-btn{% if loop.first %} active{% endif %}" role="tab"
+            aria-selected="{{ 'true' if loop.first else 'false' }}" aria-controls="page-{{ tab }}"
+            tabindex="{{ 0 if loop.first else -1 }}" aria-label="{{ name }}"
+            data-onclick="switchTab" data-tab="{{ tab }}">
+      <span class="tab-label-full" aria-hidden="true">{{ full | safe }}</span><span class="tab-label-short" aria-hidden="true">{{ short }}</span>
     </button>
     {% endfor %}
   </div>
 
   <!-- ══════════ CONTROL PAGE ══════════ -->
-  <div id="page-control" class="page active">
-    <div class="section-label">COMPOSE</div>
+  <div id="page-control" class="page active" role="tabpanel" aria-labelledby="tab-control">
+    <h2 class="section-label">COMPOSE</h2>
     <!-- Type straight into the grid: the hidden textarea takes the keys (and
          brings up a phone's keyboard); control.js draws them into the flaps. -->
     <div class="preview-wrapper compose-wrapper" id="composeWrapper">
-      <div class="preview-grid" id="preview"></div>
-      <textarea id="composeInput" class="compose-input" aria-label="Compose text" rows="1"
+      <div class="preview-grid" id="preview" aria-hidden="true"></div>
+      <textarea id="composeInput" class="compose-input" aria-label="Compose the page" rows="1"
+                aria-describedby="composeHint composeWhere"
                 autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"></textarea>
     </div>
-    <p class="note compose-hint">Tap or click a flap and type. Arrow keys move{% if config.grid_rows > 1 %}, Enter starts the next line{% endif %}.</p>
+    <!-- Where the cursor is and what that line says, for screen readers. -->
+    <div class="sr-only" id="composeWhere" aria-live="polite"></div>
+    <p class="note compose-hint" id="composeHint">Tap or click a flap and type. Arrow keys move{% if config.grid_rows > 1 %}, Enter starts the next line{% endif %}.</p>
 
-    <div class="color-palette" id="colorPalette"></div>
+    <div class="color-palette" id="colorPalette" role="group" aria-label="Colour tiles and symbols"></div>
 
     <div class="control-panel">
       <label class="check-label"><input type="checkbox" id="modeToggle" data-onchange="toggleMultiMode"> <strong>Multi-Page Playlist</strong></label>
@@ -131,7 +142,7 @@
       <div class="section-head">
         <h3>📂 Saved Playlists</h3>
         <div class="row">
-          <input type="text" class="input" id="savePlaylistName" placeholder="Playlist name…">
+          <input type="text" class="input" id="savePlaylistName" placeholder="Playlist name…" aria-label="Playlist name">
           <button class="btn btn-success btn-sm" data-onclick="saveCurrentPlaylist">Save</button>
         </div>
       </div>
@@ -141,7 +152,7 @@
   </div>
 
   <!-- ══════════ APPS PAGE ══════════ -->
-  <div id="page-apps" class="page">
+  <div id="page-apps" class="page" role="tabpanel" aria-labelledby="tab-apps">
     <h3 class="apps-title">Available Apps</h3>
     <p class="note">Tap to launch · ⚙️ to configure</p>
 
@@ -177,7 +188,7 @@
   </div>
 
   <!-- ══════════ MODULES PAGE ══════════ -->
-  <div id="page-modules" class="page">
+  <div id="page-modules" class="page" role="tabpanel" aria-labelledby="tab-modules">
 
     <!-- Hardware Inspector -->
     <div class="config-section">
@@ -190,7 +201,8 @@
         </div>
       </div>
 
-      <div class="mod-matrix" id="modMatrix"></div>
+      <!-- One button per module; arrow keys move between them (modules.js). -->
+      <div class="mod-matrix" id="modMatrix" role="group" aria-label="Modules"></div>
 
       <div class="inspector-panel" id="inspectorPanel" hidden>
         <div class="section-head">
@@ -286,7 +298,7 @@
   </div><!-- /page-modules -->
 
   <!-- ══════════ DEBUG PAGE ══════════ -->
-  <div id="page-debug" class="page">
+  <div id="page-debug" class="page" role="tabpanel" aria-labelledby="tab-debug">
 
     <!-- Any command in the firmware's protocol (see display/debug_commands.py) -->
     <div class="config-section">
@@ -330,7 +342,8 @@
         <h3>Serial Log</h3>
         <button class="btn btn-secondary btn-sm" data-onclick="clearDebugLog">Clear</button>
       </div>
-      <div class="debug-log" id="debugLog"></div>
+      <!-- A log, but not read out as it fills: it can be very busy. -->
+      <div class="debug-log" id="debugLog" role="log" aria-live="off" aria-label="Serial log" tabindex="0"></div>
     </div>
 
     <!-- Flap character table: which character each index shows -->
@@ -346,11 +359,11 @@
   <div class="app-footer">
     <button class="btn btn-secondary btn-sm" id="installBtn" data-onclick="installApp" hidden>📲 Install as an app</button>
   </div>
-</div><!-- /container -->
+</main><!-- /container -->
 
 <!-- ══════════ APP SETTINGS MODAL ══════════ -->
 <div class="modal-overlay" id="appSettingsModal">
-  <div class="modal-content">
+  <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="appSettingsTitle">
     <h3 id="appSettingsTitle" class="modal-title">App Settings</h3>
     <div id="appSettingsFields"></div>
     <div class="button-row">
@@ -361,7 +374,8 @@
 </div>
 
 <!-- TOAST -->
-<div class="toast-container" id="toastContainer"></div>
+<!-- Read out as they appear; errors interrupt (toast.js). -->
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
 <script>const CONFIG = {{ config | tojson }};</script>
 {% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control',

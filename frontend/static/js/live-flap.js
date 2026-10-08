@@ -3,6 +3,10 @@
 
 let liveFlaps = [];
 
+// Whether the system asks for less movement. Then a flap jumps straight to
+// its character instead of flipping through every one on the way.
+const reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : {matches: false};
+
 // One flap on screen. Like a real module it only turns forwards, one
 // character at a time, until it reaches its target.
 
@@ -17,6 +21,12 @@ class LiveFlap {
   setTarget(idx, delay) {
     this.tgtIdx = idx;
     if (this.curIdx === this.tgtIdx) return;
+    if (reducedMotion.matches) {
+      this.curIdx = idx;
+      this.queued = null;
+      this._render(CHAR_MAP[idx]);
+      return;
+    }
     if (this.busy) { this.queued = idx; return; }
     setTimeout(() => this._step(), delay);
   }
@@ -91,6 +101,7 @@ function applyLiveState(data) {
 
   const text = data.state || '';
   byId('homingOverlay').style.display = data.is_homed ? 'none' : 'flex';
+  byId('liveDisplay').setAttribute('aria-label', describeDisplay(text, data.is_homed));
   // Older backends don't send it; only say so when it's definitely false.
   byId('simBadge').hidden = data.hardware_connected !== false;
   liveFlaps.forEach((flap, i) => {
@@ -127,11 +138,26 @@ function renderBanner() {
   byId('liveBannerText').textContent = playing;
 }
 
+// What the display shows, as screen readers hear it: each row that isn't
+// blank, in order.
+function describeDisplay(text, homed) {
+  const chars = Array.from(text);
+  const rows = [];
+  for (let r = 0; r < GRID_ROWS; r++) {
+    const row = chars.slice(r * GRID_COLS, (r + 1) * GRID_COLS).map(ch => displayChar(ch) || ' ').join('').trim();
+    if (row) rows.push(row);
+  }
+  const shown = rows.length ? `The display shows: ${rows.join(' / ')}` : 'The display is blank';
+  return homed === false ? `Homing required. ${shown}` : shown;
+}
+
 // Highlights the app card or saved playlist that's playing, if one is.
 function markRunning() {
   const app = liveState.active_app;
   document.querySelectorAll('.app-card').forEach(card => {
-    card.classList.toggle('running', !!app && card.dataset.app === app);
+    const running = !!app && card.dataset.app === app;
+    card.classList.toggle('running', running);
+    card.querySelector('.app-running').textContent = running ? ' (running)' : '';
   });
   const name = !app && liveState.playlist ? liveState.playlist.name : null;
   document.querySelectorAll('.saved-pl-item').forEach(row => {

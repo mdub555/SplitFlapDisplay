@@ -10,11 +10,11 @@
   margin-left: auto;
   margin-right: auto;
   padding: var(--box-pad);
-  background: var(--inset);
+  background: var(--display-case);
   border-radius: 8px;
-  border: 2px solid var(--border-strong);
+  border: 2px solid var(--display-case-border);
   margin-bottom: 16px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, .5);
+  box-shadow: 0 4px 10px var(--display-shadow);
 }
 
 /* The live display, which the homing overlay covers. */
@@ -30,14 +30,14 @@
 
 .flap-unit {
   aspect-ratio: 2 / 3;
-  background: var(--flap-bg);
-  border: 1px solid var(--border);
+  background: var(--display-flap);
+  border: 1px solid var(--display-flap-border);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1rem;
   font-family: var(--mono);
-  color: var(--text-bright);
+  color: var(--display-text);
   border-radius: 2px;
 }
 
@@ -47,8 +47,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, .85);
-  color: var(--orange);
+  background: var(--display-overlay);
+  color: #fd8c3c;   /* on the display, so the dark theme's orange */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -78,8 +78,8 @@
   right: 0;
   height: 50%;
   overflow: hidden;
-  background: var(--flap-bg);
-  border: 1px solid var(--border);
+  background: var(--display-flap);
+  border: 1px solid var(--display-flap-border);
 }
 
 .live-flap .ft,
@@ -104,7 +104,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-bright);
+  color: var(--display-text);
   font-size: inherit;
   line-height: 1;
 }
@@ -142,7 +142,7 @@
   right: 0;
   height: 1px;
   top: 50%;
-  background: #000;
+  background: var(--display-split);
   z-index: 3;
 }
 
@@ -209,10 +209,10 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: var(--flap-bg);
-  border: 1px solid var(--border-strong);
+  background: var(--display-flap);
+  border: 1px solid var(--display-case-border);
   border-radius: 3px;
-  color: var(--text-bright);
+  color: var(--display-text);
   font-family: var(--mono);
   font-size: 1rem;
   line-height: 1;
@@ -366,7 +366,7 @@
 }
 
 .saved-pl-item {
-  background: #222;
+  background: var(--surface-row);
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   padding: 10px 14px;
@@ -383,7 +383,7 @@
 
 .saved-pl-item.running {
   border-color: var(--green);
-  background: #1a2a1a;
+  background: var(--success-bg);
 }
 
 .saved-pl-name {
@@ -394,7 +394,7 @@
 }
 
 .saved-pl-meta {
-  color: #666;
+  color: var(--text-faint);
   font-size: .8rem;
 }
 

@@ -4,16 +4,18 @@
 window.appsByKey = {};
 let appsRequest = null;   // the /apps request, once it's made (and hasn't failed)
 
+// A card: a button filling it that runs the app, and (beside it, not inside
+// it) a ⚙️ button for the app's settings.
 function buildAppCard(app) {
-  return el('div', {class: 'app-card', dataset: {app: app.key, onclick: 'runApp'}},
-    // The dispatcher acts on the nearest data-onclick, so clicking the gear
-    // opens the settings without also running the app.
-    app.settings_fields.length
-      ? el('button', {class: 'app-gear', title: 'Settings', dataset: {onclick: 'openAppSettings'}}, '⚙️')
-      : '',
-    el('span', {class: 'app-icon'}, app.icon),
-    el('span', {class: 'app-name'}, app.name),
-    el('span', {class: 'app-desc'}, app.desc));
+  const gear = el('button', {class: 'app-gear', title: `${app.name} settings`, ariaLabel: `${app.name} settings`,
+                             dataset: {onclick: 'openAppSettings'}}, '⚙️');
+  return el('div', {class: 'app-card', dataset: {app: app.key}},
+    el('button', {class: 'app-run', dataset: {onclick: 'runApp'}},
+      el('span', {class: 'app-icon', ariaHidden: 'true'}, app.icon),
+      el('span', {class: 'app-name'}, app.name),
+      el('span', {class: 'app-running sr-only'}),
+      el('span', {class: 'app-desc'}, app.desc)),
+    app.settings_fields.length ? gear : '');
 }
 
 // Fills the grid (and appsByKey) once; resolves when that's done. After a
@@ -35,8 +37,8 @@ function appName(key) {
   return (window.appsByKey[key] || {name: key}).name;
 }
 
-function runApp(card) {
-  const key = card.dataset.app;
+function runApp(button) {
+  const key = button.closest('[data-app]').dataset.app;
   api.runApp(key).then(result => {
     if (result) showToast(`▶ ${appName(key)} started`);
   });
