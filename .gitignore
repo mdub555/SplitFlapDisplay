@@ -4,6 +4,7 @@
 # Re-include the dotfiles that DO belong in the repo
 !.gitignore
 !.gitattributes
+!.github/
 
 # OS
 Thumbs.db
@@ -32,3 +33,6 @@ flaps.json
 # Python bytecode and test dependencies
 __pycache__/
 node_modules/
+
+# Firmware test builds
+firmware/splitflapfirmwarev8/tests/build/

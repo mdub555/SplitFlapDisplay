@@ -29,3 +29,31 @@ Motor IN1   |           7 | PB2
 Motor IN2   |           6 | PB3
 Motor IN3   |           5 | PB4
 Motor IN4   |           4 | PB5
+
+Testing
+-------
+tests/run_tests.sh builds the firmware on your computer, against fake
+hardware, and runs its tests. It needs CMake 3.24 or later and a C++17
+compiler (g++ or clang++). The tests use GoogleTest, which the first run
+downloads unless it's installed. Building takes a few seconds; the tests
+take well under one.
+
+The firmware's own source files are compiled as they are. What's faked is
+in tests/fakes: the clock, the RS-485 serial port, the EEPROM, and a reel
+that the real motor code turns and the real home sensor code reads. A test
+puts messages on the bus, lets simulated time pass, and checks where the
+reel ended up and what the module sent back. Pass part of a test's name to
+run just those tests, e.g. tests/run_tests.sh Frame.
+
+Each test runs in its own process (CTest runs them one by one), so each
+starts from a freshly powered-on module with blank EEPROM. Running the
+test program directly runs them all in one process instead, where they'd
+see each other's state; use run_tests.sh or ctest.
+
+check_flash.sh builds the firmware for the ATtiny816 with arduino-cli, with
+debug output and without (DEBUG_OUTPUT 0, as flashed), and reports how much
+of the 8 KB of flash and 512 bytes of RAM each uses. It fails if either
+doesn't fit, and warns when one has less than 256 bytes of flash left.
+
+Both run on GitHub for every pull request that changes the firmware
+(.github/workflows/firmware.yml), with the sizes in the run's summary.
