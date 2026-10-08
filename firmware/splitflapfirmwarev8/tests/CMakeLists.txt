@@ -35,6 +35,7 @@ add_executable(firmware_tests
   fakes/fake_hardware.cpp
   harness.cpp
   test_bus.cpp
+  test_flap_offsets.cpp
   test_module.cpp
   test_motion.cpp
 )
