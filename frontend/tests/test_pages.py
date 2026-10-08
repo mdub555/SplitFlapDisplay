@@ -63,10 +63,7 @@ class PageTest(unittest.TestCase):
         letters = {value for name, value in vars(Cmd).items() if not name.startswith('_')}
         offered = [command['cmd'] for command in DEBUG_COMMANDS if command['cmd']]
         self.assertEqual(set(offered), letters)
-        # A letter is offered once, except where it does two things: J with
-        # a value sets a flap offset, without one dumps them.
-        forms = [(command['cmd'], bool(command['params'])) for command in DEBUG_COMMANDS if command['cmd']]
-        self.assertEqual(len(forms), len(set(forms)), 'a command is offered twice')
+        self.assertEqual(len(offered), len(set(offered)), 'a command is offered twice')
         for command in DEBUG_COMMANDS:
             with self.subTest(command=command['key']):
                 self.assertIn(f'<option value="{command["key"]}">', self.html)

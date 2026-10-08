@@ -108,7 +108,7 @@ DEBUG_COMMANDS = [
     _command('reset_settings', MODULE, 'Reset settings to defaults', Cmd.RESET_SETTINGS,
              hint='Resets every setting to its firmware default, keeping the ID, then reboots.',
              confirm='Reset ALL settings on {target} to their defaults?'),
-    _command('flap_offsets', MODULE, 'Dump flap offsets', Cmd.SET_FLAP_OFFSET,
+    _command('flap_offsets', MODULE, 'Dump flap offsets', Cmd.DUMP_FLAP_OFFSETS,
              hint="Every flap's offset, from the module's EEPROM. A busy module replies once it "
                   'finishes moving. The reply appears in the log below.',
              target='single'),

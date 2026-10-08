@@ -310,12 +310,13 @@ const debugPage = {
     line.append(...fields);
   },
 
-  // A flap offset reply (m<ID>J then two hex digits per flap, each the
+  // A flap offset reply (m<ID>% then two hex digits per flap, each the
   // offset in steps plus CONFIG.flap_offsets.zero) as {id, offsets} with
   // one signed offset per flap, or null if `text` isn't one.
   parseFlapOffsets(text) {
     const {marker, zero} = CONFIG.flap_offsets;
-    const match = text.trim().match(new RegExp(`^m(\\d+)${marker}((?:[0-9A-Fa-f]{2}){${CHAR_MAP.length}})$`));
+    const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = text.trim().match(new RegExp(`^m(\\d+)${escaped}((?:[0-9A-Fa-f]{2}){${CHAR_MAP.length}})$`));
     if (!match) return null;
     const offsets = match[2].match(/../g).map(hex => parseInt(hex, 16) - zero);
     return {id: match[1], offsets};

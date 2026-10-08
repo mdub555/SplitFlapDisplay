@@ -41,7 +41,7 @@ def client_config():
         ],
         'dump_format': dump_format(),
         # The flap offset dump, which the Debug page shows as signed steps.
-        'flap_offsets': {'marker': Cmd.SET_FLAP_OFFSET, 'zero': FLAP_OFFSET_ZERO},
+        'flap_offsets': {'marker': Cmd.DUMP_FLAP_OFFSETS, 'zero': FLAP_OFFSET_ZERO},
         # Everything the Debug page can send (see display/debug_commands.py).
         'debug_commands': DEBUG_COMMANDS,
         'broadcast': BROADCAST,

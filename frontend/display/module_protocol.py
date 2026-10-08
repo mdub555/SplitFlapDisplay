@@ -30,6 +30,7 @@ class Cmd:
     DUMP_STATE = '?'
     RESET_SETTINGS = '!'
     SET_MODULE_ID = '@'
+    DUMP_FLAP_OFFSETS = '%'
     # Settings
     SET_OFFSET = 'O'
     SET_TOTAL_STEPS = 'T'
@@ -44,8 +45,6 @@ class Cmd:
     SET_RAMP_STEPS = 'L'
     SET_SETTLE_MS = 'W'
     SET_STAGGER_MS = 'P'
-    # With a value, sets the offset of the flap showing; without, asks for
-    # every flap's offset (see FLAP_OFFSET_ZERO).
     SET_FLAP_OFFSET = 'J'
 
 
@@ -58,8 +57,9 @@ UNPROVISIONED_ID = 255
 
 # A flap offset goes on the wire, and is stored, as the offset in steps plus
 # this, so it needs no sign (FLAP_OFFSET_ZERO in the firmware's
-# eeprom_store.h). The offset dump (m<ID>J) replies m<ID>J and then each
-# flap's stored value as two hex digits, from flap 0.
+# eeprom_store.h). Cmd.SET_FLAP_OFFSET sets the offset of the flap showing;
+# the offset dump (m<ID>%) replies m<ID>% and then each flap's stored value
+# as two hex digits, from flap 0.
 FLAP_OFFSET_ZERO = 128
 
 

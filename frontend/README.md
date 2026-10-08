@@ -302,7 +302,7 @@ npm test
   compose UI accepts as `°` and `♥`.
 - Per-flap fine-tuning (the old `w<idx>:<pos>` and its Auto Fine-Tune wizard)
   is now the firmware's flap offsets: `J<n>` sets the offset of the flap
-  showing (steps + 128) and `J` alone dumps them all. Modules aren't expected
+  showing (steps + 128) and `%` dumps them all. Modules aren't expected
   to need it, so it's only on the Debug page, not the Modules page.
 - Backend tests: run `python -m unittest discover -s tests` from `frontend/`
   (the route tests need Flask). They cover the dump parser and protocol
