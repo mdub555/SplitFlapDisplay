@@ -196,7 +196,7 @@ void handleCommand(const Command& command) {
       break;
 
     case SET_MOTOR_CW:
-      EepromStore::saveMotorDir(/* clockwise= */ command.data.dataInt);
+      splitFlap.setMotorClockwise(command.data.dataInt);
       break;
 
     case SET_MOTOR_RELEASE:

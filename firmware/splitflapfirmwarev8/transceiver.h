@@ -73,15 +73,19 @@
 //            so the next move homes first
 //         T, Set the number of steps in a full rotation. data must be a number.
 //            A changed value stops any move and marks the position unknown,
-//            so the next move homes first
+//            so the next move homes first. A home offset of a revolution or
+//            more lands where its remainder does
 //         D, Set the debounce delay for the home sensor, in milliseconds
-//            (0-65535).
+//            (0-65535): how long the contact has to have been open before
+//            it closing counts as the home edge.
 //         E, Enable or disable recalculating home at each home edge. 1 to
 //            continuously recalculate, 0 to only calculate on home.
 //         A, Enable or disable auto-home. data must be 0 for disable, 1 for
 //            enable
 //         C, Set the motor direction. data must be 1 for clockwise, 0 for
-//            counter-clockwise
+//            counter-clockwise. A changed direction stops whatever the motor
+//            is doing and marks the position unknown, so the next move homes
+//            first
 //         F, Enable or disable freeing (releasing) the motor coils when idle.
 //            data must be 1 to release, 0 to keep them energized
 //         S, Set the delay between each motor step during normal operation, in
@@ -161,13 +165,16 @@ struct Command {
     char dataChar;
     uint16_t dataInt;
   };
-  Data data = {'0'};
+  Data data = {};
   uint16_t frameDelayMs = 0;  // FRAME: wait before moving to dataChar
 };
 
+// Every member has an initializer, so the global Transceiver is built at
+// compile time rather than by start-up code (which costs flash), and all of
+// them are 0 so it takes no flash at all.
 class Transceiver {
  private:
-  char buffer[BUFFER_SIZE];
+  char buffer[BUFFER_SIZE] = {};
   uint8_t bufferLen = 0;
   uint32_t lastSerialTime = 0;
 
@@ -176,7 +183,7 @@ class Transceiver {
   bool inFrame = false;
   uint16_t framePos = 0;       // bytes of pairs received so far
   uint8_t frameInterval = 0;   // ms per rank
-  char frameChar = ' ';        // this module's character, once received
+  char frameChar = 0;          // this module's character, once received
   uint8_t frameRank = 0;       // and its rank
   bool frameHit = false;       // both of this module's bytes received
 

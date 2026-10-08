@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <EEPROM.h>
+#include <stddef.h>
 
 namespace {
   // Every setting except the revolution count. The whole struct is stored as
@@ -58,6 +59,7 @@ namespace {
   const uint16_t ADDR_CONFIG      = 1;                     // sizeof(Config) bytes — the settings
   const uint16_t ADDR_REVOLUTIONS = 1 + sizeof(Config);    // 4 bytes — lifetime revolution count
   const uint16_t ADDR_FLAP_OFFSETS = ADDR_REVOLUTIONS + 4; // NUM_FLAP_OFFSETS bytes — one per flap
+  const uint16_t ADDR_MODULE_ID   = ADDR_CONFIG + offsetof(Config, moduleId);  // within the settings
   static_assert(ADDR_FLAP_OFFSETS + EepromStore::NUM_FLAP_OFFSETS <= EEPROM_SIZE,
                 "The settings don't fit in EEPROM");
 
@@ -67,6 +69,9 @@ namespace {
   // 0x08: the settings are stored as one Config block.
   // 0x09: the flap offsets follow the revolution count.
   const uint8_t INIT_VALUE = 0x09;
+  // Written to ADDR_INIT while a settings reset is under way, so a reset cut
+  // short by a power cut is finished on the next boot, keeping the ID.
+  const uint8_t INIT_RESETTING = INIT_VALUE | 0x80;
 
   Config config;
 
@@ -77,24 +82,36 @@ namespace {
 
 namespace EepromStore {
 void begin(uint8_t hardcodedId) {
-  if (!isInitialized()) {
+  uint8_t init = EEPROM.read(ADDR_INIT);
+  if (init != INIT_VALUE) {
+    if (init == INIT_RESETTING) {
+      // A settings reset was cut short: finish it, keeping the ID, which a
+      // reset never changes. (On a first boot cut short, it's whatever was
+      // there: unprovisioned on a new chip.)
+      hardcodedId = EEPROM.read(ADDR_MODULE_ID);
+    } else {
+      // First boot. The counter is only cleared here: it survives a
+      // settings reset. Cleared first, so if the power is cut while the
+      // defaults are written, the next boot can finish them as a reset.
+      saveRevolutions(0);
+    }
     writeDefaults(hardcodedId);
-    // Only on first initialization: the counter survives a settings reset.
-    saveRevolutions(0);
   }
   EEPROM.get(ADDR_CONFIG, config);
 }
 
 void writeDefaults(uint8_t hardcodedId) {
+  // Marked first, so a power cut part way through leaves a mix of old and
+  // default settings that the next boot knows to finish resetting.
+  EEPROM.update(ADDR_INIT, INIT_RESETTING);
   config = DEFAULTS;
   config.moduleId = hardcodedId;
   save();
   for (uint8_t flap = 0; flap < NUM_FLAP_OFFSETS; flap++) {
     saveFlapOffset(flap, FLAP_OFFSET_ZERO);
   }
-  // Last, so a power cut part way through leaves the module uninitialized
-  // and it starts again from the defaults on the next boot.
-  EEPROM.write(ADDR_INIT, INIT_VALUE);
+  // Last, to mark the defaults complete.
+  EEPROM.update(ADDR_INIT, INIT_VALUE);
 }
 
 bool isInitialized() {

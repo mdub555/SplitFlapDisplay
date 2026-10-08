@@ -34,7 +34,9 @@ const int8_t FLAP_BETWEEN = -2;  // the step position is known, but not on a fla
 
 class SplitFlap {
  public:
-  SplitFlap(DebugSerial* debugSerial);
+  // constexpr, so the global SplitFlap is built at compile time rather than
+  // by start-up code storing each member (which costs far more flash).
+  constexpr SplitFlap(DebugSerial* debugSerial) : debug(debugSerial) {}
 
   // ---- Setup and the update loop ----
 
@@ -113,6 +115,11 @@ class SplitFlap {
   // progress) and the next move homes first. No effect on a home or
   // calibration in progress.
   void setTotalSteps(uint16_t steps);
+
+  // Saves the motor direction. A changed direction reverses the reel, so it
+  // stops whatever the reel was doing (as stop()) and marks the position
+  // unknown, and the next move homes first.
+  void setMotorClockwise(bool clockwise);
 
   // ---- Per-flap correction ----
 

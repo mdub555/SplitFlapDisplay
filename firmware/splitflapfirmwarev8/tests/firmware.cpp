@@ -15,6 +15,7 @@ namespace Module {
     dumpPending = false;
     dumpDelayMs = 0;
     dumpAtMs = 0;
+    flapOffsetsPending = false;
     identifyStartMs = 0;
     identifying = false;
   }
