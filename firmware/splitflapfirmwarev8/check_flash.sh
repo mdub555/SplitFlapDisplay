@@ -30,6 +30,14 @@ if ! command -v "$ARDUINO_CLI" > /dev/null; then
   exit 2
 fi
 
+# arduino-cli looks up the upload port in sketch.yaml (default_port) even
+# just to compile, and stops if nothing is plugged in there. So the build is
+# of a copy of the sketch whose sketch.yaml has no upload port.
+COPY="$BUILD_DIR/sketch/$(basename "$SKETCH")"
+mkdir -p "$COPY"
+cp "$SKETCH"/*.ino "$SKETCH"/*.cpp "$SKETCH"/*.h "$COPY"/
+grep -vE '^default_(port|protocol):' "$SKETCH/sketch.yaml" > "$COPY/sketch.yaml"
+
 failed=0
 summary="| Build | Flash used | Flash free | RAM used |\n|---|---|---|---|\n"
 
@@ -49,7 +57,7 @@ check_build() {
   local name=$1 flags=$2 output
   echo "Building $name..."
   if ! output=$("$ARDUINO_CLI" compile --profile attiny816 --build-path "$BUILD_DIR/$name" \
-                  --build-property "compiler.cpp.extra_flags=$flags" "$SKETCH" 2>&1); then
+                  --build-property "compiler.cpp.extra_flags=$flags" "$COPY" 2>&1); then
     echo "$output"
     report error "The $name build failed, or doesn't fit (see above)."
     failed=1
