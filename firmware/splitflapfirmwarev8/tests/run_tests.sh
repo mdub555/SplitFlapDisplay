@@ -1,25 +1,16 @@
 #!/usr/bin/env bash
 # Builds the firmware on this computer against fake hardware (tests/fakes/)
-# and runs the tests. Needs only a C++17 compiler (g++ or clang++).
+# and runs the tests, each in its own process. Needs CMake 3.24+ and a C++17
+# compiler; the first run downloads GoogleTest unless it's installed.
 #
 #   tests/run_tests.sh            run every test
-#   tests/run_tests.sh frame      run the tests whose names contain "frame"
+#   tests/run_tests.sh Frame      run the tests whose names match "Frame"
 set -euo pipefail
 
 TESTS="$(cd "$(dirname "$0")" && pwd)"
-SKETCH="$(dirname "$TESTS")"
 BUILD="${BUILD_DIR:-$TESTS/build}"
-CXX="${CXX:-g++}"
-mkdir -p "$BUILD"
 
-# Debug output is compiled out: it bit-bangs a pin with interrupts off.
-"$CXX" -std=gnu++17 -O1 -g -Wall -Werror \
-  -DDEBUG_OUTPUT=0 -I"$TESTS/fakes" -I"$SKETCH" \
-  "$TESTS/firmware.cpp" \
-  "$SKETCH/splitflap.cpp" "$SKETCH/transceiver.cpp" "$SKETCH/eeprom_store.cpp" \
-  "$SKETCH/home_sensor.cpp" "$SKETCH/motor.cpp" \
-  "$TESTS/fakes/fake_hardware.cpp" "$TESTS/harness.cpp" "$TESTS/main.cpp" \
-  "$TESTS"/test_*.cpp \
-  -o "$BUILD/firmware_tests"
-
-"$BUILD/firmware_tests" "$@"
+cmake -S "$TESTS" -B "$BUILD" -DCMAKE_BUILD_TYPE=Debug > /dev/null
+cmake --build "$BUILD" --parallel
+ctest --test-dir "$BUILD" --output-on-failure --parallel "$(nproc 2>/dev/null || sysctl -n hw.ncpu)" \
+  ${1:+--tests-regex "$1"}

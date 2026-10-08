@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#include "test.h"
+#include <gtest/gtest.h>
 
 namespace {
   // Simulated time each pass through loop() takes. Short against the step
@@ -22,7 +22,7 @@ namespace Module {
     boot();
     send("m*@" + std::to_string(id));
     runMs(1);
-    CHECK_EQ(EepromStore::getModuleId(), id);
+    EXPECT_EQ(EepromStore::getModuleId(), id);
   }
 
   void sendRaw(const std::string& bytes) { Serial.rx += bytes; }
@@ -47,7 +47,7 @@ namespace Module {
 
   void sendAndSettle(const std::string& message) {
     send(message);
-    CHECK(runUntilIdle());
+    EXPECT_TRUE(runUntilIdle());
   }
 
   std::string takeOutput() {
@@ -58,8 +58,8 @@ namespace Module {
 
   void home() {
     sendAndSettle("m" + std::to_string(EepromStore::getModuleId()) + "h");
-    CHECK_EQ(splitFlap().currentFlapIndex(), (int8_t)0);
-    CHECK_EQ(flapShowing(), 0);
+    EXPECT_EQ(splitFlap().currentFlapIndex(), 0);
+    EXPECT_EQ(flapShowing(), 0);
   }
 
   int flapShowing() {
