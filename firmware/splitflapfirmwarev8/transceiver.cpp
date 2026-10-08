@@ -33,10 +33,11 @@ namespace {
     ArgKind arg;
   };
 
-  // The letters also used outside COMMANDS: the frame header, and the dump
-  // reply, which is marked with the dump command's letter.
+  // The letters also used outside COMMANDS: the frame header, and the
+  // replies, each marked with the letter of the command it answers.
   const char FRAME_CODE = 'f';
   const char DUMP_CODE = '?';
+  const char FLAP_OFFSETS_CODE = '%';
 
   // Labels for the dump's two read-only fields. The settings in a dump are
   // labelled with the letter that sets them.
@@ -61,6 +62,7 @@ namespace {
     {DUMP_CODE, DUMP_STATE,      ARG_NONE},
     {'!', RESET_SETTINGS,        ARG_NONE},
     {'@', SET_MODULE_ID,         ARG_INT_BYTE},
+    {FLAP_OFFSETS_CODE, DUMP_FLAP_OFFSETS, ARG_NONE},
     // Settings
     {'O', SET_OFFSET,            ARG_INT_BELOW_TOTAL},
     {'T', SET_TOTAL_STEPS,       ARG_INT_NONZERO},
@@ -75,6 +77,7 @@ namespace {
     {'L', SET_RAMP_STEPS,        ARG_INT_BYTE},
     {'W', SET_SETTLE_MS,         ARG_INT_BYTE},
     {'P', SET_STAGGER_MS,        ARG_INT_BYTE},
+    {'J', SET_FLAP_OFFSET,       ARG_INT_BYTE},
   };
 
   // The COMMANDS entry for the letter `c`, or nullptr if there isn't one.
@@ -160,6 +163,12 @@ namespace {
                 EepromStore::getModuleId() != EepromStore::UNPROVISIONED_ID) {
               return false;
             }
+            // Flap offsets are per module, and every module's offset dump at
+            // once would collide on the bus.
+            if ((command.type == SET_FLAP_OFFSET || command.type == DUMP_FLAP_OFFSETS) &&
+                command.broadcast) {
+              return false;
+            }
             switch (arg) {
               case ARG_NONE:
                 return true;
@@ -215,6 +224,20 @@ void Transceiver::begin(long baud) {
 }
 
 namespace {
+  // Starts a reply: m, this module's ID (at least two digits), and the
+  // letter of the command it answers.
+  void printReplyHeader(char code) {
+    Serial.print('m');
+    uint8_t id = EepromStore::getModuleId();
+    if (id < 10) Serial.print('0');
+    Serial.print(id);
+    Serial.print(code);
+  }
+
+  void printHexDigit(uint8_t digit) {
+    Serial.print((char)(digit < 10 ? '0' + digit : 'A' - 10 + digit));
+  }
+
   // Starts a dump field: a tab, then the field's label.
   void printFieldLabel(char code) {
     Serial.print('\t');
@@ -232,11 +255,7 @@ namespace {
 }
 
 void Transceiver::dump(uint32_t revolutions, int16_t drift) {
-  Serial.print("m");
-  uint8_t id = EepromStore::getModuleId();
-  if (id < 10) Serial.print("0");
-  Serial.print(id);
-  Serial.print(DUMP_CODE);
+  printReplyHeader(DUMP_CODE);
   printField(SET_OFFSET, EepromStore::getHomeOffset());
   printField(SET_TOTAL_STEPS, EepromStore::getTotalSteps());
   printField(SET_DEBOUNCE_MS, EepromStore::getDebounceMs());
@@ -254,6 +273,16 @@ void Transceiver::dump(uint32_t revolutions, int16_t drift) {
   Serial.print(revolutions);
   printFieldLabel(DRIFT_CODE);
   Serial.println(drift);
+}
+
+void Transceiver::dumpFlapOffsets() {
+  printReplyHeader(FLAP_OFFSETS_CODE);
+  for (uint8_t flap = 0; flap < EepromStore::NUM_FLAP_OFFSETS; flap++) {
+    uint8_t offset = EepromStore::getFlapOffset(flap);
+    printHexDigit(offset >> 4);
+    printHexDigit(offset & 0xF);
+  }
+  Serial.println();
 }
 
 const char* Transceiver::message() const { return buffer; }

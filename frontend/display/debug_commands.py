@@ -8,11 +8,13 @@ Each command is a dict the page reads from CONFIG.debug_commands:
   label     how the dropdown names it
   cmd       the command letter (see Cmd)
   target    'module': sent to the chosen module ID, or * to broadcast
+            'single': sent to the chosen module ID only
             'broadcast': always sent to every module (m*...)
             'none': the message is typed out in full
   format    how the message is built: 'plain' (m<ID><cmd><value>),
             'frame' (m*f<interval>:<pairs>) or 'raw' (sent as typed)
-  params    the inputs it takes, in order (see _int, _bool, ...)
+  params    the inputs it takes, in order (see _int, _bool, ...). An int's
+            bias is added to the value typed before it's sent
   hint      shown under the inputs
   confirm   if set, asked before sending ({target} is the module it goes to)
   dump_after  offer to request a state dump straight afterwards
@@ -20,12 +22,12 @@ Each command is a dict the page reads from CONFIG.debug_commands:
 
 from display.charset import NUM_FLAPS
 from display.module_protocol import (
-    FRAME_MAX_MODULES, GLOBAL_SETTINGS, MODULE_TOGGLES, UNPROVISIONED_ID, Cmd)
+    FLAP_OFFSET_ZERO, FRAME_MAX_MODULES, GLOBAL_SETTINGS, MODULE_TOGGLES, UNPROVISIONED_ID, Cmd)
 
 
-def _int(name, label, lo, hi, default=None, unit=''):
+def _int(name, label, lo, hi, default=None, unit='', bias=0):
     return {'name': name, 'kind': 'int', 'label': label, 'min': lo, 'max': hi,
-            'default': default, 'unit': unit}
+            'default': default, 'unit': unit, 'bias': bias}
 
 
 def _bool(name, label, on='Yes (1)', off='No (0)', default=True):
@@ -106,6 +108,10 @@ DEBUG_COMMANDS = [
     _command('reset_settings', MODULE, 'Reset settings to defaults', Cmd.RESET_SETTINGS,
              hint='Resets every setting to its firmware default, keeping the ID, then reboots.',
              confirm='Reset ALL settings on {target} to their defaults?'),
+    _command('flap_offsets', MODULE, 'Dump flap offsets', Cmd.DUMP_FLAP_OFFSETS,
+             hint="Every flap's offset, from the module's EEPROM. A busy module replies once it "
+                  'finishes moving. The reply appears in the log below.',
+             target='single'),
     # Settings
     _command('offset', SETTINGS, 'Set home offset', Cmd.SET_OFFSET,
              [_int('value', 'Home offset', 0, 65535, None, 'steps')],
@@ -125,6 +131,13 @@ DEBUG_COMMANDS = [
     _global_setting('rampSteps'),
     _global_setting('settleMs'),
     _global_setting('staggerMs'),
+    _command('flap_offset', SETTINGS, 'Set flap offset (flap showing)', Cmd.SET_FLAP_OFFSET,
+             [_int('offset', 'Offset', -FLAP_OFFSET_ZERO, 255 - FLAP_OFFSET_ZERO, 0, 'steps',
+                   bias=FLAP_OFFSET_ZERO)],
+             'Shifts the flap showing (show it first) this many steps from its even position, '
+             'and turns to it; lowering an offset takes nearly a full revolution. Ignored for '
+             'flap 0 (set the home offset instead), or while the module is moving.',
+             target='single'),
     # Utilities
     _command('raw', UTILITIES, 'Send raw message', None,
              [{'name': 'message', 'kind': 'text', 'label': 'Message', 'placeholder': 'e.g. m05-B'}],

@@ -300,12 +300,10 @@ npm test
   backend. Characters with no flap (e.g. `;` and `'`) are sent as a
   blank. On the v8 reels `d` and `h` are the degree sign and heart, which the
   compose UI accepts as `°` and `♥`.
-- Per-character EEPROM fine-tuning (`w<idx>:<pos>`, the old Auto Fine-Tune
-  wizard) has been removed from both the backend and frontend per the
-  "modules don't need fine tuning" decision — only home offset and total
-  steps/revolution remain configurable. If any modules DO need per-character
-  correction later, that functionality no longer exists and would need to be
-  rebuilt.
+- Per-flap fine-tuning (the old `w<idx>:<pos>` and its Auto Fine-Tune wizard)
+  is now the firmware's flap offsets: `J<n>` sets the offset of the flap
+  showing (steps + 128) and `%` dumps them all. Modules aren't expected
+  to need it, so it's only on the Debug page, not the Modules page.
 - Backend tests: run `python -m unittest discover -s tests` from `frontend/`
   (the route tests need Flask). They cover the dump parser and protocol
   (checked against the firmware source), the module, settings, playlist and

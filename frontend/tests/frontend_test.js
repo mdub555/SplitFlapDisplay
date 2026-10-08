@@ -429,6 +429,17 @@ async function main() {
   check('a garbled reply is shown as received', !garbled.classList.contains('dump') &&
     garbled.textContent.endsWith('RECV: m07?\tO48x'));
   check('other received text is shown as received', noise.textContent.endsWith('RECV: junk'));
+  const offsetsBefore = logLines().length;
+  const offsetHex = '80'.repeat(3) + '7D' + '83' + '80'.repeat(58) + '0A';
+  serialLog.emit({ msg: `RECV: m05%${offsetHex}\r\nm06%${'80'.repeat(64)}\r\nm07%8080\r\n` });
+  await sleep(10);
+  const [offsetsLine, noOffsets, shortOffsets] = logLines().slice(offsetsBefore);
+  check('a flap offset reply lists the flaps with an offset, as signed steps',
+    [...offsetsLine.querySelectorAll('.dump-field')].map(f => f.textContent).join('|') ===
+      'flap 3 C -3 steps|flap 4 D +3 steps|flap 63 🟪 (p) -118 steps' &&
+    offsetsLine.textContent.includes('RECV m05% (module 05) flap offsets: ') && offsetsLine.title === `m05%${offsetHex}`);
+  check('a flap offset reply with none says so', noOffsets.textContent.endsWith('flap offsets: none'));
+  check('a short flap offset reply is shown as received', shortOffsets.textContent.endsWith('RECV: m07%8080'));
 
   console.log('\n--- Debug page builds and sends any command ---');
   const debugSelect = document.getElementById('debugCommand');
@@ -463,6 +474,15 @@ async function main() {
   const broadcast = document.getElementById('debugBroadcast');
   broadcast.checked = true; change(broadcast);
   check('broadcast sends to *', preview() === 'm*C0' && document.getElementById('debugModuleId').disabled);
+  choose('flap_offset');
+  check('a flap offset can\'t be broadcast, and is sent as steps + 128',
+    preview() === 'm10J128' && broadcast.disabled && !document.getElementById('debugModuleId').disabled);
+  typeInto(param('offset'), '-3');
+  check('a negative flap offset is sent below 128', preview() === 'm10J125');
+  typeInto(param('offset'), '128');
+  check('a flap offset past +127 is refused', document.getElementById('debugSend').disabled);
+  choose('flap_offsets');
+  check('the flap offset dump goes to one module', preview() === 'm10%' && broadcast.disabled);
   broadcast.checked = false; change(broadcast);
   choose('frame');
   typeInto(param('text'), 'HI!');

@@ -57,12 +57,16 @@ namespace {
   const uint16_t ADDR_INIT        = 0;                     // 1 byte — magic number, see INIT_VALUE
   const uint16_t ADDR_CONFIG      = 1;                     // sizeof(Config) bytes — the settings
   const uint16_t ADDR_REVOLUTIONS = 1 + sizeof(Config);    // 4 bytes — lifetime revolution count
+  const uint16_t ADDR_FLAP_OFFSETS = ADDR_REVOLUTIONS + 4; // NUM_FLAP_OFFSETS bytes — one per flap
+  static_assert(ADDR_FLAP_OFFSETS + EepromStore::NUM_FLAP_OFFSETS <= EEPROM_SIZE,
+                "The settings don't fit in EEPROM");
 
   // Magic value written to ADDR_INIT to indicate EEPROM has been initialized.
   // Changing this value forces all modules to reset to defaults on next boot,
-  // so change it whenever Config changes.
+  // so change it whenever Config or the layout above changes.
   // 0x08: the settings are stored as one Config block.
-  const uint8_t INIT_VALUE = 0x08;
+  // 0x09: the flap offsets follow the revolution count.
+  const uint8_t INIT_VALUE = 0x09;
 
   Config config;
 
@@ -85,6 +89,9 @@ void writeDefaults(uint8_t hardcodedId) {
   config = DEFAULTS;
   config.moduleId = hardcodedId;
   save();
+  for (uint8_t flap = 0; flap < NUM_FLAP_OFFSETS; flap++) {
+    saveFlapOffset(flap, FLAP_OFFSET_ZERO);
+  }
   // Last, so a power cut part way through leaves the module uninitialized
   // and it starts again from the defaults on the next boot.
   EEPROM.write(ADDR_INIT, INIT_VALUE);
@@ -135,6 +142,14 @@ uint8_t getSettleMs() { return config.settleMs; }
 
 void saveStaggerMs(uint8_t ms) { config.staggerMs = ms; save(); }
 uint8_t getStaggerMs() { return config.staggerMs; }
+
+void saveFlapOffset(uint8_t flap, uint8_t offset) {
+  EEPROM.update(ADDR_FLAP_OFFSETS + flap, offset);
+}
+
+uint8_t getFlapOffset(uint8_t flap) {
+  return EEPROM.read(ADDR_FLAP_OFFSETS + flap);
+}
 
 void saveRevolutions(uint32_t revolutions) {
   EEPROM.put(ADDR_REVOLUTIONS, revolutions);

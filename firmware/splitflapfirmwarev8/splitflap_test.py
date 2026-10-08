@@ -23,6 +23,7 @@ transceiver.h for the full reference):
     m<ID>?              Dump state (reply: m<ID>?\\tO480\\tT4096...)
     m<ID>!              Reset all settings to defaults (keeps ID), reboot
     m<ID>@<n>           Set module ID                  e.g. m255@5
+    m<ID>%              Dump flap offsets (reply: m<ID>% + 2 hex digits per flap)
 
   Settings (saved to EEPROM)
     m<ID>O<n>  Home offset, steps (0 = make current position blank flap)
@@ -38,6 +39,8 @@ transceiver.h for the full reference):
     m<ID>L<n>  Ramp length, steps (0–255, 0 = no ramp)
     m<ID>W<n>  Settle time before releasing coils, ms (0–255)
     m<ID>P<n>  Power-on stagger, ms per module ID (0–255)
+    m<ID>J<n>  Offset of the flap showing, steps + 128 (128 = none), then
+               move to it. Not flap 0, not broadcast
 
   Use * as ID to broadcast to all modules.
 
@@ -123,6 +126,29 @@ DUMP_FIELDS = {
     "~": ("last drift",           "steps"),
 }
 
+# A stored flap offset is the offset in steps plus this (FLAP_OFFSET_ZERO in
+# eeprom_store.h), so it's sent without a sign.
+FLAP_OFFSET_ZERO = 128
+
+def format_flap_offsets(line):
+    """
+    Pretty-print a flap offset dump ("m05%8080837D..."), listing the flaps
+    with an offset, or return None if the line isn't one.
+    """
+    head, _, hexes = line.partition("%")
+    if not (head.startswith("m") and head[1:].isdigit() and len(hexes) == 2 * NUM_FLAPS):
+        return None
+    try:
+        offsets = [int(hexes[i:i + 2], 16) - FLAP_OFFSET_ZERO for i in range(0, len(hexes), 2)]
+    except ValueError:
+        return None
+    out = [bold(f"Module {int(head[1:])} flap offsets:")]
+    out += [f"      {i:>2}  {flap_label(flap_char(i)):<12} {offset:+d} steps"
+            for i, offset in enumerate(offsets) if offset]
+    if len(out) == 1:
+        out.append("      (none)")
+    return "\n".join(out)
+
 def format_dump(line):
     """
     Pretty-print a dump reply ("m05?\\tO480\\tT4096..."), or return None if the
@@ -175,8 +201,8 @@ _listener_running = False
 def start_listener(ser):
     """
     Spawn a daemon thread that prints any lines arriving from the bus.
-    Modules only transmit in response to '?' (dump state); dump replies are
-    decoded into one field per line.
+    Modules only transmit in response to '?' (dump state) and '%' (flap
+    offsets); both replies are decoded, one field or flap per line.
     """
     global _listener_running
     _listener_running = True
@@ -195,7 +221,7 @@ def start_listener(ser):
                     line = line.strip()
                     if line:
                         print(yellow(f"\n  ← {line!r}"))
-                        pretty = format_dump(line)
+                        pretty = format_dump(line) or format_flap_offsets(line)
                         if pretty:
                             print(yellow(f"    {pretty}"))
                         print(bold("command> "), end="", flush=True)
@@ -423,6 +449,32 @@ def make_setting_handler(letter, prompt, lo, hi, note):
     handler.__doc__ = f"m<ID>{letter}<n>"
     return handler
 
+# ── Flap offsets ───────────────────────────────────────────────────────────────
+
+def prompt_module_id():
+    """Ask for one module's ID (no broadcast)."""
+    while True:
+        raw = input(bold("  Module ID: ")).strip()
+        if raw.isdigit() and int(raw) <= 255:
+            return f"{int(raw):02d}"
+        print(red("  Enter a number 0–255"))
+
+def cmd_set_flap_offset(ser):
+    """m<ID>J<n>  — set the offset of the flap showing, then move to it."""
+    print(dim("  (show the flap first; flap 0 is placed by the home offset instead)"))
+    mid = prompt_module_id()
+    offset = prompt_int("Offset in steps (-128–127, 0 = none)", -FLAP_OFFSET_ZERO, 255 - FLAP_OFFSET_ZERO)
+    if offset is None:
+        return
+    send(ser, build_message(mid, f"J{offset + FLAP_OFFSET_ZERO}"))
+    print(dim("  (a smaller offset turns the reel nearly a full revolution to get there)"))
+
+def cmd_dump_flap_offsets(ser):
+    """m<ID>%  — dump every flap's offset.  Reply decoded by the listener."""
+    mid = prompt_module_id()
+    send(ser, build_message(mid, "%"))
+    time.sleep(0.5)
+
 # ── Utilities ──────────────────────────────────────────────────────────────────
 
 def cmd_raw(ser):
@@ -463,11 +515,13 @@ MENU = [
     ("Frame broadcast (all modules)", cmd_frame),
     ("Module", None),
     ("Dump module state",            cmd_dump),
+    ("Dump flap offsets",            cmd_dump_flap_offsets),
     ("Set module ID",                cmd_set_id),
     ("Reset settings to defaults",   cmd_reset_settings),
     ("Settings (saved to EEPROM)", None),
     *[(label, make_setting_handler(letter, prompt, lo, hi, note))
       for letter, label, prompt, lo, hi, note in SETTINGS],
+    ("Set flap offset (flap showing)", cmd_set_flap_offset),
     ("Utilities", None),
     ("Send raw message",             cmd_raw),
     ("Show flap character table",    cmd_show_flap_table),

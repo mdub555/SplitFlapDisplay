@@ -1,6 +1,7 @@
 // The Debug page: send any command in the firmware's protocol to a module
 // (or all of them), watch every message sent or received on the bus, and
-// look up the flap character table. Dump replies are shown as labelled values.
+// look up the flap character table. Dump replies are shown as labelled values,
+// and flap offset replies as the flaps that have one.
 
 // What a character typed or shown in the UI is sent as: colour emoji, °, ♥
 // and " become their codes on the wire; anything else is sent as typed.
@@ -35,12 +36,26 @@ const debugPage = {
     return DEBUG_COMMANDS[byId('debugCommand').value];
   },
 
+  // Whether the chosen command is sent to a module ID, and whether it may be
+  // broadcast instead.
+  takesModuleId() {
+    return ['module', 'single'].includes(this.command().target);
+  },
+
+  canBroadcast() {
+    return this.command().target === 'module';
+  },
+
+  broadcasting() {
+    return this.canBroadcast() && byId('debugBroadcast').checked;
+  },
+
   // Builds the inputs for the chosen command.
   selectCommand() {
     const command = this.command();
-    const target = command.target === 'module';
-    byId('debugModuleId').disabled = !target || byId('debugBroadcast').checked;
-    byId('debugBroadcast').disabled = !target;
+    const target = this.takesModuleId();
+    byId('debugModuleId').disabled = !target || this.broadcasting();
+    byId('debugBroadcast').disabled = !this.canBroadcast();
     byId('debugTarget').classList.toggle('disabled', !target);
     byId('debugCommandHint').textContent = command.hint;
     byId('debugParams').replaceChildren(
@@ -79,7 +94,7 @@ const debugPage = {
 
   // The chosen module ID, as it goes on the wire (two or more digits, or *).
   target() {
-    if (byId('debugBroadcast').checked) return {wire: CONFIG.broadcast, name: 'every module'};
+    if (this.broadcasting()) return {wire: CONFIG.broadcast, name: 'every module'};
     const raw = byId('debugModuleId').value.trim();
     const id = Number(raw);
     if (!/^\d+$/.test(raw) || id > CONFIG.max_module_id) {
@@ -99,7 +114,7 @@ const debugPage = {
         if (value.trim() === '' || !Number.isInteger(n) || n < param.min || n > param.max) {
           return {error: `${param.label} must be a whole number from ${param.min} to ${param.max}`};
         }
-        values.push(String(n));
+        values.push(String(n + param.bias));
       } else {
         values.push(value);
       }
@@ -148,10 +163,11 @@ const debugPage = {
   // Shows the message that would be sent, and what the target and inputs mean.
   updatePreview() {
     const target = this.target();
-    byId('debugModuleHint').textContent = this.command().target !== 'module'
+    const single = this.command().target === 'single' ? ' This command can\'t be broadcast.' : '';
+    byId('debugModuleHint').textContent = !this.takesModuleId()
       ? (this.command().target === 'broadcast' ? 'This command always goes to every module.'
                                                : 'The message is sent exactly as typed.')
-      : (target.error || `Sends to ${target.name} (IDs are typed in decimal, shown elsewhere in hex).`);
+      : (target.error || `Sends to ${target.name} (IDs are typed in decimal, shown elsewhere in hex).${single}`);
 
     const built = this.build();
     const preview = byId('debugPreview');
@@ -255,7 +271,9 @@ const debugPage = {
     msg.slice('RECV:'.length).split(/\r?\n/).forEach(text => {
       if (!text.trim()) return;
       const dump = this.parseDump(text);
+      const offsets = dump ? null : this.parseFlapOffsets(text);
       if (dump) this.appendDump(dump, text.trim());
+      else if (offsets) this.appendFlapOffsets(offsets, text.trim());
       else this.appendLine(`RECV: ${text.trim()}`);
     });
   },
@@ -287,6 +305,34 @@ const debugPage = {
     });
     const line = this.appendLine(
       `RECV m${dump.id}${CONFIG.dump_format.marker} (module ${formatModuleId(Number(dump.id))}): `);
+    line.classList.add('dump');
+    line.title = raw;
+    line.append(...fields);
+  },
+
+  // A flap offset reply (m<ID>% then two hex digits per flap, each the
+  // offset in steps plus CONFIG.flap_offsets.zero) as {id, offsets} with
+  // one signed offset per flap, or null if `text` isn't one.
+  parseFlapOffsets(text) {
+    const {marker, zero} = CONFIG.flap_offsets;
+    const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = text.trim().match(new RegExp(`^m(\\d+)${escaped}((?:[0-9A-Fa-f]{2}){${CHAR_MAP.length}})$`));
+    if (!match) return null;
+    const offsets = match[2].match(/../g).map(hex => parseInt(hex, 16) - zero);
+    return {id: match[1], offsets};
+  },
+
+  // Lists the flaps that have an offset; most have none.
+  appendFlapOffsets({id, offsets}, raw) {
+    const fields = [];
+    offsets.forEach((offset, flap) => {
+      if (!offset) return;
+      if (fields.length) fields.push(' · ');
+      fields.push(el('span', {class: 'dump-field', dataset: {flap}},
+        `flap ${flap} ${this.flapLabel(CHAR_MAP[flap])} ${offset > 0 ? '+' : ''}${offset} steps`));
+    });
+    const line = this.appendLine(`RECV m${id}${CONFIG.flap_offsets.marker} (module ${formatModuleId(Number(id))}) ` +
+      `flap offsets: ${fields.length ? '' : 'none'}`);
     line.classList.add('dump');
     line.title = raw;
     line.append(...fields);

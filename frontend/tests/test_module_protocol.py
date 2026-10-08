@@ -13,7 +13,7 @@ FIRMWARE = os.path.join(os.path.dirname(FRONTEND), 'firmware', 'splitflapfirmwar
 sys.path.insert(0, FRONTEND)
 
 from display.module_protocol import (  # noqa: E402
-    BROADCAST, DUMP_DRIFT, DUMP_FIELDS, DUMP_REVOLUTIONS, DUMP_SLOT_S, UNPROVISIONED_ID, Cmd,
+    BROADCAST, DUMP_DRIFT, DUMP_FIELDS, DUMP_REVOLUTIONS, DUMP_SLOT_S, FLAP_OFFSET_ZERO, UNPROVISIONED_ID, Cmd,
     dump_format, dump_reply_pattern, message, parse_dump_fields)
 
 
@@ -72,6 +72,10 @@ class MatchesFirmwareTest(unittest.TestCase):
     def test_dump_slot_matches(self):
         slot_ms = re.search(r'DUMP_SLOT_MS = (\d+);', _firmware('splitflapfirmwarev8.ino')).group(1)
         self.assertAlmostEqual(DUMP_SLOT_S, int(slot_ms) / 1000)
+
+    def test_flap_offset_zero_matches(self):
+        zero = re.search(r'FLAP_OFFSET_ZERO = (\d+);', _firmware('eeprom_store.h')).group(1)
+        self.assertEqual(FLAP_OFFSET_ZERO, int(zero))
 
     def test_unprovisioned_id_matches(self):
         firmware_id = re.search(r'UNPROVISIONED_ID = (\d+);', _firmware('eeprom_store.h')).group(1)
