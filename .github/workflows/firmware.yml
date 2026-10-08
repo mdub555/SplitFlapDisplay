@@ -1,0 +1,38 @@
+# Checks the module firmware: runs its tests on the host, and builds it for
+# the ATtiny816 to check it still fits in flash.
+name: Firmware
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - firmware/splitflapfirmwarev8/**
+      - .github/workflows/firmware.yml
+  pull_request:
+    paths:
+      - firmware/splitflapfirmwarev8/**
+      - .github/workflows/firmware.yml
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run the tests
+        run: firmware/splitflapfirmwarev8/tests/run_tests.sh
+
+  flash-size:
+    name: Flash size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      # megaTinyCore and its toolchain, as pinned in sketch.yaml.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.arduino15
+          key: arduino15-${{ hashFiles('firmware/splitflapfirmwarev8/sketch.yaml') }}
+      - name: Build for the ATtiny816 and check the size
+        run: firmware/splitflapfirmwarev8/check_flash.sh
