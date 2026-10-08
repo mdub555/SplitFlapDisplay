@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from apps.base import App, SettingField  # noqa: E402
+from apps.base import App, SettingField, clean_settings  # noqa: E402
 from apps.builtin.animations.base import AnimationApp  # noqa: E402
 from display.layout import STYLES  # noqa: E402
 
@@ -48,6 +48,46 @@ class AnimationAppTest(unittest.TestCase):
         self.assertEqual(Sparkle().get_pages({}, {})[0].delay, 0.3)
         self.assertEqual(Sparkle().get_pages({'anim_test_speed': '0.01'}, {})[0].delay, 0.2)
         self.assertEqual(Fixed().get_pages({}, {})[0].style, 'random')
+
+
+class CleanTest(unittest.TestCase):
+    """SettingField.clean(): values from the page as the field's type."""
+
+    SPEED = SettingField('speed', 'Speed', type='number', default='0.4', min='0.1', max='5')
+
+    def test_numbers(self):
+        self.assertEqual(self.SPEED.clean('2'), 2)
+        self.assertEqual(self.SPEED.clean(0.5), 0.5)
+        self.assertEqual(self.SPEED.clean(''), 0.4)      # blank is the default
+        self.assertEqual(self.SPEED.clean(None), 0.4)
+
+    def test_bad_numbers_name_the_field(self):
+        for value, message in (('fast', 'Speed must be a number'), (True, 'Speed must be a number'),
+                               ('nan', 'Speed must be a number'), (0, 'Speed must be at least 0.1'),
+                               (6, 'Speed must be at most 5'), ([1], 'Speed must be a number')):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, f'^{message}$'):
+                    self.SPEED.clean(value)
+
+    def test_checkboxes(self):
+        box = SettingField('on', 'On', type='checkbox')
+        self.assertIs(box.clean(True), True)
+        self.assertIs(box.clean('false'), False)
+        with self.assertRaisesRegex(ValueError, 'On must be on or off'):
+            box.clean('yes')
+
+    def test_selects_and_text(self):
+        order = SettingField('order', 'Order', type='select', opts=['ltr', 'rtl'])
+        self.assertEqual(order.clean('rtl'), 'rtl')
+        with self.assertRaisesRegex(ValueError, 'Order must be one of: ltr, rtl'):
+            order.clean('up')
+        name = SettingField('name', 'Name')
+        self.assertEqual(name.clean(42), '42')
+        with self.assertRaisesRegex(ValueError, 'Name must be text'):
+            name.clean({'a': 1})
+
+    def test_clean_settings_keeps_only_the_fields(self):
+        self.assertEqual(clean_settings([self.SPEED], {'speed': '1', 'other': 'x'}), {'speed': 1})
 
 
 class SettingTest(unittest.TestCase):

@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify
 
 from config import NUM_MODULES
 from display.state import state
+from display.pages import clean_playlist
 from display.module_protocol import BROADCAST, Cmd, message
 from display.serial_link import send_raw
 from routes.common import error, json_body, sse_response
@@ -42,30 +43,28 @@ def serial_send():
 
 @bp.route('/update_playlist', methods=['POST'])
 def update_playlist():
-    data = json_body()
-    state.current_playlist = data.get('pages', [])
-    state.loop_delay = data.get('delay', 5)
-    state.last_sent_page = None
-    state.set_active_app(None)
-    state.request_stop()
+    try:
+        pages, delay = clean_playlist(json_body())
+    except ValueError as e:
+        return error(str(e), 400)
+    state.run_playlist(pages, delay)
     return jsonify(status='success')
 
 
 @bp.route('/run_app', methods=['POST'])
 def run_app():
-    state.set_active_app(json_body().get('app'))
-    state.request_stop()
+    state.run_app(json_body().get('app'))
     return jsonify(status=f"App {state.active_app} started")
 
 
 @bp.route('/stop_app', methods=['POST'])
 def stop_app():
-    state.set_active_app(None)
-    state.request_stop()
+    """Stops whatever's running, an app or a playlist."""
+    state.stop()
     return jsonify(status='stopped')
 
 
-@bp.route('/home_all')
+@bp.route('/home_all', methods=['POST'])
 def home_all():
     send_raw(message(BROADCAST, Cmd.HOME))
     state.set_display(' ' * NUM_MODULES, [0] * NUM_MODULES)

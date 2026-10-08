@@ -11,31 +11,124 @@
   margin-top: 16px;
 }
 
-/* The global settings, below the app cards. */
+/* The schedule and the global settings, below the app cards. */
+.schedule-section,
 .global-settings {
   margin-top: 28px;
 }
 
+.schedule-section h3 {
+  margin-top: 0;
+}
+
+.schedule-status {
+  margin: 10px 0 12px;
+}
+
+.schedule-entries {
+  margin-bottom: 10px;
+}
+
+.schedule-entries:empty::before {
+  content: 'No time slots yet.';
+  color: var(--text-faint);
+  font-style: italic;
+  font-size: .85rem;
+}
+
+/* One time slot: its days, its times, what it shows, and its buttons. */
+.schedule-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  background: var(--surface-dark);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.schedule-entry select {
+  flex: 1;
+  min-width: 160px;
+}
+
+.schedule-days {
+  display: flex;
+  gap: 3px;
+}
+
+.day-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.day-chip span {
+  display: inline-block;
+  min-width: 34px;
+  padding: 4px 0;
+  text-align: center;
+  border: 1px solid var(--border-input);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: .75rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.day-chip input:checked + span {
+  background: var(--btn-primary);
+  border-color: var(--btn-primary);
+  color: var(--on-color);
+}
+
+.day-chip input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.schedule-default {
+  margin-top: 14px;
+}
+
+.schedule-default .input {
+  width: 100%;
+}
+
+/* A card is the app's run button, filling it, with the ⚙️ button on top. */
 .app-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 20px 12px 16px;
-  text-align: center;
-  cursor: pointer;
   transition: all .2s;
   position: relative;
 }
 
+.app-run {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 20px 12px 16px;
+  background: none;
+  border: none;
+  border-radius: inherit;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
 .app-card:hover {
   border-color: var(--accent);
-  background: #252525;
+  background: var(--hover);
   transform: translateY(-2px);
 }
 
 .app-card.running {
   border-color: var(--green);
-  background: #1a2a1a;
+  background: var(--success-bg);
 }
 
 .app-card.running::after {
@@ -73,7 +166,7 @@
   right: 8px;
   background: none;
   border: none;
-  color: var(--border-input);
+  color: var(--text-faint);
   cursor: pointer;
   font-size: 1rem;
   padding: 2px 4px;
@@ -82,17 +175,27 @@
 }
 
 .app-gear:hover {
-  color: #ccc;
+  color: var(--text);
   background: var(--border);
 }
 
 @media (max-width: 600px) {
+  .schedule-days {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .day-chip span {
+    min-width: 0;
+    width: 38px;
+  }
+
   .apps-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
   }
 
-  .app-card {
+  .app-run {
     padding: 14px 6px 12px;
   }
 

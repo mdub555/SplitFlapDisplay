@@ -22,15 +22,56 @@ pip install -r requirements.txt
 python app.py
 ```
 
+That's Flask's development server, which is fine for working on the app
+(it warns that it isn't meant for production). To serve it properly, use
+gunicorn, which the Docker image does:
+
+```
+gunicorn app:app
+```
+
+Run it from `frontend/`; it reads `gunicorn.conf.py` from there. That file
+keeps the app to **one worker process with threads**: the serial port, the
+display state and the background threads live in the app's process, so a
+second worker would fight over the port and run its own playlist. Don't
+raise `workers`, and don't turn on `preload_app` or `max_requests` (the
+file says why). It serves on port 80, or `SPLITFLAP_PORT`.
+
 Set `SPLITFLAP_ROWS` / `SPLITFLAP_COLS` env vars (or edit `config.py`) to
 match your hardware — everything (module count, animation layout, frontend
 grid rendering) derives from those two numbers. Defaults are 4x16. The UI is
 laid out for displays up to 4x16; bigger ones work but may not look as good.
 
 If `SPLITFLAP_SERIAL_PORT` can't be opened, the app logs a warning and runs
-in simulation mode — the UI works, but nothing physically moves. `/config`
-reports `hardware_connected` if you want to surface that in a future UI
-tweak.
+in simulation mode — the UI works, but nothing physically moves. The page
+says so with a SIMULATION badge next to LIVE DISPLAY (from
+`hardware_connected` in the live state; `/config` reports it too).
+
+The port can come and go while the app runs. If the USB adapter is unplugged,
+the next write or read fails, or a background check every 5 s notices; the
+badge appears, and the app carries on in simulation mode. Once the port is
+back it's reopened within 5 s, the badge goes, and the current page is sent
+again. (A re-plugged adapter can come back under a new name, ttyUSB1 instead
+of ttyUSB0; a `/dev/serial/by-id/...` path for `SPLITFLAP_SERIAL_PORT` stays
+the same.) Nothing that goes wrong while playing stops the playlist loop:
+errors are logged and it carries on.
+
+The web page is served on port 80, or `SPLITFLAP_PORT`. settings.json is
+written atomically (to a temporary file, then moved into place), so a power
+cut mid-save can't leave it half-written.
+
+### Docker
+
+`compose.yaml` builds the image and maps `APP_PORT` (from `.env`) to the
+container's port 5000. The container keeps settings.json on the
+`splitflap-settings` volume (`SPLITFLAP_CONFIG_PATH=/code/data/settings.json`
+in the Dockerfile), so rebuilding or updating keeps your calibrations,
+playlists and schedule. It serves with gunicorn (see above), not Flask's
+development server.
+
+Containers built before this change kept settings.json inside the container
+itself, where a rebuild loses it: download a backup (Modules → Backup &
+Restore) before updating, and restore it afterwards.
 
 The page gets everything the backend already knows (grid size, character
 set, animation styles, the firmware settings and module toggles with their
@@ -74,6 +115,105 @@ field's default. `apps/builtin/_shared.py` has helpers for the common parts
 (`center_page`, `row_frames`, `clock`, `split_list`). A colour animation can
 subclass `AnimationApp` (`apps/builtin/animations/base.py`) and only
 implement `frames()`; the update-order and speed settings are built for it.
+
+## Playlists, the schedule and the draft
+
+- **What's playing** is in every live-state snapshot: `active_app`, or
+  `playlist` (`{name, page, pages}`, `name` being null for one that was
+  pushed rather than saved), plus `scheduled` when the schedule started it.
+  The banner above the tabs shows it with a STOP button; `POST /stop_app`
+  stops an app or a playlist alike. `POST /playlists/<name>/run` plays a
+  saved playlist under its name, and saving the playlist that's playing
+  updates the display straight away.
+- **Saved playlists are edited in place**: Edit loads one and keeps its name
+  in the box, so Save updates it. Saving under a name that's already taken
+  by a different playlist asks first. **Rename** edits the name in its row
+  (`POST /playlists/<name>/rename`); the schedule's slots and default that
+  pointed at it, the playlist that's playing and the one being edited all
+  follow the new name. A name that's taken is refused.
+- **Undo**: deleting a saved playlist, removing a playlist page or a
+  schedule slot, and Clear each show a toast with Undo (8 s), and Ctrl+Z /
+  ⌘Z does the same while it's up, unless you're typing in a field. Deleting
+  a saved playlist no longer asks "are you sure?": `DELETE /playlists/<name>`
+  answers with the playlist, and Undo saves it again. A removed schedule
+  slot only stays removed once the schedule is saved.
+- **Preview** (▷ Preview, next to Center Lines) plays the page, or with
+  Multi-Page Playlist on the whole playlist, in the compose grid the way the
+  display will: starting from what's on the display now, each flap starts
+  at its turn in the transition (its rank × the page's speed, plus bus
+  time) and turns forward through the reel at the reel's speed, then the
+  page holds for its delay. Nothing is sent. Typing or clicking in the grid
+  ends it. The page config carries each transition's order for this
+  (Random's is one random order; the display picks a new one each time).
+- **The schedule** (Apps page; `display/scheduler.py`, `GET/POST /schedule`,
+  stored as `settings['schedule']`) picks an app or saved playlist by time
+  of day and weekday, in the timezone from the global settings. Time slots
+  are checked in order and the first that covers the time wins; outside
+  them the default runs, or nothing changes. A slot (or the default) can
+  also **blank the display**, for quiet hours: it shows a blank page and
+  keeps it blank (the banner says so) until something else starts. The
+  scheduler only acts when
+  what the schedule calls for changes (checked every 20 s, and straight
+  away on startup or when the schedule is saved), so starting or stopping
+  something by hand lasts until the next scheduled change.
+- **Playlist pages** can be dragged by their ⠿ handle (mouse or finger),
+  duplicated (⧉), or shown on their own (▶). The backend checks every page
+  it's sent (`display/pages.py`): delays, speeds and transitions must be
+  real values, and they're stored as numbers.
+- **Settings are typed**: `SettingField.clean()` (apps/base.py) turns what
+  the page sends into the field's type (number, checkbox, select option or
+  text) and refuses anything else with the field's name, for app and global
+  settings alike. A blank number field means its default.
+- **Pages stay current**: every save of settings.json bumps
+  `settings_version` in the live state, so an open Modules page reloads its
+  module data when another device (or a sync or restore) changes it, and the
+  saved playlist list refreshes. Shared firmware settings someone is
+  part-way through editing aren't overwritten.
+- **Sync progress**: Sync All reports each module's result over the live
+  state as it arrives (`sync` in the snapshot), so the module grid flashes a
+  module green when it answers and turns it orange if it doesn't (after one
+  individual retry). A failed module stays orange, and its inspector says
+  "Sync failed", until it next syncs; a single module's Sync EEPROM counts
+  too. The status is kept by the server, so every open page shows it.
+- **Backups hold everything**: Download Backup (version 4) has the modules,
+  the settings for all modules, saved playlists, the schedule, and every app
+  and global setting. Restoring checks each part the way saving it from the
+  page would; anything that doesn't check out is skipped and listed, and
+  the rest is still restored. Saved playlists are merged in by name. An
+  older (version 3) backup restores just the modules, as before.
+- **Timezone** is a list of real timezones, so a typo can't break every
+  clock. An unknown name already in settings.json is shown as "not
+  recognised" until it's changed, and the apps use US/Eastern meanwhile.
+- **Phone install**: the page has a web app manifest
+  (`/manifest.webmanifest`) and icons (`static/icons/`, drawn by
+  `tools/make_icons.py`), so Add to Home Screen gives it an icon and opens
+  it full screen. Browsers that offer to install it get an Install button
+  at the bottom of the page.
+- **The Control page's draft** (the grid, the playlist being built, its
+  defaults and name) is kept in the browser's localStorage, so a reload
+  doesn't lose it. It's per browser and best-effort; nothing depends on it.
+
+## Themes and accessibility
+
+- **Light and dark** follow the system setting (`prefers-color-scheme`).
+  Every colour is a variable at the top of `static/css/base.css`; light mode
+  overrides them in one block. The display boxes (live display, compose
+  grid, symbol tiles) keep their own fixed colours and stay dark in both,
+  like the real hardware. Text and controls meet WCAG AA contrast in both
+  themes; if you change a colour, check it still does.
+- **Keyboard**: everything works without a mouse. The tabs and the module
+  grid each take one Tab stop and are moved round with the arrow keys
+  (plus Home/End); the settings dialog keeps focus inside it and closes with
+  Escape; reordering playlist pages or schedule slots keeps focus in place.
+  Dragging a page is for pointers; its ▲ ▼ buttons do the same by keyboard.
+- **Screen readers**: the live display is read as its text, row by row,
+  rather than as 64 flaps; the compose grid says where the cursor is and
+  what that row says; buttons that are only a symbol (▲, ⧉, ✕, ⚙️, module
+  cells) have names that say what they act on; toasts are read out, and
+  errors interrupt. Pages are an ARIA tab list.
+- **Reduced motion** (`prefers-reduced-motion`): no flipping, pulsing or
+  sliding. The live display jumps straight to each character. The green
+  sync flash still fades, since it's a colour change, not movement.
 
 ## Frontend architecture notes
 

@@ -17,6 +17,15 @@ function displayChar(ch) {
   return shown === ' ' ? '' : shown;
 }
 
+// Each colour tile's flap code ({emoji: code}). The black tile is the blank
+// flap (' '): no flap is shown as it, so it's the one tile display_chars
+// doesn't name. Worked out here rather than only trusting `code` in the
+// config, so the tiles still work if the page is newer than the server that
+// rendered it (the app hasn't been restarted since an update, say).
+const SHOWN_AS_CODE = Object.fromEntries(Object.entries(CONFIG.display_chars).map(([code, shown]) => [shown, code]));
+const TILE_CODES = Object.fromEntries(CONFIG.color_tiles.map(tile =>
+  [tile.emoji, tile.code ?? SHOWN_AS_CODE[tile.emoji] ?? ' ']));
+
 // The options of an animation style <select>, with `selected` chosen.
 function styleOptions(selected = 'ltr') {
   return CONFIG.styles.map(s => el('option', {value: s.value, selected: s.value === selected}, s.label));

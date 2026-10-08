@@ -126,16 +126,74 @@ class RestoreBackupTest(unittest.TestCase):
                          {'homeOffset': 1, 'totalSteps': 2, 'autoHome': False,
                           'motorClockwise': False, 'motorRelease': True})
 
-    def test_returns_false_and_sends_nothing_when_hardware_disconnected(self):
+    def test_says_hardware_was_not_updated_and_sends_nothing_when_disconnected(self):
         self.connected = False
         self.settings['modules'] = {'0': {'homeOffset': 1, 'totalSteps': 2, 'autoHome': True}}
         result = self.restore({'version': 3, 'modules': {}})
-        self.assertFalse(result)
+        self.assertFalse(result['hardware_updated'])
         self.assertEqual(self.sent, [])
 
-    def test_returns_true_when_hardware_connected(self):
+    def test_says_hardware_was_updated_when_connected(self):
         self.settings['modules'] = {}
-        self.assertTrue(self.restore({'version': 3, 'modules': {}}))
+        self.assertTrue(self.restore({'version': 3, 'modules': {}})['hardware_updated'])
+
+    # ---- v4: playlists, the schedule and the app and global settings --------
+
+    def test_a_backup_carries_everything(self):
+        self.settings.update({
+            'saved_playlists': {'Morning': {'pages': [{'text': 'HI'}], 'delay': 5}},
+            'schedule': {'enabled': True, 'default': 'app:time', 'entries': []},
+            'timezone': 'UTC', 'zip_code': '02118', 'not_a_setting': 1,
+        })
+        backup = self.backup.build_backup()
+        self.assertEqual(backup['version'], 4)
+        self.assertEqual(backup['saved_playlists'], self.settings['saved_playlists'])
+        self.assertEqual(backup['schedule'], self.settings['schedule'])
+        self.assertEqual((backup['settings']['timezone'], backup['settings']['zip_code']), ('UTC', '02118'))
+        self.assertNotIn('not_a_setting', backup['settings'])
+
+    def test_restoring_a_full_backup_brings_it_all_back(self):
+        self.settings['saved_playlists'] = {'Kept': {'pages': [{'text': 'X'}], 'delay': 5}}
+        result = self.restore({
+            'version': 4, 'modules': {'0': {'homeOffset': 1, 'totalSteps': 2}},
+            'saved_playlists': {'Morning': {'pages': ['HI'], 'delay': '3'}},
+            'schedule': {'enabled': True, 'default': 'app:time', 'entries': [
+                {'days': [0], 'start': '07:00', 'end': '09:00', 'target': 'playlist:Morning'}]},
+            'settings': {'timezone': 'Europe/London', 'zip_code': '02118'},
+        })
+        self.assertEqual(self.settings['saved_playlists'], {
+            'Kept': {'pages': [{'text': 'X'}], 'delay': 5},           # merged, not replaced
+            'Morning': {'pages': [{'text': 'HI'}], 'delay': 3}})
+        self.assertEqual(self.settings['schedule']['entries'][0]['target'], 'playlist:Morning')
+        self.assertEqual((self.settings['timezone'], self.settings['zip_code']), ('Europe/London', '02118'))
+        self.assertEqual(result['restored'], ['1 module', '1 saved playlist', 'the schedule',
+                                              '2 app and global settings'])
+        self.assertEqual(result['skipped'], [])
+        self.assertEqual(self.saves, 1)
+
+    def test_bad_parts_are_skipped_and_named(self):
+        self.settings['timezone'] = 'US/Eastern'
+        result = self.restore({
+            'version': 4,
+            'saved_playlists': {'Bad': {'pages': [{'text': 'X', 'delay': 'soon'}]}, 'Good': {'pages': []}},
+            'schedule': {'enabled': True, 'default': 'app:nope'},
+            'settings': {'timezone': 'Mars/Olympus', 'zip_code': '1'},
+        })
+        self.assertEqual(result['skipped'], [
+            'playlist "Bad" (Page 1 delay must be a number)',
+            'the schedule (Unknown default: app:nope)',
+            'Timezone: "Mars/Olympus" isn\'t one of the choices',
+        ])
+        self.assertEqual(self.settings['timezone'], 'US/Eastern')
+        self.assertIn('Good', self.settings['saved_playlists'])
+        self.assertNotIn('schedule', self.settings)
+
+    def test_a_v3_backup_leaves_playlists_and_settings_alone(self):
+        self.settings.update({'saved_playlists': {'Kept': {'pages': [], 'delay': 5}}, 'timezone': 'UTC'})
+        self.restore({'version': 3, 'modules': {}, 'saved_playlists': {'New': {'pages': []}},
+                      'settings': {'timezone': 'Europe/London'}})
+        self.assertEqual(list(self.settings['saved_playlists']), ['Kept'])
+        self.assertEqual(self.settings['timezone'], 'UTC')
 
     def test_settings_saved_exactly_once(self):
         self.restore({'version': 3, 'modules': {'0': {'autoHome': True}}})

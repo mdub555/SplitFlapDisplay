@@ -52,7 +52,7 @@ const api = {
   apps:               () => apiGet('/apps', 'Could not load app list'),
   saveAppSettings:    (key, data) => apiPost(`/apps/${key}/settings`, data, 'Could not save app settings'),
   runApp:             (key) => apiPost('/run_app', {app: key}, 'Could not start app'),
-  stopApp:            () => apiPost('/stop_app', undefined, 'Could not stop app'),
+  stopApp:            () => apiPost('/stop_app', undefined, 'Could not stop'),
 
   globalFields:       () => apiGet('/global_fields', 'Could not load settings fields'),
   getSettings:        () => apiGet('/settings', 'Could not load settings'),
@@ -63,6 +63,13 @@ const api = {
   savePlaylist:       (name, pages, delay) => apiPost('/playlists', {name, pages, delay}, 'Could not save playlist'),
   deletePlaylist:     (name) => apiFetchJson(`/playlists/${encodeURIComponent(name)}`, {method: 'DELETE'},
                                              'Could not delete playlist'),
+  renamePlaylist:     (name, to) => apiPost(`/playlists/${encodeURIComponent(name)}/rename`, {name: to},
+                                            'Could not rename playlist'),
+  runPlaylist:        (name) => apiPost(`/playlists/${encodeURIComponent(name)}/run`, undefined,
+                                        'Could not run playlist'),
+
+  schedule:           () => apiGet('/schedule', 'Could not load the schedule'),
+  saveSchedule:       (data) => apiPost('/schedule', data, 'Could not save the schedule'),
 
   adjustOffset:       (modId, delta) => apiPost(`/modules/${modId}/adjust`, {delta}, 'Could not adjust offset'),
   homeModule:         (modId) => apiPost(`/modules/${modId}/home`, undefined, 'Could not home module'),
@@ -79,7 +86,7 @@ const api = {
   setTotalSteps:      (modId, steps) => apiPost(`/modules/${modId}/total_steps`, {steps}, 'Could not set total steps'),
   showOnModule:       (modId, payload) => apiPost(`/modules/${modId}/display`, payload, 'Could not update module display'),
   gotoStep:           (modId, step) => apiPost(`/modules/${modId}/goto_step`, {step}, 'Could not move module'),
-  homeAll:            () => apiGet('/home_all', 'Could not home all modules'),
+  homeAll:            () => apiPost('/home_all', undefined, 'Could not home all modules'),
   provisionModule:    (id) => apiPost('/provision_module', {id}, 'Could not provision module'),
 
   firmwareConfig:     () => apiGet('/firmware_config', 'Could not load firmware settings'),

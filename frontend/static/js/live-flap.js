@@ -3,6 +3,10 @@
 
 let liveFlaps = [];
 
+// Whether the system asks for less movement. Then a flap jumps straight to
+// its character instead of flipping through every one on the way.
+const reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : {matches: false};
+
 // One flap on screen. Like a real module it only turns forwards, one
 // character at a time, until it reaches its target.
 
@@ -17,6 +21,12 @@ class LiveFlap {
   setTarget(idx, delay) {
     this.tgtIdx = idx;
     if (this.curIdx === this.tgtIdx) return;
+    if (reducedMotion.matches) {
+      this.curIdx = idx;
+      this.queued = null;
+      this._render(CHAR_MAP[idx]);
+      return;
+    }
     if (this.busy) { this.queued = idx; return; }
     setTimeout(() => this._step(), delay);
   }
@@ -64,24 +74,98 @@ function initLiveGrids() {
   liveFlaps = flaps.map(flap => new LiveFlap(flap));
 }
 
+// The latest snapshot, for anything drawn after it arrived (the saved
+// playlist rows mark the one that's playing).
+let liveState = {};
+
+// What the banner says is playing, or '' when nothing is worth a banner: a
+// single unsaved page just sits on the display, with nothing to stop.
+function nowPlayingText(data) {
+  let text = '';
+  const playing = data.playlist;
+  if (data.blank) {
+    text = '■ The display is blanked';
+  } else if (data.active_app) {
+    text = `▶ ${appName(data.active_app)} is running`;
+  } else if (playing && (playing.name || playing.pages > 1)) {
+    const what = playing.name ? `Playlist "${playing.name}"` : 'Playlist';
+    text = `▶ ${what} · page ${playing.page + 1} of ${playing.pages}`;
+  }
+  return text && data.scheduled ? `${text} (scheduled)` : text;
+}
+
 // Pulled out from the SSE wiring below so it can be exercised directly in
 // tests (and reused for anything else that ever wants to push a snapshot
 // into the UI) without needing a real or mocked EventSource in the loop.
 function applyLiveState(data) {
   if (!data) return;
+  liveState = data;
 
   const text = data.state || '';
-  const app = data.active_app;
   byId('homingOverlay').style.display = data.is_homed ? 'none' : 'flex';
+  byId('liveDisplay').setAttribute('aria-label', describeDisplay(text, data.is_homed));
+  // Older backends don't send it; only say so when it's definitely false.
+  byId('simBadge').hidden = data.hardware_connected !== false;
   liveFlaps.forEach((flap, i) => {
     const idx = CHAR_MAP.indexOf(text[i] || ' ');
     flap.setTarget(idx >= 0 ? idx : 0, i * 5);   // a slight ripple across the grid
   });
-  byId('live-banner').classList.toggle('visible', !!app);
-  if (app) byId('live-app-name').textContent = appName(app);
+  renderBanner();
+  markRunning();
+  noticeSettingsVersion(data.settings_version);
+  noticeSyncState(data.sync);
+}
 
+// The settings were saved (here or on another device) since this page last
+// heard: reload what shows them, once a burst of saves has settled.
+let seenSettingsVersion;
+let settingsReloadTimer = null;
+function noticeSettingsVersion(version) {
+  if (version === undefined || version === seenSettingsVersion) return;
+  const first = seenSettingsVersion === undefined;
+  seenSettingsVersion = version;
+  if (first) return;   // the page loaded everything itself just now
+  clearTimeout(settingsReloadTimer);
+  settingsReloadTimer = setTimeout(settingsChanged, 300);
+}
+
+function settingsChanged() {
+  if (byId('page-modules').classList.contains('active')) refreshModulesPage();
+  loadSavedPlaylists();
+}
+
+function renderBanner() {
+  const playing = nowPlayingText(liveState);
+  byId('live-banner').classList.toggle('visible', !!playing);
+  // A blank display has nothing to stop: starting anything replaces it.
+  byId('live-banner').querySelector('.aab-stop').hidden = !!liveState.blank;
+  byId('liveBannerText').textContent = playing;
+}
+
+// What the display shows, as screen readers hear it: each row that isn't
+// blank, in order.
+function describeDisplay(text, homed) {
+  const chars = Array.from(text);
+  const rows = [];
+  for (let r = 0; r < GRID_ROWS; r++) {
+    const row = chars.slice(r * GRID_COLS, (r + 1) * GRID_COLS).map(ch => displayChar(ch) || ' ').join('').trim();
+    if (row) rows.push(row);
+  }
+  const shown = rows.length ? `The display shows: ${rows.join(' / ')}` : 'The display is blank';
+  return homed === false ? `Homing required. ${shown}` : shown;
+}
+
+// Highlights the app card or saved playlist that's playing, if one is.
+function markRunning() {
+  const app = liveState.active_app;
   document.querySelectorAll('.app-card').forEach(card => {
-    card.classList.toggle('running', card.dataset.app === app);
+    const running = !!app && card.dataset.app === app;
+    card.classList.toggle('running', running);
+    card.querySelector('.app-running').textContent = running ? ' (running)' : '';
+  });
+  const name = !app && liveState.playlist ? liveState.playlist.name : null;
+  document.querySelectorAll('.saved-pl-item').forEach(row => {
+    row.classList.toggle('running', name !== null && row.dataset.name === name);
   });
 }
 

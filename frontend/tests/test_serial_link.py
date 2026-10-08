@@ -8,6 +8,9 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from unittest import mock  # noqa: E402
+
+from display import serial_link  # noqa: E402
 from display.serial_link import parse_buffer, parse_all_dumps  # noqa: E402
 
 # Every field, in the order the firmware sends them.
@@ -107,6 +110,152 @@ class ParseAllDumpsTest(unittest.TestCase):
 
     def test_empty_buffer(self):
         self.assertEqual(parse_all_dumps(""), {})
+
+
+class FakeSerial:
+    """Hands out `chunks` one read at a time, as replies trickle in."""
+
+    def __init__(self, chunks):
+        self.chunks = [c.encode() for c in chunks]
+
+    @property
+    def in_waiting(self):
+        return len(self.chunks[0]) if self.chunks else 0
+
+    def read(self, n):
+        return self.chunks.pop(0)
+
+    def reset_input_buffer(self):
+        pass
+
+    def write(self, data):
+        pass
+
+    def flush(self):
+        pass
+
+
+class ReadAllDumpsTest(unittest.TestCase):
+    def test_each_reply_is_reported_as_it_arrives(self):
+        first = reply('00')
+        chunks = [first[:20], first[20:] + reply('01')[:10], reply('01')[10:]]
+        seen = []
+        fake = FakeSerial(chunks)
+        with mock.patch.object(serial_link, 'ser', fake):
+            dumps = serial_link.read_all_dumps(
+                1, margin=0.05, on_reply=lambda mod_id, dump: seen.append((mod_id, len(fake.chunks))))
+        self.assertEqual(sorted(dumps), [0, 1])
+        # Module 0 was reported once its line was complete, before module 1's arrived.
+        self.assertEqual(seen, [(0, 1), (1, 0)])
+
+
+class BrokenSerial(FakeSerial):
+    """A port whose device has gone: every use fails."""
+
+    def __init__(self):
+        super().__init__([])
+        self.closed = False
+
+    def write(self, data):
+        raise serial_link.serial.SerialException('device disconnected')
+
+    @property
+    def in_waiting(self):
+        raise OSError(5, 'Input/output error')
+
+    def close(self):
+        self.closed = True
+
+
+class ReconnectTest(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(serial_link, 'ser', None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        serial_link.state.set_hardware_connected(True)
+
+    def test_a_failed_write_drops_the_port(self):
+        broken = BrokenSerial()
+        serial_link.ser = broken
+        with serial_link.serial_lock:
+            self.assertFalse(serial_link.write_serial('m00-A\n'))
+        self.assertIsNone(serial_link.ser)
+        self.assertTrue(broken.closed)
+        self.assertFalse(serial_link.state.snapshot()['hardware_connected'])
+
+    def logged(self, action):
+        q = serial_link.state.subscribe_serial()
+        try:
+            action()
+        finally:
+            serial_link.state.unsubscribe_serial(q)
+        return [q.get_nowait() for _ in range(q.qsize())]
+
+    def test_every_write_is_logged_however_it_is_sent(self):
+        # The player writes pages with write_serial() directly, not send_raw().
+        serial_link.ser = FakeSerial([])
+        with serial_link.serial_lock:
+            self.assertEqual(self.logged(lambda: serial_link.write_serial('m*f21:H!I"\n')), ['SENT: m*f21:H!I"'])
+        serial_link.ser = None
+        with serial_link.serial_lock:
+            self.assertEqual(self.logged(lambda: serial_link.write_serial('m00-A\n')), ['SIMULATED SENT: m00-A'])
+        serial_link.ser = BrokenSerial()
+        with serial_link.serial_lock:
+            log = self.logged(lambda: serial_link.write_serial('m00-A\n'))
+        self.assertEqual(log[-1], 'NOT SENT (serial lost): m00-A')
+
+    def test_send_raw_logs_each_message_once(self):
+        serial_link.ser = FakeSerial([])
+        with mock.patch.object(serial_link.time, 'sleep'):
+            self.assertEqual(self.logged(lambda: serial_link.send_raw('m05h')), ['SENT: m05h'])
+
+    def test_sending_with_no_port_is_simulated(self):
+        q = serial_link.state.subscribe_serial()
+        serial_link.send_raw('m00h')
+        self.assertEqual(q.get_nowait(), 'SIMULATED SENT: m00h')
+        serial_link.state.unsubscribe_serial(q)
+
+    def test_reads_give_up_when_the_port_goes(self):
+        serial_link.ser = BrokenSerial()
+        self.assertIsNone(serial_link.read_dump(5, timeout=0.1))
+        serial_link.ser = BrokenSerial()
+        self.assertEqual(serial_link.read_all_dumps(0, margin=0.01), {})
+        self.assertIsNone(serial_link.ser)
+
+    def run_watchdog_once(self):
+        """keep_connected() runs for ever; stop it after one check."""
+        class Stop(Exception):
+            pass
+        sleeps = []
+
+        def sleep(seconds):
+            if sleeps:
+                raise Stop
+            sleeps.append(seconds)
+        with mock.patch.object(serial_link.time, 'sleep', sleep):
+            with self.assertRaises(Stop):
+                serial_link.keep_connected(interval=5)
+
+    def test_the_watchdog_reopens_a_missing_port(self):
+        serial_link.state.set_hardware_connected(False)
+        serial_link.state.last_sent_page = 'OLD PAGE'
+        opened = FakeSerial([])
+        with mock.patch.object(serial_link.serial, 'Serial', return_value=opened):
+            self.run_watchdog_once()
+        self.assertIs(serial_link.ser, opened)
+        self.assertTrue(serial_link.state.snapshot()['hardware_connected'])
+        self.assertIsNone(serial_link.state.last_sent_page, 'the page is sent again')
+
+    def test_the_watchdog_notices_an_unplugged_port_while_idle(self):
+        serial_link.ser = BrokenSerial()
+        self.run_watchdog_once()
+        self.assertIsNone(serial_link.ser)
+        self.assertFalse(serial_link.state.snapshot()['hardware_connected'])
+
+    def test_the_watchdog_keeps_trying_while_the_port_is_missing(self):
+        with mock.patch.object(serial_link.serial, 'Serial', side_effect=serial_link.serial.SerialException('no')):
+            self.run_watchdog_once()
+        self.assertIsNone(serial_link.ser)
 
 
 if __name__ == '__main__':

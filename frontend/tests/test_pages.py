@@ -27,7 +27,8 @@ class PageTest(unittest.TestCase):
         app = Flask(__name__, template_folder=os.path.join(FRONTEND, 'templates'),
                     static_folder=os.path.join(FRONTEND, 'static'))
         app.register_blueprint(pages.bp)
-        cls.html = app.test_client().get('/').get_data(as_text=True)
+        cls.client = app.test_client()
+        cls.html = cls.client.get('/').get_data(as_text=True)
 
     def test_every_firmware_setting_has_an_input(self):
         for key, spec in GLOBAL_SETTINGS.items():
@@ -39,7 +40,7 @@ class PageTest(unittest.TestCase):
         # The attributes must come out as attributes, not escaped text.
         for key in MODULE_TOGGLES:
             with self.subTest(key=key):
-                self.assertRegex(self.html, rf'id="modToggle-{key}" data-onchange="toggleModuleSetting" '
+                self.assertRegex(self.html, rf'id="modToggle-{key}"[^>]* data-onchange="toggleModuleSetting" '
                                             rf'data-setting="{key}"')
 
     def test_config_carries_what_the_scripts_read(self):
@@ -50,6 +51,14 @@ class PageTest(unittest.TestCase):
         self.assertEqual(config['display_chars']['q'], '"')
         self.assertEqual(len(config['color_tiles']), 8)
 
+    def test_config_carries_what_the_preview_needs(self):
+        config = json.loads(re.search(r'const CONFIG = (.*?);</script>', self.html).group(1))
+        for style in config['styles']:
+            with self.subTest(style=style['value']):
+                self.assertEqual(sorted(style['order']), list(range(NUM_MODULES)))
+        self.assertGreater(config['seconds_per_flap'], 0)
+        self.assertGreater(config['bus_ms_per_module'], 0)
+
     def test_debug_page_offers_every_command(self):
         letters = {value for name, value in vars(Cmd).items() if not name.startswith('_')}
         offered = [command['cmd'] for command in DEBUG_COMMANDS if command['cmd']]
@@ -58,6 +67,19 @@ class PageTest(unittest.TestCase):
         for command in DEBUG_COMMANDS:
             with self.subTest(command=command['key']):
                 self.assertIn(f'<option value="{command["key"]}">', self.html)
+
+    def test_the_page_can_be_installed_as_an_app(self):
+        self.assertIn('<link rel="manifest" href="/manifest.webmanifest">', self.html)
+        self.assertIn('apple-touch-icon', self.html)
+        res = self.client.get('/manifest.webmanifest')
+        self.assertEqual(res.mimetype, 'application/manifest+json')
+        manifest = res.get_json(force=True)
+        self.assertEqual((manifest['start_url'], manifest['display']), ('/', 'standalone'))
+        self.assertIn('maskable', [icon['purpose'] for icon in manifest['icons']])
+        for icon in manifest['icons']:
+            with self.subTest(icon=icon['src']):
+                self.assertTrue(os.path.exists(os.path.join(FRONTEND, icon['src'].lstrip('/'))))
+        self.assertTrue(os.path.exists(os.path.join(FRONTEND, 'static/icons/apple-touch-icon.png')))
 
     def test_every_script_exists(self):
         scripts = re.findall(r'<script src="/(static/js/[^"]+)"', self.html)

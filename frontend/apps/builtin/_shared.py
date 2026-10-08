@@ -1,3 +1,4 @@
+import logging
 import random
 import time
 
@@ -8,8 +9,19 @@ from display.layout import format_lines
 from apps.base import Frame
 
 
+DEFAULT_TZ = 'US/Eastern'
+
+
 def get_tz(settings):
-    return pytz.timezone(settings.get('timezone', 'US/Eastern'))
+    """The timezone from the global settings. One that isn't a real timezone
+    (say, typed in before the setting was a list) falls back to the default,
+    so the clocks keep working instead of every app failing."""
+    name = settings.get('timezone') or DEFAULT_TZ
+    try:
+        return pytz.timezone(name)
+    except pytz.UnknownTimeZoneError:
+        logging.warning(f'Unknown timezone {name!r}; using {DEFAULT_TZ}')
+        return pytz.timezone(DEFAULT_TZ)
 
 
 def clock(dt, spaced=True):

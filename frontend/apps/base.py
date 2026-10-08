@@ -12,7 +12,7 @@ class SettingField:
     places."""
     key: str
     label: str
-    type: str = 'text'          # text | password | number | select | textarea | datetime-local
+    type: str = 'text'          # text | password | number | checkbox | select | textarea | datetime-local
     scope: str = 'app'
     default: str = ''
     opts: list = field(default_factory=list)
@@ -27,6 +27,49 @@ class SettingField:
         data = asdict(self)
         del data['scope']
         return data
+
+    def clean(self, value):
+        """`value` (as the page sent it) as this field's type: a number for a
+        number field, True/False for a checkbox, one of `opts` for a select,
+        otherwise a string. Raises ValueError, naming the field, if it isn't
+        one. A blank number goes back to the default."""
+        if self.type == 'number':
+            if value is None or (isinstance(value, str) and not value.strip()):
+                value = self.default
+            if isinstance(value, bool):
+                raise ValueError(f'{self.label} must be a number')
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                raise ValueError(f'{self.label} must be a number') from None
+            if number != number or number in (float('inf'), float('-inf')):
+                raise ValueError(f'{self.label} must be a number')
+            if self.min is not None and number < float(self.min):
+                raise ValueError(f'{self.label} must be at least {self.min}')
+            if self.max is not None and number > float(self.max):
+                raise ValueError(f'{self.label} must be at most {self.max}')
+            return int(number) if number.is_integer() else number
+        if self.type == 'checkbox':
+            if isinstance(value, bool):
+                return value
+            if value in ('true', 'false'):
+                return value == 'true'
+            raise ValueError(f'{self.label} must be on or off')
+        if not isinstance(value, (str, int, float)) or isinstance(value, bool):
+            raise ValueError(f'{self.label} must be text')
+        value = str(value)
+        if self.type == 'select' and self.opts and value not in self.opts:
+            # A short list is worth spelling out; a long one (timezones) isn't.
+            if len(self.opts) <= 10:
+                raise ValueError(f'{self.label} must be one of: {", ".join(self.opts)}')
+            raise ValueError(f'{self.label}: "{value}" isn\'t one of the choices')
+        return value
+
+
+def clean_settings(fields, data):
+    """The values in `data` for `fields` (other keys are dropped), each
+    cleaned by its field. Raises ValueError for the first that's wrong."""
+    return {f.key: f.clean(data[f.key]) for f in fields if f.key in data}
 
 
 @dataclass

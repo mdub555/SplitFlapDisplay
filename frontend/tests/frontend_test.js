@@ -1,4 +1,4 @@
-const { dom, window, calls, MockEventSource } = require('./harness');
+const { dom, window, calls, MockEventSource, savedPlaylists } = require('./harness');
 
 const document = window.document;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -82,7 +82,7 @@ async function main() {
 
   console.log('\n--- Running an app via delegated click ---');
   calls.length = 0;
-  click(weatherCard);
+  click(weatherCard.querySelector('.app-run'));
   await sleep(20);
   check('runApp posted to /run_app', calls.some(c => c.url === '/run_app' && c.method === 'POST'));
   check('run_app body carries the right app key', calls.some(c => c.url === '/run_app' && JSON.parse(c.body).app === 'weather'));
@@ -170,7 +170,7 @@ async function main() {
     document.getElementById('homingOverlay').style.display === 'flex');
   check('a pushed snapshot updates the active-app banner',
     document.getElementById('live-banner').classList.contains('visible') &&
-    document.getElementById('live-app-name').textContent === 'Weather');
+    document.getElementById('liveBannerText').textContent === '▶ Weather is running');
 
   source.emit({ is_homed: true, state: 'X'.repeat(64), active_app: null });
   await sleep(10);
@@ -522,6 +522,12 @@ async function main() {
   check('Delete clears the flap under the cursor', rowN(1) === '"O "            ' && cursorAt() === 18);
   click(document.querySelector('#colorPalette .color-btn'));
   check('a colour tile goes in at the cursor', rowN(1) === '"O🟥"            ');
+  click(document.querySelector('#preview .flap-unit[data-cell="16"]'));
+  click(document.querySelector('#colorPalette .color-btn[title="Black"]'));
+  check('the black tile blanks the flap under the cursor and moves on, like a space',
+    rowN(1) === ' O🟥"            ' && cursorAt() === 17);
+  click(document.querySelector('#preview .flap-unit[data-cell="16"]'));
+  typeKeys('"');
   const paste = new window.Event('paste', { bubbles: true, cancelable: true });
   paste.clipboardData = { getData: () => 'AB\nCD' };
   click(document.querySelector('#preview .flap-unit[data-cell="48"]'));
@@ -551,6 +557,574 @@ async function main() {
   click(document.querySelector('#preview .flap-unit[data-cell="32"]'));
   document.querySelectorAll('#colorPalette .symbol-btn').forEach(click);
   check('the degree and heart buttons type their flaps at the cursor', rowN(2) === '°♥              ');
+
+  console.log('\n--- The banner shows a playing playlist, with STOP ---');
+  const banner = document.getElementById('live-banner');
+  const bannerText = () => document.getElementById('liveBannerText').textContent;
+  const live = MockEventSource.instances.find(s => s.url === '/current_state/stream');
+  const snapshot = extra => ({ is_homed: true, state: ' '.repeat(64), active_app: null, playlist: null,
+                               scheduled: false, hardware_connected: true, ...extra });
+  live.emit(snapshot({ playlist: { name: null, page: 1, pages: 3 } }));
+  check('an unsaved playlist shows its page', banner.classList.contains('visible') && bannerText() === '▶ Playlist · page 2 of 3');
+  live.emit(snapshot({ playlist: { name: 'Morning', page: 0, pages: 2 }, scheduled: true }));
+  check('a saved playlist shows its name, and that it was scheduled',
+    bannerText() === '▶ Playlist "Morning" · page 1 of 2 (scheduled)');
+  live.emit(snapshot({ playlist: { name: null, page: 0, pages: 1 } }));
+  check('a single pushed page gets no banner (nothing is cycling)', !banner.classList.contains('visible'));
+  live.emit(snapshot({ playlist: { name: 'Morning', page: 0, pages: 2 } }));
+  calls.length = 0;
+  click(banner.querySelector('[data-onclick="stopApp"]'));
+  await sleep(20);
+  check('STOP on a playlist posts /stop_app', calls.some(c => c.url === '/stop_app' && c.method === 'POST'));
+
+  console.log('\n--- Simulation badge ---');
+  const simBadge = document.getElementById('simBadge');
+  check('no badge while the hardware is connected', simBadge.hidden);
+  live.emit(snapshot({ hardware_connected: false }));
+  check('the badge shows when the serial port is not open', !simBadge.hidden);
+  live.emit(snapshot({}));
+  check('and hides again once it is', simBadge.hidden);
+
+  console.log('\n--- Saved playlists: edit in place ---');
+  window.confirm = () => { throw new Error('unexpected confirm'); };
+  const plName = document.getElementById('savePlaylistName');
+  plName.value = 'Morning';
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="saveCurrentPlaylist"]'));
+  await sleep(50);
+  check('a new name saves without asking', 'Morning' in savedPlaylists);
+  check('the name stays in the box and the playlist is now the one being edited',
+    plName.value === 'Morning' && !document.getElementById('loadedPlaylistNote').hidden &&
+    document.querySelector('.saved-pl-item[data-name="Morning"]').classList.contains('loaded'));
+  const pagesBefore = savedPlaylists.Morning.pages.length;
+  click(document.querySelector('[data-onclick="clearDisplay"]'));   // stop editing a page...
+  click(document.getElementById('saveMsgBtn'));                       // ...so this adds one
+  click(document.querySelector('[data-onclick="saveCurrentPlaylist"]'));
+  await sleep(50);
+  check('saving again updates it without asking', savedPlaylists.Morning.pages.length === pagesBefore + 1);
+
+  savedPlaylists.Evening = { pages: [{ text: 'EVE' }], delay: 5 };
+  plName.value = 'Evening';
+  let asked = null;
+  window.confirm = msg => { asked = msg; return false; };
+  click(document.querySelector('[data-onclick="saveCurrentPlaylist"]'));
+  await sleep(50);
+  check('saving over a different saved playlist asks first', asked === 'Replace the saved playlist "Evening"?');
+  check('and declining leaves it alone', savedPlaylists.Evening.pages.length === 1);
+  window.loadSavedPlaylists();   // as the page would after any change, to show Evening
+  await sleep(50);
+
+  calls.length = 0;
+  click(document.querySelector('.saved-pl-item[data-name="Morning"] [data-onclick="runSavedPlaylist"]'));
+  await sleep(50);
+  check('Run plays the playlist by name', calls.some(c => c.url === '/playlists/Morning/run' && c.method === 'POST'));
+  live.emit(snapshot({ playlist: { name: 'Morning', page: 0, pages: 2 } }));
+  check('the playing saved playlist is highlighted',
+    document.querySelector('.saved-pl-item[data-name="Morning"]').classList.contains('running') &&
+    !document.querySelector('.saved-pl-item[data-name="Evening"]').classList.contains('running'));
+
+  window.confirm = () => true;
+  click(document.querySelector('.saved-pl-item[data-name="Evening"] [data-onclick="loadSavedPlaylist"]'));
+  await sleep(50);
+  check('Edit loads the playlist, its name and its pages',
+    plName.value === 'Evening' && globalVar('loadedPlaylist') === 'Evening' &&
+    document.querySelectorAll('#playlistList .playlist-item').length === 1 &&
+    globalVar('editingIndex') === null);
+  click(document.querySelector('.saved-pl-item[data-name="Evening"] [data-onclick="deleteSavedPlaylist"]'));
+  await sleep(50);
+  check('deleting the playlist being edited stops editing it',
+    globalVar('loadedPlaylist') === null && document.getElementById('loadedPlaylistNote').hidden);
+
+  console.log('\n--- The draft survives a reload ---');
+  const draft = () => JSON.parse(window.localStorage.getItem('splitflap.controlDraft'));
+  check('the playlist being built is kept in localStorage',
+    draft().playlist.length === 1 && draft().multi === true && draft().name === 'Evening');
+  document.getElementById('delayInput').value = '7.5';
+  change(document.getElementById('delayInput'));
+  check('changing a default updates the draft', draft().delay === '7.5');
+  window.localStorage.setItem('splitflap.controlDraft', JSON.stringify({
+    text: 'SAVED', playlist: [{ text: 'ONE' }, 'TWO', 42, null], multi: true, editing: 1,
+    loaded: 'Morning', name: 'Morning', delay: '3', style: 'no-such-style', speed: '25' }));
+  window.restoreDraft();
+  check('restoring puts the grid back', row0() === 'SAVED           ');
+  check('and the playlist, skipping anything that is not a page',
+    globalVar('playlist').length === 2 && globalVar('playlist')[1].text === 'TWO' &&
+    document.querySelectorAll('#playlistList .playlist-item').length === 2);
+  check('and the page being edited and the saved playlist it came from',
+    document.getElementById('saveMsgBtn').textContent === 'Save Changes to Page 2' &&
+    globalVar('loadedPlaylist') === 'Morning');
+  check('and the defaults, ignoring a style that no longer exists',
+    document.getElementById('delayInput').value === '3' && document.getElementById('speedInput').value === '25' &&
+    document.getElementById('styleInput').value !== '');
+  window.localStorage.setItem('splitflap.controlDraft', '{not json');
+  let restoreThrew = false;
+  try { window.restoreDraft(); } catch (e) { restoreThrew = true; }
+  check('an unreadable draft is ignored', !restoreThrew);
+
+  console.log('\n--- Schedule ---');
+  calls.length = 0;
+  click(document.getElementById('tab-apps'));
+  await sleep(30);
+  check('opening Apps loads the schedule', calls.some(c => c.url === '/schedule' && c.method === 'GET'));
+  const slots = () => document.querySelectorAll('#scheduleEntries .schedule-entry');
+  check('each time slot is drawn, with its days', slots().length === 1 &&
+    [...slots()[0].querySelectorAll('[data-day]')].map(b => b.checked).join() === 'true,true,true,true,true,false,false');
+  const slotTarget = slots()[0].querySelector('[data-target]');
+  check('a slot showing a deleted playlist keeps it, marked missing',
+    slotTarget.value === 'playlist:Gone' && slotTarget.selectedOptions[0].textContent.includes('(missing)'));
+  check('saved playlists are offered as targets', !!slotTarget.querySelector('option[value="playlist:Morning"]'));
+  check('the default is chosen', document.getElementById('scheduleDefault').value === 'app:time');
+  check('the status line names the display clock and what is scheduled now',
+    document.getElementById('scheduleStatus').textContent === 'Display clock: Tue 14:05. Scheduled now: Time.');
+
+  click(document.querySelector('[data-onclick="addScheduleEntry"]'));
+  check('Add Time Slot adds a weekday slot', slots().length === 2);
+  click(slots()[1].querySelector('[data-onclick="moveScheduleEntry"][data-dir="-1"]'));
+  check('a slot can be moved up', slots()[0].querySelector('[data-target]').value === '');
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="saveSchedule"]'));
+  await sleep(20);
+  check('a slot with nothing to show is refused, with the reason',
+    [...document.querySelectorAll('.toast.error')].some(t => t.textContent.includes('needs something to show')));
+  slots()[0].querySelector('[data-target]').value = 'app:weather';
+  slots()[0].querySelector('[data-time="start"]').value = '22:00';
+  slots()[0].querySelector('[data-time="end"]').value = '06:00';
+  slots()[0].querySelector('[data-day="5"]').checked = true;
+  click(slots()[1].querySelector('[data-onclick="removeScheduleEntry"]'));
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="saveSchedule"]'));
+  await sleep(20);
+  const savedSchedule = calls.find(c => c.url === '/schedule' && c.method === 'POST');
+  check('Save Schedule posts the form', savedSchedule && JSON.stringify(JSON.parse(savedSchedule.body)) === JSON.stringify({
+    enabled: true, default: 'app:time',
+    entries: [{ days: [0, 1, 2, 3, 4, 5], start: '22:00', end: '06:00', target: 'app:weather' }] }));
+
+  console.log('\n--- Settings fields keep their types ---');
+  const fieldBox = document.createElement('div');
+  document.body.append(fieldBox);
+  const typedFields = [
+    { key: 'spd', label: 'Speed', type: 'number', default: '0.4', min: '0.1', max: '5' },
+    { key: 'on', label: 'Enabled', type: 'checkbox' },
+    { key: 'nm', label: 'Name', type: 'text' },
+  ];
+  fieldBox.append(...typedFields.map(f => window.buildField(f, { spd: 2, on: 'true', nm: 'x' }[f.key], 'tf_')));
+  check('a checkbox field is a switch, on from a stored "true"', document.getElementById('tf_on').checked);
+  document.getElementById('tf_spd').value = '1.5';
+  check('numbers are read as numbers and checkboxes as true/false',
+    JSON.stringify(window.readFieldValues(typedFields, 'tf_')) === '{"spd":1.5,"on":true,"nm":"x"}');
+  document.getElementById('tf_spd').value = '';
+  check('a blank number is sent blank (the backend uses the default)', window.readFieldValues(typedFields, 'tf_').spd === '');
+  fieldBox.remove();
+
+  console.log('\n--- Playlist: duplicate, show one page, drag, checked values ---');
+  click(document.getElementById('tab-control'));
+  await sleep(20);
+  window.eval(`playlist = [{text: 'AAA', delay: 2, style: 'ltr', speed: 15},
+                           {text: 'BBB', delay: 3, style: 'rtl', speed: 15}]`);
+  window.stopEditing();
+  window.renderPlaylist();
+  const plRows = () => [...document.querySelectorAll('#playlistList .playlist-item')];
+  const plTexts = () => globalVar('playlist').map(p => p.text).join();
+  click(plRows()[0].querySelector('[data-onclick="duplicatePlaylistPage"]'));
+  check('⧉ puts a copy right after the page', plTexts() === 'AAA,AAA,BBB' &&
+    globalVar('playlist')[0] !== globalVar('playlist')[1]);
+
+  calls.length = 0;
+  click(plRows()[2].querySelector('[data-onclick="pushPlaylistPage"]'));
+  await sleep(20);
+  const onePage = calls.find(c => c.url === '/update_playlist');
+  check('▶ shows just that page, with its delay as a number', onePage &&
+    JSON.parse(onePage.body).pages.length === 1 && JSON.parse(onePage.body).pages[0].text === 'BBB' &&
+    JSON.parse(onePage.body).delay === 3);
+
+  click(plRows()[0].querySelector('[data-onclick="editPlaylist"]'));   // page 1 is being edited
+  // Lay the rows out 100px apart, as a browser would.
+  plRows().forEach((row, i) => { row.getBoundingClientRect = () => ({ top: i * 100, height: 100 }); });
+  const pointer = (target, type, clientY) =>
+    target.dispatchEvent(new window.MouseEvent(type, { bubbles: true, clientY, button: 0 }));
+  pointer(plRows()[0].querySelector('.drag-handle'), 'pointerdown', 50);
+  check('the dragged row is marked', plRows()[0].classList.contains('dragging'));
+  pointer(document, 'pointermove', 260);
+  pointer(document, 'pointerup', 260);
+  check('dragging a page to the bottom moves it there', plTexts() === 'AAA,BBB,AAA' && !document.querySelector('.dragging'));
+  check('the page being edited stays the one being edited',
+    globalVar('editingIndex') === 2 && document.getElementById('saveMsgBtn').textContent === 'Save Changes to Page 3');
+  click(plRows()[1].querySelector('[data-onclick="movePlaylist"][data-dir="-1"]'));
+  check('▲ still moves a page up', plTexts() === 'BBB,AAA,AAA' && globalVar('editingIndex') === 2);
+  click(plRows()[2].querySelector('[data-onclick="removeFromPlaylist"]'));
+  check('removing the page being edited stops editing', globalVar('editingIndex') === null && plTexts() === 'BBB,AAA');
+
+  const delayBox = plRows()[0].querySelector('[data-field="delay"]');
+  delayBox.value = '0';
+  change(delayBox);
+  check('a delay out of range is refused and put back', delayBox.value === '3' && globalVar('playlist')[0].delay === 3 &&
+    [...document.querySelectorAll('.toast.warn')].some(t => t.textContent === 'Delay must be from 0.5 to 60'));
+  const speedBox = plRows()[0].querySelector('[data-field="speed"]');
+  speedBox.value = '20';
+  change(speedBox);
+  check('a good value is kept as a number', globalVar('playlist')[0].speed === 20);
+
+  document.getElementById('delayInput').value = '4';
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="sync"]'));
+  await sleep(20);
+  check('PUSH sends the default delay as a number', JSON.parse(calls.find(c => c.url === '/update_playlist').body).delay === 4);
+
+  const summary = window.playlistSummary;
+  check('saved playlists sum up their pages', summary({ pages: [{ delay: 2 }, { delay: 8 }, {}], delay: 5 }) === '3 pages · 2–8 s' &&
+    summary({ pages: [{}, 'X'], delay: '5' }) === '2 pages · 5 s each' && summary({ pages: [{}], delay: 5 }) === '1 page · 5 s' &&
+    summary({ pages: [], delay: 5 }) === '0 pages');
+
+  console.log('\n--- Home All is a POST ---');
+  click(document.getElementById('tab-modules'));
+  await sleep(30);
+  window.confirm = () => true;
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="homeAll"]'));
+  await sleep(20);
+  check('Home All posts to /home_all', calls.some(c => c.url === '/home_all' && c.method === 'POST'));
+
+  console.log('\n--- Settings saved elsewhere reload the Modules page ---');
+  live.emit(snapshot({ settings_version: 5 }));
+  await sleep(10);
+  calls.length = 0;
+  live.emit(snapshot({ settings_version: 6 }));
+  live.emit(snapshot({ settings_version: 7 }));   // a burst: one reload
+  await sleep(400);
+  check('a new settings version reloads the module data and shared settings, once',
+    calls.filter(c => c.url === '/settings').length === 1 && calls.filter(c => c.url === '/firmware_config').length === 1);
+  check('and the saved playlists', calls.some(c => c.url === '/playlists'));
+  const fwInput = document.querySelector('#firmwareSettings input[type="number"]');
+  fwInput.value = '1234';
+  fwInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+  calls.length = 0;
+  live.emit(snapshot({ settings_version: 8 }));
+  await sleep(400);
+  check('shared settings being edited are not overwritten',
+    calls.some(c => c.url === '/settings') && !calls.some(c => c.url === '/firmware_config') && fwInput.value === '1234');
+  calls.length = 0;
+  click(document.getElementById('tab-control'));
+  live.emit(snapshot({ settings_version: 9 }));
+  await sleep(400);
+  check('with the Modules page closed, nothing of it is reloaded', !calls.some(c => c.url === '/settings'));
+
+  console.log('\n--- Sync progress on the module grid ---');
+  click(document.getElementById('tab-modules'));
+  await sleep(30);
+  const cell = id => document.querySelector(`#modMatrix .mod-cell[data-id="${id}"]`);
+  const syncSnap = sync => snapshot({ settings_version: 9, sync });
+  live.emit(syncSnap({ running: false, ok: { '2': 1 }, failed: [] }));
+  check('a success from before the page loaded does not flash', !cell(2).classList.contains('sync-flash'));
+  live.emit(syncSnap({ running: true, ok: { '2': 1 }, failed: [] }));
+  const syncBtn = document.getElementById('syncAllBtn');
+  check('while a sync runs its button says so and is disabled', syncBtn.disabled && syncBtn.textContent === 'SYNCING…');
+  live.emit(syncSnap({ running: true, ok: { '2': 1, '0': 2 }, failed: [] }));
+  check('a module that syncs flashes green', cell(0).classList.contains('sync-flash') && !cell(2).classList.contains('sync-flash'));
+  live.emit(syncSnap({ running: true, ok: { '2': 1, '0': 2 }, failed: [3] }));
+  check('a module that fails turns orange', cell(3).classList.contains('sync-failed') && !cell(0).classList.contains('sync-failed'));
+  await sleep(200);
+  window.renderModuleGrid();
+  check('a redrawn cell carries on its flash from where it was',
+    cell(0).classList.contains('sync-flash') && parseFloat(cell(0).style.animationDelay) <= -150);
+  live.emit(syncSnap({ running: false, ok: { '2': 1, '0': 2 }, failed: [3] }));
+  check('the button comes back when the sync ends', !syncBtn.disabled && syncBtn.textContent === 'SYNC ALL (EEPROM)');
+  click(cell(3));
+  check('the failed module\'s inspector says Sync failed', !document.getElementById('inspectSyncFailed').hidden &&
+    document.getElementById('inspectSyncFailed').textContent.includes('Sync failed'));
+  click(cell(0));
+  check('a module that synced does not', document.getElementById('inspectSyncFailed').hidden);
+  await sleep(1100);
+  live.emit(syncSnap({ running: false, ok: { '2': 1, '0': 2 }, failed: [3] }));
+  check('the flash ends; the failure stays orange', !cell(0).classList.contains('sync-flash') && cell(3).classList.contains('sync-failed'));
+  live.emit(syncSnap({ running: false, ok: { '2': 1, '0': 2, '3': 3 }, failed: [] }));
+  check('a failed module that syncs again flashes green and is no longer orange',
+    cell(3).classList.contains('sync-flash') && !cell(3).classList.contains('sync-failed'));
+  window.confirm = () => true;
+  click(syncBtn);
+  await sleep(30);
+  check('Sync All ends with a summary naming the failures',
+    [...document.querySelectorAll('.toast.warn')].some(t => t.textContent === '1 synced; sync failed for 03'));
+
+  console.log('\n--- Install as an app ---');
+  const installBtn = document.getElementById('installBtn');
+  check('no Install button until the browser offers it', installBtn.hidden);
+  let prompted = false;
+  const offer = new window.Event('beforeinstallprompt', { cancelable: true });
+  offer.prompt = () => { prompted = true; };
+  offer.userChoice = Promise.resolve({ outcome: 'accepted' });
+  window.dispatchEvent(offer);
+  check('the button shows when it does, instead of the browser banner', !installBtn.hidden && offer.defaultPrevented);
+  click(installBtn);
+  await sleep(10);
+  check('it opens the browser\'s install prompt, then goes', prompted && installBtn.hidden);
+
+  console.log('\n--- Accessibility ---');
+  const keydown = (target, k, opts = {}) =>
+    target.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...opts }));
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  click(document.getElementById('tab-control'));
+  check('tabs say which is selected, and only it is in the Tab order',
+    tabs.map(t => `${t.getAttribute('aria-selected')}/${t.tabIndex}`).join() === 'true/0,false/-1,false/-1,false/-1');
+  check('each tab has a plain name and controls its page',
+    tabs.map(t => t.getAttribute('aria-label')).join() === 'Control,Apps,Modules,Debug' &&
+    tabs.every(t => document.getElementById(t.getAttribute('aria-controls')).getAttribute('role') === 'tabpanel'));
+  tabs[0].focus();
+  keydown(tabs[0], 'ArrowLeft');
+  check('ArrowLeft from the first tab wraps to the last, and opens it',
+    document.activeElement === tabs[3] && document.getElementById('page-debug').classList.contains('active'));
+  keydown(tabs[3], 'Home');
+  check('Home goes back to the first tab', document.activeElement === tabs[0] && tabs[0].getAttribute('aria-selected') === 'true');
+
+  live.emit(snapshot({ is_homed: true, state: 'HELLO'.padEnd(16) + ' '.repeat(16) + 'WORLD'.padEnd(32) }));
+  check('screen readers get the display as text, row by row',
+    document.getElementById('liveDisplay').getAttribute('aria-label') === 'The display shows: HELLO / WORLD');
+  live.emit(snapshot({ is_homed: false, state: ' '.repeat(64) }));
+  check('and hear when it needs homing',
+    document.getElementById('liveDisplay').getAttribute('aria-label') === 'Homing required. The display is blank');
+  check('the flaps themselves are hidden from them', document.getElementById('liveGrid').getAttribute('aria-hidden') === 'true');
+
+  click(document.querySelector('[data-onclick="clearDisplay"]'));
+  click(document.querySelector('#preview .flap-unit[data-cell="17"]'));
+  typeKeys('hi');
+  check('the composer says where the cursor is and what the row says',
+    document.getElementById('composeWhere').textContent === 'Row 2 of 4, column 4. Row 2: HI');
+
+  {
+    window.showToast('Boom', 'error');
+    window.showToast('Fine');
+    const toasts = [...document.querySelectorAll('#toastContainer .toast')].slice(-2);
+    check('an error toast interrupts; others are read politely',
+      toasts[0].getAttribute('role') === 'alert' && !toasts[1].hasAttribute('role') &&
+      document.getElementById('toastContainer').getAttribute('aria-live') === 'polite');
+  }
+
+  check('playlist buttons name the page they act on',
+    !!document.querySelector('#playlistList [aria-label="Move page 1 down"]') &&
+    !!document.querySelector('#playlistList [aria-label="Page 1 delay in seconds"]') &&
+    document.querySelector('#playlistList .drag-handle').getAttribute('aria-hidden') === 'true');
+  calls.length = 0;
+  const firstDown = document.querySelector('#playlistList [aria-label="Move page 1 down"]');
+  click(firstDown);
+  check('moving a page keeps focus on its button in the new place',
+    document.activeElement === document.querySelector('#playlistList [aria-label="Move page 2 down"]'));
+
+  click(document.getElementById('tab-modules'));
+  await sleep(30);
+  const modCell = id => document.querySelector(`#modMatrix .mod-cell[data-id="${id}"]`);
+  click(modCell(0));
+  check('module cells are buttons; only the selected one is in the Tab order',
+    modCell(0).tagName === 'BUTTON' && modCell(0).tabIndex === 0 && modCell(1).tabIndex === -1 &&
+    modCell(0).getAttribute('aria-current') === 'true');
+  check('a cell says its state', modCell(1).getAttribute('aria-label') === 'Module 01, not set up' &&
+    modCell(3).getAttribute('aria-label') === 'Module 03');
+  keydown(modCell(0), 'ArrowDown');
+  check('arrow keys move the selection round the grid', globalVar('selectedModule') === 16 && document.activeElement === modCell(16));
+  keydown(modCell(16), 'ArrowLeft');
+  keydown(modCell(15), 'Home');
+  check('Home goes to the first module', globalVar('selectedModule') === 0 && document.activeElement === modCell(0));
+
+  click(document.getElementById('tab-apps'));
+  await sleep(30);
+  const gearBtn = document.querySelector('.app-card[data-app="weather"] .app-gear');
+  check('the settings button is named for its app, beside the run button (not inside it)',
+    gearBtn.getAttribute('aria-label') === 'Weather settings' && !gearBtn.closest('.app-run'));
+  live.emit(snapshot({ active_app: 'weather' }));
+  check('the running app says so to screen readers',
+    document.querySelector('.app-card[data-app="weather"] .app-run').textContent.includes('(running)'));
+  gearBtn.focus();
+  click(gearBtn);
+  await sleep(30);
+  const modal = document.getElementById('appSettingsModal');
+  check('the settings dialog takes focus and makes the page behind inert',
+    modal.contains(document.activeElement) && document.querySelector('.container').inert === true);
+  const modalButtons = [...modal.querySelectorAll('button')];
+  modalButtons[modalButtons.length - 1].focus();
+  keydown(modalButtons[modalButtons.length - 1], 'Tab');
+  check('Tab from its last control goes round to its first', document.activeElement === document.getElementById('asf_zip_code'));
+  keydown(document.activeElement, 'Escape');
+  check('Escape closes it and puts focus back on the ⚙️ button',
+    modal.style.display === 'none' && document.activeElement === gearBtn && !document.querySelector('.container').inert);
+  click(gearBtn);
+  await sleep(30);
+  modal.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  check('a click on the backdrop closes it too', modal.style.display === 'none');
+
+  check('every switch is labelled by its name', [...document.querySelectorAll('input[role="switch"]')].every(input =>
+    document.querySelector(`label[for="${input.id}"]`) || input.closest('.toggle-row').querySelector('label.field-label')));
+
+  console.log('\n--- Unrecognised choices and the restore report ---');
+  const tzBox = document.createElement('div');
+  document.body.append(tzBox);
+  tzBox.append(window.buildField({ key: 'tz', label: 'Timezone', type: 'select', opts: ['UTC', 'US/Eastern'] }, 'EST', 'tzf_'));
+  const tzSelect = document.getElementById('tzf_tz');
+  check('a stored value that is not a choice is shown as not recognised, not swapped for the first choice',
+    tzSelect.value === 'EST' && tzSelect.selectedOptions[0].textContent === 'EST (not recognised)');
+  tzBox.remove();
+
+  click(document.getElementById('tab-modules'));
+  await sleep(30);
+  const backupInput = document.getElementById('backupFile');
+  const file = { text: async () => JSON.stringify({ version: 4, modules: {} }) };
+  Object.defineProperty(backupInput, 'files', { value: [file], configurable: true });
+  window.confirm = () => true;
+  change(backupInput);
+  await sleep(40);
+  const report = document.getElementById('restoreReport');
+  check('a restore says what came back and what was skipped, and why',
+    !report.hidden && report.textContent.includes('Restored: 2 modules, the schedule.') &&
+    report.querySelector('li').textContent === 'Timezone must be one of: ...' && report.classList.contains('warning'));
+
+  console.log('\n--- Blank the display ---');
+  live.emit(snapshot({ blank: true, scheduled: true }));
+  check('a blanked display says so in the banner, with no STOP',
+    document.getElementById('liveBannerText').textContent === '■ The display is blanked (scheduled)' &&
+    document.querySelector('#live-banner .aab-stop').hidden);
+  live.emit(snapshot({ active_app: 'weather' }));
+  check('STOP comes back for anything else', !document.querySelector('#live-banner .aab-stop').hidden);
+  click(document.getElementById('tab-apps'));
+  await sleep(40);
+  const defaultSelect = document.getElementById('scheduleDefault');
+  check('the schedule can blank the display', !!defaultSelect.querySelector('option[value="blank"]') &&
+    window.targetLabel('blank') === 'a blank display');
+
+  console.log('\n--- Undo ---');
+  const undoToasts = () => [...document.querySelectorAll('.toast.has-action')];
+  const lastUndo = () => undoToasts().slice(-1)[0];
+  click(document.querySelector('[data-onclick="addScheduleEntry"]'));
+  const slotCount = document.querySelectorAll('.schedule-entry').length;
+  const lastSlot = [...document.querySelectorAll('.schedule-entry')].slice(-1)[0];
+  click(lastSlot.querySelector('[data-onclick="removeScheduleEntry"]'));
+  check('removing a time slot offers Undo', document.querySelectorAll('.schedule-entry').length === slotCount - 1 &&
+    lastUndo().textContent.includes('Time slot removed'));
+  click(lastUndo().querySelector('.toast-action'));
+  check('Undo puts the slot back where it was', document.querySelectorAll('.schedule-entry').length === slotCount &&
+    [...document.querySelectorAll('.schedule-entry')].slice(-1)[0] === lastSlot);
+
+  click(document.getElementById('tab-control'));
+  await sleep(20);
+  window.eval(`playlist = [{text: 'ONE', delay: 5, style: 'ltr', speed: 15}, {text: 'TWO', delay: 5, style: 'ltr', speed: 15}]`);
+  window.stopEditing();
+  window.renderPlaylist();
+  click(document.querySelector('#playlistList .playlist-item[data-idx="0"] [data-onclick="removeFromPlaylist"]'));
+  check('removing a page offers Undo', globalVar('playlist').map(p => p.text).join() === 'TWO' && lastUndo().textContent.includes('Page 1 removed'));
+  const pageToast = lastUndo();
+  await sleep(20);   // let it finish appearing
+  document.body.focus();
+  document.body.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  check('Ctrl+Z undoes it: the page is back in its place', globalVar('playlist').map(p => p.text).join() === 'ONE,TWO');
+  check('and the Undo toast goes', globalVar('latestUndo') === null && !pageToast.classList.contains('show'));
+
+  click(document.querySelector('#preview .flap-unit[data-cell="0"]'));
+  typeKeys('keep');
+  click(document.querySelector('[data-onclick="clearDisplay"]'));
+  check('Clear offers Undo', row0().trim() === '' && lastUndo().textContent.includes('Grid cleared'));
+  click(lastUndo().querySelector('.toast-action'));
+  check('which brings the grid back', row0().startsWith('KEEP'));
+
+  savedPlaylists.Evening = { pages: [{ text: 'EVE' }], delay: 6 };
+  await window.loadSavedPlaylists();
+  window.confirm = () => { throw new Error('no confirm any more'); };
+  calls.length = 0;
+  click(document.querySelector('.saved-pl-item[data-name="Evening"] [data-onclick="deleteSavedPlaylist"]'));
+  await sleep(50);
+  check('deleting a saved playlist needs no confirm, and offers Undo',
+    !('Evening' in savedPlaylists) && lastUndo().textContent.includes('Deleted "Evening"'));
+  click(lastUndo().querySelector('.toast-action'));
+  await sleep(50);
+  check('Undo saves it again, as it was', savedPlaylists.Evening &&
+    JSON.stringify(savedPlaylists.Evening) === JSON.stringify({ pages: [{ text: 'EVE' }], delay: 6 }) &&
+    !!document.querySelector('.saved-pl-item[data-name="Evening"]'));
+
+  console.log('\n--- Renaming a saved playlist ---');
+  click(document.querySelector('.saved-pl-item[data-name="Evening"] [data-onclick="startRenamePlaylist"]'));
+  const renameBox = document.querySelector('.saved-pl-rename');
+  check('Rename turns the name into a box, focused', !!renameBox && document.activeElement === renameBox && renameBox.value === 'Evening');
+  renameBox.value = 'Morning';
+  renameBox.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await sleep(50);
+  check('a name that is taken is refused, and the box stays', 'Evening' in savedPlaylists && !!document.querySelector('.saved-pl-rename') &&
+    [...document.querySelectorAll('.toast.error')].some(t => t.textContent.includes('already a playlist called "Morning"')));
+  const box2 = document.querySelector('.saved-pl-rename');
+  box2.value = 'Night';
+  box2.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await sleep(60);
+  check('Enter renames it, keeping its place, and says the schedule follows',
+    Object.keys(savedPlaylists).indexOf('Night') >= 0 && !('Evening' in savedPlaylists) &&
+    [...document.querySelectorAll('.toast')].some(t => t.textContent === 'Renamed to "Night"; the schedule follows it') &&
+    document.activeElement === document.querySelector('.saved-pl-item[data-name="Night"] [data-onclick="startRenamePlaylist"]'));
+  click(document.querySelector('.saved-pl-item[data-name="Night"] [data-onclick="loadSavedPlaylist"]'));
+  await sleep(50);
+  click(document.querySelector('.saved-pl-item[data-name="Night"] [data-onclick="startRenamePlaylist"]'));
+  const box3 = document.querySelector('.saved-pl-rename');
+  box3.value = 'Late';
+  box3.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await sleep(60);
+  check('renaming the playlist being edited carries the editor along',
+    globalVar('loadedPlaylist') === 'Late' && document.getElementById('savePlaylistName').value === 'Late');
+  click(document.querySelector('.saved-pl-item[data-name="Late"] [data-onclick="startRenamePlaylist"]'));
+  document.querySelector('.saved-pl-rename').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  check('Escape cancels', !document.querySelector('.saved-pl-rename') && !!document.querySelector('.saved-pl-item[data-name="Late"]'));
+
+  console.log('\n--- Preview ---');
+  document.getElementById('modeToggle').checked = false;
+  change(document.getElementById('modeToggle'));
+  click(document.querySelector('[data-onclick="clearDisplay"]'));
+  click(document.querySelector('#preview .flap-unit[data-cell="0"]'));
+  typeKeys('ab');
+  document.getElementById('speedInput').value = '300';
+  live.emit(snapshot({ state: ' '.repeat(64) }));
+  const previewBtn = document.getElementById('previewBtn');
+  calls.length = 0;
+  click(previewBtn);
+  check('Preview starts: the grid says so, and nothing is sent',
+    document.getElementById('composeWrapper').classList.contains('previewing') &&
+    previewBtn.getAttribute('aria-pressed') === 'true' && calls.length === 0);
+  await sleep(180);
+  check('flaps start in the transition\'s order, a speed apart: the first has turned, the second not yet', row0().startsWith('A '));
+  await sleep(400);
+  check('then the next turns, through the reel, to its character', row0().startsWith('AB'));
+  click(previewBtn);
+  check('Stop preview puts the page back, ending the preview',
+    !document.getElementById('composeWrapper').classList.contains('previewing') && row0().startsWith('AB') &&
+    previewBtn.textContent === '▷ Preview');
+  live.emit(snapshot({ state: 'Z'.repeat(64) }));
+  click(previewBtn);
+  await sleep(40);
+  check('a preview starts from what the display shows now', row0().startsWith('ZZ'));
+  key('ArrowRight');
+  check('typing (or any key in the grid) ends it', !document.getElementById('composeWrapper').classList.contains('previewing') &&
+    row0().startsWith('AB'));
+
+  console.log('\n--- The black tile is the blank flap on the Debug page too ---');
+  click(document.getElementById('tab-debug'));
+  document.getElementById('debugCommand').value = 'show_char';
+  change(document.getElementById('debugCommand'));
+  document.getElementById('debugModuleId').value = '5';
+  document.getElementById('debugParam-char').value = '⬛';
+  document.getElementById('debugParam-char').dispatchEvent(new window.Event('input', { bubbles: true }));
+  check('Show character with the black tile sends a blank', document.getElementById('debugPreview').textContent === 'm05- ' &&
+    document.getElementById('debugNote').textContent === 'Flap index 0');
+  document.getElementById('debugParam-char').value = '🟥';
+  document.getElementById('debugParam-char').dispatchEvent(new window.Event('input', { bubbles: true }));
+  check('and a colour tile its code', document.getElementById('debugPreview').textContent === 'm05-r');
+
+  console.log('\n--- Every page sent shows in the serial log ---');
+  const logStream = MockEventSource.instances.find(s => s.url === '/serial_log/stream');
+  const serialLines = () => [...document.querySelectorAll('#debugLog .debug-log-line')];
+  const pairsFor = text => Array.from(text.padEnd(64)).map((ch, i) => ch + String.fromCharCode(33 + i)).join('');
+  logStream.emit({ msg: 'SIMULATED SENT: m*f21:' + pairsFor('HELLO'.padEnd(16) + 'WORLD') });
+  const frameLine = serialLines().slice(-1)[0];
+  check('a frame broadcast is shown with what it puts on the display',
+    frameLine.classList.contains('sent') &&
+    frameLine.querySelector('.log-note').textContent === ' → page "HELLO / WORLD", modules 21 ms apart');
+  logStream.emit({ msg: 'SENT: m05h' });
+  check('other messages are shown as they are', !serialLines().slice(-1)[0].querySelector('.log-note'));
+  logStream.emit({ msg: 'NOT SENT (serial lost): m00-A' });
+  check('a message that did not reach the bus stands out', serialLines().slice(-1)[0].classList.contains('lost'));
+  let logThrew = false;
+  try { logStream.emitRaw('{not json'); } catch (e) { logThrew = true; }
+  logStream.emit({ msg: 'SENT: m06h' });
+  check('a bad log message is skipped, and the log carries on', !logThrew && serialLines().slice(-1)[0].textContent.endsWith('SENT: m06h'));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

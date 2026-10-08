@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Split-Flap OS</title>
+<!-- Adding the page to a phone's home screen opens it like an app, full screen. -->
+<link rel="manifest" href="{{ url_for('pages.manifest') }}">
+<meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f3f5" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="dark light">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Split-Flap">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
 {% for sheet in ['base', 'control', 'apps', 'modules', 'modals', 'debug'] %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/' + sheet + '.css') }}">
 {% endfor %}
@@ -16,10 +27,11 @@
 {% macro toggle_row(input_id, name, hint='', attrs={}) %}
   <div class="toggle-row">
     <div>
-      <span class="toggle-name">{{ name }}</span>
-      {% if hint %}<span class="hint">{{ hint }}</span>{% endif %}
+      <label class="toggle-name" for="{{ input_id }}">{{ name }}</label>
+      {% if hint %}<span class="hint" id="{{ input_id }}-hint">{{ hint }}</span>{% endif %}
     </div>
-    <label class="switch"><input type="checkbox" id="{{ input_id }}"{{ attrs | xmlattr }}><span class="slider"></span></label>
+    <label class="switch"><input type="checkbox" role="switch" id="{{ input_id }}"
+      {%- if hint %} aria-describedby="{{ input_id }}-hint"{% endif %}{{ attrs | xmlattr }}><span class="slider"></span></label>
   </div>
 {% endmacro %}
 
@@ -34,60 +46,74 @@
   </div>
 {% endmacro %}
 
-<div class="container">
+<main class="container">
+  <h1 class="sr-only">Split-Flap OS</h1>
 
   <!-- Shown only while the live-state stream (SSE) is disconnected — the
        browser retries automatically, this is just so a dropped connection
        is visibly different from "genuinely nothing is happening." -->
-  <div id="streamStatus" class="stream-status">
-    <div class="pulse-dot"></div>
+  <div id="streamStatus" class="stream-status" role="status">
+    <div class="pulse-dot" aria-hidden="true"></div>
     <span>Reconnecting to display…</span>
   </div>
 
   <!-- LIVE DISPLAY: above the tabs, so it shows on every page -->
+  <!-- What's playing (an app or a playlist), with a way to stop it. -->
   <div id="live-banner" class="active-app-banner">
-    <div class="pulse-dot"></div>
-    <span class="aab-label">▶ <span id="live-app-name">APP</span> is running</span>
+    <div class="pulse-dot" aria-hidden="true"></div>
+    <span class="aab-label" id="liveBannerText"></span>
     <button class="aab-stop" data-onclick="stopApp">⏹ STOP</button>
   </div>
 
-  <div class="section-label">LIVE DISPLAY</div>
-  <div class="preview-wrapper live-wrapper">
-    <div class="preview-grid" id="liveGrid"></div>
-    <div class="homing-overlay" id="homingOverlay">HOMING REQUIRED</div>
+  <h2 class="section-label" id="liveDisplayLabel">LIVE DISPLAY
+    <span id="simBadge" class="sim-badge" hidden
+          title="There's no serial port open, so nothing on the display physically moves. Check the USB-RS485 adapter and SPLITFLAP_SERIAL_PORT; it reconnects by itself within a few seconds of the port coming back.">SIMULATION · NO HARDWARE</span>
+  </h2>
+  <!-- Screen readers get what's on the display as text (live-flap.js), not 64 flaps. -->
+  <div class="preview-wrapper live-wrapper" role="img" id="liveDisplay" aria-label="The display is blank">
+    <div class="preview-grid" id="liveGrid" aria-hidden="true"></div>
+    <div class="homing-overlay" id="homingOverlay" aria-hidden="true">HOMING REQUIRED</div>
   </div>
 
   <!-- TAB BAR -->
-  <div class="tab-bar">
-    {% for tab, full, short, action in [
-         ('control', 'CONTROL', 'CTRL', 'switchTab'),
-         ('apps', 'APPS', 'APPS', 'switchTab'),
-         ('modules', 'MODULES', 'MODS', 'switchTab'),
-         ('debug', 'DEBUG', 'DBG', 'switchTab')] %}
-    <button id="tab-{{ tab }}" class="tab-btn{% if loop.first %} active{% endif %}"
-            data-onclick="{{ action }}" data-tab="{{ tab }}">
-      <span class="tab-label-full">{{ full | safe }}</span><span class="tab-label-short">{{ short }}</span>
+  <!-- Tabs: arrow keys move between them (tabs.js). -->
+  <div class="tab-bar" role="tablist" aria-label="Pages">
+    {% for tab, full, short, name in [
+         ('control', 'CONTROL', 'CTRL', 'Control'),
+         ('apps', 'APPS', 'APPS', 'Apps'),
+         ('modules', 'MODULES', 'MODS', 'Modules'),
+         ('debug', 'DEBUG', 'DBG', 'Debug')] %}
+    <button id="tab-{{ tab }}" class="tab-btn{% if loop.first %} active{% endif %}" role="tab"
+            aria-selected="{{ 'true' if loop.first else 'false' }}" aria-controls="page-{{ tab }}"
+            tabindex="{{ 0 if loop.first else -1 }}" aria-label="{{ name }}"
+            data-onclick="switchTab" data-tab="{{ tab }}">
+      <span class="tab-label-full" aria-hidden="true">{{ full | safe }}</span><span class="tab-label-short" aria-hidden="true">{{ short }}</span>
     </button>
     {% endfor %}
   </div>
 
   <!-- ══════════ CONTROL PAGE ══════════ -->
-  <div id="page-control" class="page active">
-    <div class="section-label">COMPOSE</div>
+  <div id="page-control" class="page active" role="tabpanel" aria-labelledby="tab-control">
+    <h2 class="section-label">COMPOSE</h2>
     <!-- Type straight into the grid: the hidden textarea takes the keys (and
          brings up a phone's keyboard); control.js draws them into the flaps. -->
     <div class="preview-wrapper compose-wrapper" id="composeWrapper">
-      <div class="preview-grid" id="preview"></div>
-      <textarea id="composeInput" class="compose-input" aria-label="Compose text" rows="1"
+      <div class="preview-grid" id="preview" aria-hidden="true"></div>
+      <textarea id="composeInput" class="compose-input" aria-label="Compose the page" rows="1"
+                aria-describedby="composeHint composeWhere"
                 autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"></textarea>
     </div>
-    <p class="note compose-hint">Tap or click a flap and type. Arrow keys move{% if config.grid_rows > 1 %}, Enter starts the next line{% endif %}.</p>
+    <!-- Where the cursor is and what that line says, for screen readers. -->
+    <div class="sr-only" id="composeWhere" aria-live="polite"></div>
+    <p class="note compose-hint" id="composeHint">Tap or click a flap and type. Arrow keys move{% if config.grid_rows > 1 %}, Enter starts the next line{% endif %}.</p>
 
-    <div class="color-palette" id="colorPalette"></div>
+    <div class="color-palette" id="colorPalette" role="group" aria-label="Colour tiles and symbols"></div>
 
     <div class="control-panel">
       <label class="check-label"><input type="checkbox" id="modeToggle" data-onchange="toggleMultiMode"> <strong>Multi-Page Playlist</strong></label>
-      <button class="btn btn-secondary btn-sm push-right" data-onclick="centerLines">Center Lines</button>
+      <button class="btn btn-secondary btn-sm push-right" id="previewBtn" data-onclick="togglePreview" aria-pressed="false"
+              title="Play the page (with Multi-Page Playlist on, the whole playlist) in the grid as the display would show it. Nothing is sent.">▷ Preview</button>
+      <button class="btn btn-secondary btn-sm" data-onclick="centerLines">Center Lines</button>
       <button class="btn btn-secondary btn-sm" data-onclick="clearDisplay">Clear</button>
     </div>
 
@@ -118,21 +144,38 @@
       <div class="section-head">
         <h3>📂 Saved Playlists</h3>
         <div class="row">
-          <input type="text" class="input" id="savePlaylistName" placeholder="Playlist name…">
+          <input type="text" class="input" id="savePlaylistName" placeholder="Playlist name…" aria-label="Playlist name">
           <button class="btn btn-success btn-sm" data-onclick="saveCurrentPlaylist">Save</button>
         </div>
       </div>
+      <p class="note" id="loadedPlaylistNote" hidden></p>
       <div id="savedPlaylistList"><div class="empty-note">No saved playlists yet.</div></div>
     </div>
   </div>
 
   <!-- ══════════ APPS PAGE ══════════ -->
-  <div id="page-apps" class="page">
+  <div id="page-apps" class="page" role="tabpanel" aria-labelledby="tab-apps">
     <h3 class="apps-title">Available Apps</h3>
     <p class="note">Tap to launch · ⚙️ to configure</p>
 
     <div class="apps-grid" id="appsGrid">
       <!-- Populated from /apps by apps.js -->
+    </div>
+
+    <!-- Schedule: which app or playlist runs when (see display/scheduler.py) -->
+    <div class="config-section schedule-section">
+      <h3>Schedule</h3>
+      {{ toggle_row('scheduleEnabled', 'Follow the schedule',
+                    'Starting or stopping something by hand overrides it until the next scheduled change.') }}
+      <p class="note schedule-status" id="scheduleStatus"></p>
+      <div id="scheduleEntries" class="schedule-entries"></div>
+      <button class="btn btn-secondary btn-sm" data-onclick="addScheduleEntry">+ Add Time Slot</button>
+      <div class="schedule-default">
+        <label class="field-label" for="scheduleDefault">At all other times</label>
+        <select class="input" id="scheduleDefault"></select>
+      </div>
+      <span class="hint">Time slots are checked from the top; the first that covers the current time wins. A slot that ends before it starts runs past midnight; one that starts and ends at the same time runs all day.</span>
+      <button class="btn btn-secondary section-action" data-onclick="saveSchedule">Save Schedule</button>
     </div>
 
     <!-- Global Settings: shared by the apps -->
@@ -147,7 +190,7 @@
   </div>
 
   <!-- ══════════ MODULES PAGE ══════════ -->
-  <div id="page-modules" class="page">
+  <div id="page-modules" class="page" role="tabpanel" aria-labelledby="tab-modules">
 
     <!-- Hardware Inspector -->
     <div class="config-section">
@@ -155,17 +198,22 @@
         <h3>Hardware Inspector</h3>
         <div class="row">
           <button class="btn btn-success btn-sm" data-onclick="provisionModule">+ ADD MODULE</button>
-          <button class="btn btn-success btn-sm" data-onclick="syncAllFromHardware">SYNC ALL (EEPROM)</button>
+          <button class="btn btn-success btn-sm" id="syncAllBtn" data-onclick="syncAllFromHardware">SYNC ALL (EEPROM)</button>
           <button class="btn btn-warning btn-sm" data-onclick="homeAll">HOME ALL</button>
         </div>
       </div>
 
-      <div class="mod-matrix" id="modMatrix"></div>
+      <!-- One button per module; arrow keys move between them (modules.js). -->
+      <div class="mod-matrix" id="modMatrix" role="group" aria-label="Modules"></div>
 
       <div class="inspector-panel" id="inspectorPanel" hidden>
         <div class="section-head">
           <h3 id="inspectTitle">MODULE 00</h3>
           <button class="btn btn-secondary btn-sm" data-onclick="syncOneFromHardware">Sync EEPROM</button>
+        </div>
+        <div class="sync-failed-note" id="inspectSyncFailed" hidden>
+          <strong>Sync failed</strong>
+          <span>This module didn't answer the last sync, so the values below may be out of date. Check its power and bus connection, then press Sync EEPROM to try again.</span>
         </div>
         <div class="inspector-stats">
           <div class="stat-box"><span class="stat-label">Home Offset</span><span class="stat-val" id="inspectOffset">---</span></div>
@@ -219,7 +267,7 @@
     <div class="config-section">
       <h3>Settings for All Modules</h3>
       <p class="note">Shared by every module: saved here and sent to all modules at once (each keeps them in its EEPROM).</p>
-      <div class="settings-grid">
+      <div class="settings-grid" id="firmwareSettings">
         {% for key, spec in firmware_settings.items() %}
         {% if spec.type == 'bool' %}
         {{ toggle_row('fw-' + key, spec.label, spec.hint) }}
@@ -237,8 +285,9 @@
 
     <!-- Backup / Restore -->
     <div class="config-section">
-      <h3>Calibration Backup &amp; Restore</h3>
-      <p class="note">Export/import all home offsets, step calibrations, motor directions and the settings for all modules.</p>
+      <h3>Backup &amp; Restore</h3>
+      <p class="note">Everything in one file: each module's home offset, step calibration and motor settings, the settings for all modules, saved playlists, the schedule, and every app and global setting. Restoring merges in the saved playlists and replaces the rest. A backup from before playlists were included restores just the modules.</p>
+      <div class="restore-report" id="restoreReport" role="status" hidden></div>
       <div class="backup-row">
         <button class="btn btn-secondary" data-onclick="downloadBackup">⬇ Download Backup JSON</button>
         <div class="row grow">
@@ -252,7 +301,7 @@
   </div><!-- /page-modules -->
 
   <!-- ══════════ DEBUG PAGE ══════════ -->
-  <div id="page-debug" class="page">
+  <div id="page-debug" class="page" role="tabpanel" aria-labelledby="tab-debug">
 
     <!-- Any command in the firmware's protocol (see display/debug_commands.py) -->
     <div class="config-section">
@@ -296,7 +345,8 @@
         <h3>Serial Log</h3>
         <button class="btn btn-secondary btn-sm" data-onclick="clearDebugLog">Clear</button>
       </div>
-      <div class="debug-log" id="debugLog"></div>
+      <!-- A log, but not read out as it fills: it can be very busy. -->
+      <div class="debug-log" id="debugLog" role="log" aria-live="off" aria-label="Serial log" tabindex="0"></div>
     </div>
 
     <!-- Flap character table: which character each index shows -->
@@ -308,11 +358,15 @@
     </div>
 
   </div><!-- /page-debug -->
-</div><!-- /container -->
+  <!-- Only shown when the browser offers to install the page as an app. -->
+  <div class="app-footer">
+    <button class="btn btn-secondary btn-sm" id="installBtn" data-onclick="installApp" hidden>📲 Install as an app</button>
+  </div>
+</main><!-- /container -->
 
 <!-- ══════════ APP SETTINGS MODAL ══════════ -->
 <div class="modal-overlay" id="appSettingsModal">
-  <div class="modal-content">
+  <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="appSettingsTitle">
     <h3 id="appSettingsTitle" class="modal-title">App Settings</h3>
     <div id="appSettingsFields"></div>
     <div class="button-row">
@@ -323,11 +377,12 @@
 </div>
 
 <!-- TOAST -->
-<div class="toast-container" id="toastContainer"></div>
+<!-- Read out as they appear; errors interrupt (toast.js). -->
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
 <script>const CONFIG = {{ config | tojson }};</script>
-{% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control',
-                  'apps', 'app-settings-modal', 'modules', 'debug', 'main'] %}
+{% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control', 'preview',
+                  'apps', 'schedule', 'app-settings-modal', 'modules', 'debug', 'install', 'main'] %}
 <script src="{{ url_for('static', filename='js/' + script + '.js') }}"></script>
 {% endfor %}
 </body>

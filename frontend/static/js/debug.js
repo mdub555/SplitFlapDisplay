@@ -4,7 +4,11 @@
 
 // What a character typed or shown in the UI is sent as: colour emoji, °, ♥
 // and " become their codes on the wire; anything else is sent as typed.
-const WIRE_CHARS = Object.fromEntries(Object.entries(CONFIG.display_chars).map(([code, shown]) => [shown, code]));
+const WIRE_CHARS = {
+  ...Object.fromEntries(Object.entries(CONFIG.display_chars).map(([code, shown]) => [shown, code])),
+  // Every colour tile, the black one (the blank flap, ' ') included.
+  ...TILE_CODES,
+};
 const toWireChars = text => Array.from(text).map(ch => WIRE_CHARS[ch] || ch).join('');
 
 const DEBUG_COMMANDS = Object.fromEntries(CONFIG.debug_commands.map(c => [c.key, c]));
@@ -221,7 +225,16 @@ const debugPage = {
 
   startLogStream() {
     this.source = new EventSource('/serial_log/stream');
-    this.source.onmessage = event => this.appendLog(JSON.parse(event.data).msg);
+    this.source.onmessage = event => {
+      let msg;
+      try {
+        msg = JSON.parse(event.data).msg;
+      } catch (err) {
+        console.error('Bad serial log message:', event.data, err);
+        return;   // one bad message mustn't stop the log
+      }
+      if (typeof msg === 'string') this.appendLog(msg);
+    };
     this.source.onerror = () => {
       console.error('Serial log stream error.');
       this.source.close();
@@ -234,7 +247,9 @@ const debugPage = {
     // module). Each dump reply gets a line of labelled values; anything else
     // is shown as received.
     if (!msg.startsWith('RECV:')) {
-      this.appendLine(msg);
+      const line = this.appendLine(msg);
+      const frame = this.describeFrame(msg);
+      if (frame) line.append(el('span', {class: 'log-note'}, ` → ${frame}`));
       return;
     }
     msg.slice('RECV:'.length).split(/\r?\n/).forEach(text => {
@@ -277,10 +292,29 @@ const debugPage = {
     line.append(...fields);
   },
 
+  // What a frame broadcast (m*f<interval>:<pairs>, how pages go to the
+  // display; see frame_message() in display/player.py) puts on the display,
+  // in words, or null if `msg` isn't one. Each pair is a module's character
+  // and its start rank.
+  describeFrame(msg) {
+    const frameCmd = (CONFIG.debug_commands.find(c => c.format === 'frame') || {}).cmd;
+    const match = frameCmd && msg.match(/^(?:SIMULATED )?SENT: m(.)(.)(\d+):(.*)$/);
+    if (!match || match[1] !== CONFIG.broadcast || match[2] !== frameCmd) return null;
+    const pairs = Array.from(match[4]);
+    const chars = pairs.filter((_, i) => i % 2 === 0).map(ch => displayChar(ch) || ' ');
+    const rows = [];
+    for (let r = 0; r < GRID_ROWS; r++) {
+      const row = chars.slice(r * GRID_COLS, (r + 1) * GRID_COLS).join('').trim();
+      if (row) rows.push(row);
+    }
+    return `page "${rows.join(' / ') || '(blank)'}", modules ${match[3]} ms apart`;
+  },
+
   // Adds a timestamped line to the log and returns it.
   appendLine(msg) {
     const line = el('div', {class: 'debug-log-line'}, `[${new Date().toLocaleTimeString()}] ${msg}`);
     if (msg.startsWith('SENT:') || msg.startsWith('SIMULATED SENT:')) line.classList.add('sent');
+    if (msg.startsWith('NOT SENT') || msg.startsWith('SERIAL LOST')) line.classList.add('lost');
     if (msg.startsWith('RECV')) line.classList.add('recv');
     // Only follow new lines if the log was already scrolled to the bottom.
     const atBottom = this.logEl.scrollHeight - this.logEl.scrollTop - this.logEl.clientHeight < 20;

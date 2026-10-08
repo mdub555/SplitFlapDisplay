@@ -4,6 +4,16 @@ import threading
 from config import NUM_MODULES
 
 
+def _seconds(value, default):
+    """`value` as a positive number of seconds, or `default`. The page sends
+    the delay as typed, so it can be a string, blank or nonsense."""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return default
+    return seconds if seconds > 0 else default
+
+
 class _Subscribers:
     """The queues of every open SSE stream for one kind of message.
 
@@ -72,6 +82,33 @@ class DisplayState:
         self.active_app = None       # key into the app registry, or None
         self.current_playlist = []   # manual pages when active_app is None
         self.loop_delay = 5          # default seconds/page for the manual playlist
+        self.playlist_name = None    # the saved playlist being played, if it is one
+        self.playlist_page = 0       # index of the playlist page on the display
+        self.blanked = False         # showing a blank page on purpose (see run_blank)
+
+        # Whether the serial port opened (display/serial_link.py sets it). When
+        # it didn't, nothing physically moves and the page says so.
+        self.hardware_connected = False
+
+        # What the scheduler (display/scheduler.py) last started, as a target
+        # string ('app:<key>' or 'playlist:<name>'), so the page can say a
+        # running thing is scheduled. Set by the scheduler only.
+        self.scheduled_target = None
+
+        # Goes up by one every time settings.json is saved (settings/store.py),
+        # so every open page hears that the settings changed, whoever changed
+        # them, and can reload what it shows.
+        self.settings_version = 0
+
+        # Syncing modules (reading back their settings), for the Modules page:
+        # whether a Sync All is under way, each module's latest success (by
+        # a number that goes up with every one, so the page can flash the
+        # module each time), and the modules whose last sync failed, until
+        # they next sync.
+        self.sync_running = False
+        self.sync_count = 0
+        self.sync_ok = {}        # module id -> sync_count at its latest success
+        self.sync_failed = set()
 
         self.last_sent_page = None
 
@@ -94,15 +131,149 @@ class DisplayState:
         """Read-only dict shared by the plain GET /current_state endpoint
         and every value pushed over the SSE stream."""
         with self.lock:
+            playing = None
+            if self.active_app is None and self.current_playlist and not self.blanked:
+                playing = {
+                    'name': self.playlist_name,
+                    'page': self.playlist_page,
+                    'pages': len(self.current_playlist),
+                }
+            target = self._current_target()
             return {
                 'is_homed': self.is_homed,
                 'state': self.current_display_string,
                 'active_app': self.active_app,
+                'playlist': playing,
+                'blank': self.blanked,
+                'scheduled': target is not None and target == self.scheduled_target,
+                'hardware_connected': self.hardware_connected,
+                'settings_version': self.settings_version,
+                'sync': {
+                    'running': self.sync_running,
+                    'ok': {str(i): n for i, n in self.sync_ok.items()},
+                    'failed': sorted(self.sync_failed),
+                },
             }
+
+    def _current_target(self):
+        """What's running as a scheduler target string, or None for nothing
+        (or an unsaved playlist). Call with the lock held."""
+        if self.blanked:
+            return 'blank'
+        if self.active_app:
+            return f'app:{self.active_app}'
+        if self.current_playlist and self.playlist_name:
+            return f'playlist:{self.playlist_name}'
+        return None
+
+    def current_target(self):
+        with self.lock:
+            return self._current_target()
 
     def set_active_app(self, app_key):
         with self.lock:
             self.active_app = app_key
+        self._broadcast()
+
+    # --- What runs: an app, a playlist, or nothing ----------------------
+    #
+    # Each of these makes the playlist loop (display/player.py) drop what
+    # it's doing and pick up the new state straight away.
+
+    def run_app(self, app_key):
+        with self.lock:
+            self.active_app = app_key
+            self.current_playlist = []
+            self.playlist_name = None
+            self.blanked = False
+        self.request_stop()
+        self._broadcast()
+
+    def run_playlist(self, pages, delay=5, name=None):
+        """Play `pages` in a loop, `delay` seconds each unless a page sets
+        its own. `name` is the saved playlist they came from, if any."""
+        with self.lock:
+            self.active_app = None
+            self.current_playlist = list(pages or [])
+            self.loop_delay = _seconds(delay, 5)
+            self.playlist_name = name
+            self.playlist_page = 0
+            self.last_sent_page = None
+            self.blanked = False
+        self.request_stop()
+        self._broadcast()
+
+    def run_blank(self):
+        """Clear the display and keep it clear (say, overnight), until
+        something else is started."""
+        self.run_playlist([{'text': ' ' * NUM_MODULES}], 60)
+        with self.lock:
+            self.blanked = True
+        self._broadcast()
+
+    def stop(self):
+        """Stop whatever's running; the display keeps its last page."""
+        with self.lock:
+            self.active_app = None
+            self.current_playlist = []
+            self.playlist_name = None
+            self.blanked = False
+        self.request_stop()
+        self._broadcast()
+
+    def rename_playlist(self, old, new):
+        """A saved playlist was renamed: if it's playing, or what the
+        schedule started, it's still the same one."""
+        with self.lock:
+            if self.playlist_name == old:
+                self.playlist_name = new
+            if self.scheduled_target == f'playlist:{old}':
+                self.scheduled_target = f'playlist:{new}'
+        self._broadcast()
+
+    def set_playlist_page(self, index):
+        with self.lock:
+            if self.playlist_page == index:
+                return
+            self.playlist_page = index
+        self._broadcast()
+
+    def start_sync(self):
+        with self.lock:
+            self.sync_running = True
+        self._broadcast()
+
+    def sync_result(self, mod_id, ok):
+        """Module `mod_id` answered a sync (`ok`) or didn't."""
+        with self.lock:
+            if ok:
+                self.sync_count += 1
+                self.sync_ok[mod_id] = self.sync_count
+                self.sync_failed.discard(mod_id)
+            else:
+                self.sync_failed.add(mod_id)
+        self._broadcast()
+
+    def finish_sync(self):
+        with self.lock:
+            self.sync_running = False
+        self._broadcast()
+
+    def set_hardware_connected(self, connected):
+        with self.lock:
+            if self.hardware_connected == connected:
+                return
+            self.hardware_connected = connected
+        self._broadcast()
+
+    def settings_changed(self):
+        with self.lock:
+            self.settings_version += 1
+        self._broadcast()
+
+    def set_scheduled_target(self, target):
+        with self.lock:
+            self.scheduled_target = target
         self._broadcast()
 
     def mark_module_char(self, module_id, char):

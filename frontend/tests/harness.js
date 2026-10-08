@@ -73,6 +73,9 @@ window.EventSource = MockEventSource;
 
 // --- Mock fetch: log every call, return canned responses per-route ---
 const calls = [];
+const savedPlaylists = {};
+let schedule = { enabled: true, default: 'app:time',
+  entries: [{ days: [0, 1, 2, 3, 4], start: '07:00', end: '09:00', target: 'playlist:Gone' }] };
 
 window.fetch = async (url, options = {}) => {
   calls.push({ url, method: options.method || 'GET', body: options.body });
@@ -113,9 +116,40 @@ window.fetch = async (url, options = {}) => {
       firmware: { stepDelayUs: 1000, homingStepDelayUs: 1800, debounceMs: 100, recalculateHome: true,
                   rampStartDelayUs: 3000, rampSteps: 0, settleMs: 0, staggerMs: 150 } });
   }
+  // Saved playlists are kept, so saving, loading and deleting round-trip.
   if (url === '/playlists') {
-    if (options.method === 'POST') return ok({ status: 'saved', name: 'Test' });
-    return ok({});
+    if (options.method === 'POST') {
+      const { name, pages, delay } = JSON.parse(options.body);
+      savedPlaylists[name] = { pages, delay };
+      return ok({ status: 'saved', name });
+    }
+    return ok(JSON.parse(JSON.stringify(savedPlaylists)));
+  }
+  const playlistRoute = url.match(/^\/playlists\/(.+?)(\/run|\/rename)?$/);
+  if (playlistRoute) {
+    const name = decodeURIComponent(playlistRoute[1]);
+    if (playlistRoute[2] === '/run') {
+      return name in savedPlaylists ? ok({ status: 'running', name }) : ok({ status: 'error', message: 'No such playlist' }, 404);
+    }
+    if (playlistRoute[2] === '/rename') {
+      const to = JSON.parse(options.body).name;
+      if (to in savedPlaylists) return ok({ status: 'error', message: `There is already a playlist called "${to}"` }, 409);
+      const renamed = Object.fromEntries(Object.entries(savedPlaylists).map(([k, v]) => [k === name ? to : k, v]));
+      Object.keys(savedPlaylists).forEach(k => delete savedPlaylists[k]);
+      Object.assign(savedPlaylists, renamed);
+      return ok({ status: 'renamed', name: to, schedule_updated: 1 });
+    }
+    const deleted = savedPlaylists[name] || null;
+    delete savedPlaylists[name];
+    return ok({ status: 'deleted', playlist: deleted });
+  }
+  if (url === '/schedule') {
+    if (options.method === 'POST') {
+      const body = JSON.parse(options.body);
+      if (body.entries.some(e => !e.target)) return ok({ status: 'error', message: 'Entry 1 needs something to show' }, 400);
+      schedule = body;
+    }
+    return ok({ schedule, now: 'Tue 14:05', current: schedule.enabled ? schedule.default : '' });
   }
   if (url.startsWith('/apps/') && url.endsWith('/settings')) {
     return ok({ status: 'saved' });
@@ -170,6 +204,14 @@ window.fetch = async (url, options = {}) => {
       },
     });
   }
+  if (url === '/modules/sync_all') {
+    return ok({ status: 'success', synced: [0], failed: [3],
+      settings: { modules: { '0': { homeOffset: 2832, totalSteps: 4096 }, '3': { homeOffset: 480, totalSteps: 4096 } } } });
+  }
+  if (url === '/restore_settings') {
+    return ok({ status: 'success', hardware_updated: false, restored: ['2 modules', 'the schedule'],
+                skipped: ['Timezone must be one of: ...'] });
+  }
   if (url === '/home_all') {
     return ok({ status: 'Homing All' });
   }
@@ -193,4 +235,4 @@ for (const f of scriptFiles) {
   window.document.head.appendChild(scriptEl);
 }
 
-module.exports = { dom, window, calls, MockEventSource };
+module.exports = { dom, window, calls, MockEventSource, savedPlaylists };

@@ -52,12 +52,19 @@ class FakeState:
 
 
 class SendToDisplayTest(unittest.TestCase):
+    def write_serial(self, data):
+        if self.port_gone:
+            return False
+        self.ser.write(data.encode())
+        return True
+
     def setUp(self):
+        self.port_gone = False
         self.ser = FakeSerial()
         self.state = FakeState()
         fakes = {
-            'display.serial_link': _module('display.serial_link', ser=self.ser,
-                                           serial_lock=threading.Lock()),
+            'display.serial_link': _module('display.serial_link', serial_lock=threading.Lock(),
+                                           write_serial=self.write_serial),
             'display.state': _module('display.state', state=self.state),
             'apps.registry': _module('apps.registry', registry=None),
             'settings.store': _module('settings.store', settings={}),
@@ -128,6 +135,33 @@ class SendToDisplayTest(unittest.TestCase):
         self.player.send_to_display('HI', step_delay_ms=15)
         self.assert_one_message_per_module()
 
+    # ---- when the port goes, or anything else goes wrong --------------------
+
+    def test_no_port_means_no_waiting_on_the_bus(self):
+        self.port_gone = True
+        slept = []
+        self.player.time = types.SimpleNamespace(sleep=slept.append, time=lambda: 0)
+        self.player.send_to_display('HI', step_delay_ms=250)   # one message per module
+        self.assertEqual(slept, [])
+        self.assertEqual(self.state.shown[0], self.page('HI'))   # the page still shows on screen
+
+    def test_the_playlist_loop_carries_on_after_an_error(self):
+        class Stop(Exception):
+            pass
+        passes = []
+
+        def play_once(cache):
+            passes.append(1)
+            raise RuntimeError('serial write failed')
+
+        self.player._play_once = play_once
+        self.player.time = types.SimpleNamespace(sleep=lambda s: None, time=lambda: 0)
+        # Every error is logged and the loop goes round again. The test ends
+        # it by having the second log call raise, which nothing catches.
+        with mock.patch.object(self.player.logging, 'exception', side_effect=[None, Stop()]):
+            with self.assertRaises(Stop):
+                self.player.playlist_loop()
+        self.assertEqual(len(passes), 2)
 
 if __name__ == '__main__':
     unittest.main()

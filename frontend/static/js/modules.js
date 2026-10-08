@@ -14,6 +14,18 @@ function loadModulesPage() {
   });
 }
 
+// The settings changed elsewhere (another device, a sync, a restore) while
+// this page is open: show the new module data. The shared firmware settings
+// are only reloaded if nobody's part-way through editing them.
+function refreshModulesPage() {
+  api.getSettings().then(settings => {
+    if (!settings) return;
+    currentSettings = settings;
+    selectModule(selectedModule);
+  });
+  if (!firmwareEdited) loadFirmwareConfig();
+}
+
 // --- The hardware inspector -----------------------------------------------
 
 // The stored settings of module `id` (the selected one by default), or null
@@ -36,10 +48,98 @@ function renderModuleGrid() {
   // Laid out like the display; phones wrap it narrower (see modules.css).
   grid.style.setProperty('--cols', GRID_COLS);
   grid.style.setProperty('--phone-cols', phoneColumns(GRID_COLS));
-  grid.replaceChildren(...Array.from({length: NUM_MODULES}, (_, i) => el('div', {
+  // Buttons, with only the selected one in the Tab order: the arrow keys
+  // move between them (see moduleGridKeydown).
+  grid.replaceChildren(...Array.from({length: NUM_MODULES}, (_, i) => el('button', {
+    type: 'button',
     class: `mod-cell${i === selectedModule ? ' active' : ''}${moduleSettings(i) ? '' : ' unprovisioned'}`,
+    tabIndex: i === selectedModule ? 0 : -1,
+    ariaCurrent: i === selectedModule ? 'true' : null,
     dataset: {onclick: 'selectModuleAction', id: i},
   }, formatModuleId(i))));
+  grid.querySelectorAll('.mod-cell').forEach(cell =>
+    cell.addEventListener('animationend', () => cell.classList.remove('sync-flash')));
+  paintSyncState();
+}
+
+// What a screen reader says for module `id`'s button.
+function moduleCellLabel(id) {
+  return `Module ${formatModuleId(id)}${moduleSettings(id) ? '' : ', not set up'}${syncFailed(id) ? ', sync failed' : ''}`;
+}
+
+// Arrow keys move the selection round the grid as it's laid out (it wraps
+// narrower on a phone); Home and End go to the first and last module.
+function moduleGridKeydown(e) {
+  const cell = e.target.closest('.mod-cell');
+  if (!cell) return;
+  const grid = byId('modMatrix');
+  const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length || GRID_COLS;
+  const id = Number(cell.dataset.id);
+  const to = {
+    ArrowRight: id + 1, ArrowLeft: id - 1, ArrowDown: id + cols, ArrowUp: id - cols,
+    Home: 0, End: NUM_MODULES - 1,
+  }[e.key];
+  if (to === undefined) return;
+  e.preventDefault();
+  if (to < 0 || to >= NUM_MODULES) return;
+  selectModule(to);
+  grid.querySelector(`.mod-cell[data-id="${to}"]`).focus();
+}
+byId('modMatrix').addEventListener('keydown', moduleGridKeydown);
+
+// --- Sync progress ----------------------------------------------------------
+//
+// The live state reports every module's sync results (DisplayState.sync_* in
+// display/state.py), whether this page or another device started the sync:
+// each success flashes the module's cell green, and a module whose last sync
+// failed stays orange until it next syncs.
+
+const SYNC_FLASH_MS = 1200;   // as long as the sync-flash animation in modules.css
+let syncState = {running: false, ok: {}, failed: []};
+let seenSyncOk = null;        // module id -> the success it was last flashed for
+const syncFlashes = {};       // module id -> when its flash started
+
+function noticeSyncState(sync) {
+  if (!sync) return;
+  // The first report is history (from before this page loaded): nothing to flash.
+  if (seenSyncOk !== null) {
+    for (const [id, n] of Object.entries(sync.ok)) {
+      if (seenSyncOk[id] !== n) syncFlashes[id] = performance.now();
+    }
+  }
+  seenSyncOk = {...sync.ok};
+  syncState = sync;
+  const button = byId('syncAllBtn');
+  button.disabled = sync.running;
+  button.textContent = sync.running ? 'SYNCING…' : 'SYNC ALL (EEPROM)';
+  paintSyncState();
+  refreshSyncNote();
+}
+
+const syncFailed = id => syncState.failed.includes(id);
+
+function paintSyncState() {
+  const now = performance.now();
+  byId('modMatrix').querySelectorAll('.mod-cell').forEach(cell => {
+    const id = Number(cell.dataset.id);
+    cell.classList.toggle('sync-failed', syncFailed(id));
+    cell.setAttribute('aria-label', moduleCellLabel(id));
+    const started = syncFlashes[id];
+    cell.classList.remove('sync-flash');
+    if (started === undefined || now - started >= SYNC_FLASH_MS) {
+      delete syncFlashes[id];
+      return;
+    }
+    // (Re)start the flash part-way through, as far as it had got: a cell
+    // that's just been redrawn carries on rather than starting over.
+    void cell.offsetWidth;   // so the browser sees the animation start again
+    cell.style.animationDelay = `${started - now}ms`;
+    cell.classList.add('sync-flash');
+  });
+}
+
+function refreshSyncNote() {
+  byId('inspectSyncFailed').hidden = !syncFailed(selectedModule);
 }
 
 // A number from the module's stored settings for the stats row, or ---.
@@ -61,10 +161,14 @@ function selectModule(id) {
   refreshModuleTiming();
   refreshModuleToggles();
   refreshManualControls();
+  refreshSyncNote();
 }
 
 function selectModuleAction(cell) {
-  selectModule(parseInt(cell.dataset.id, 10));
+  const id = parseInt(cell.dataset.id, 10);
+  selectModule(id);
+  // The grid was redrawn: keep focus on the module just picked.
+  byId('modMatrix').querySelector(`.mod-cell[data-id="${id}"]`).focus();
 }
 
 // The shared firmware settings as the selected module reported them in its
@@ -142,7 +246,9 @@ function refreshManualControls() {
   const box = byId('manualControls');
   box.classList.toggle('disabled', !mod);
   box.querySelectorAll('input, button').forEach(control => { control.disabled = !mod; });
-  byId('totalStepsInput').value = mod && mod.totalSteps !== undefined ? mod.totalSteps : '';
+  // Not while it's being typed in (a reload can come at any time).
+  const steps = byId('totalStepsInput');
+  if (document.activeElement !== steps) steps.value = mod && mod.totalSteps !== undefined ? mod.totalSteps : '';
 }
 
 // Whole number from a number input, or null (after a warning toast) if it's
@@ -294,12 +400,16 @@ function syncOneFromHardware() {
 
 function syncAllFromHardware() {
   if (!confirm(`Poll all ${NUM_MODULES} modules to rebuild settings.json?`)) return;
-  document.body.style.cursor = 'wait';
+  // The module grid shows the progress (see noticeSyncState).
   api.syncAllModules().then(result => {
-    document.body.style.cursor = '';
     if (!result) return;
     useSettings(null, result);
-    showToast('All modules synced');
+    const failed = result.failed || [];
+    if (failed.length) {
+      showToast(`${result.synced.length} synced; sync failed for ${failed.map(formatModuleId).join(', ')}`, 'warn');
+    } else {
+      showToast(`All ${result.synced.length} modules synced`);
+    }
   });
 }
 
@@ -318,11 +428,15 @@ function provisionModule() {
 // ...). The inputs are rendered from the backend's definitions (fw-<key>);
 // the values and their ranges come from GET /firmware_config.
 let firmwareLimits = null;
+let firmwareEdited = false;   // the inputs hold changes that haven't been applied
+byId('firmwareSettings').addEventListener('input', () => { firmwareEdited = true; });
+byId('firmwareSettings').addEventListener('change', () => { firmwareEdited = true; });
 
 function loadFirmwareConfig() {
   api.firmwareConfig().then(cfg => {
     if (!cfg) return; // error toast already shown by the api layer
     firmwareLimits = cfg.limits;
+    firmwareEdited = false;
     Object.entries(cfg.limits).forEach(([key, lim]) => {
       const input = byId(`fw-${key}`);
       if (lim.type === 'bool') {
@@ -349,6 +463,7 @@ function applyFirmwareConfig() {
   api.saveFirmwareConfig(payload).then(result => {
     if (!result) return;
     if (currentSettings) currentSettings.firmware = result.values;
+    firmwareEdited = false;
     showToast('Settings sent to all modules');
   });
 }
@@ -382,15 +497,32 @@ function uploadBackup(input) {
       showToast('Invalid JSON file', 'error');
       return;
     }
-    if (!confirm('Restore calibration data and push to all modules?')) return;
+    if (!confirm('Restore this backup? Module settings are sent to every module.')) return;
     status.textContent = 'Restoring…';
     api.restoreSettings(data).then(result => {
       status.textContent = result ? '✓ Done' : '✗ Error';
       if (!result) return;
-      showToast('Restore complete');
+      showRestoreReport(result);
+      showToast(result.skipped.length ? 'Restored, with some parts skipped' : 'Restore complete',
+                result.skipped.length ? 'warn' : 'success');
       loadModulesPage();
+      loadSavedPlaylists();
     });
   });
+}
+
+// What a restore brought back, and what it left out (and why).
+function showRestoreReport(result) {
+  const report = byId('restoreReport');
+  const restored = result.restored.length ? result.restored.join(', ') : 'nothing';
+  const lines = [el('div', {}, `Restored: ${restored}.${result.hardware_updated ? ' Sent to the modules.' : ''}`)];
+  if (result.skipped.length) {
+    lines.push(el('div', {}, 'Skipped, because they didn\'t check out:'),
+               el('ul', {}, ...result.skipped.map(item => el('li', {}, item))));
+  }
+  report.replaceChildren(...lines);
+  report.classList.toggle('warning', result.skipped.length > 0);
+  report.hidden = false;
 }
 
 registerActions({
