@@ -377,3 +377,99 @@ TEST(Motion, RevolutionsAreCountedAndSavedEvery16) {
   boot();
   EXPECT_EQ(splitFlap().revolutionCount(), 16u);  // what was saved
 }
+
+TEST(Motion, CalibrateRecoversFromATotalThatIsFarTooSmall) {
+  bootWithId(5);
+  sendAndSettle("m5T2048");  // the motor's full steps, not its half-steps
+  sendAndSettle("m5c");      // home is 3096 steps away: more than 2048 + 500
+  EXPECT_EQ(splitFlap().lastError(), SPLITFLAP_OK);
+  EXPECT_EQ(EepromStore::getTotalSteps(), 4096);
+  EXPECT_EQ(flapShowing(), 0);
+}
+
+TEST(Motion, ChangingTheDirectionForgetsThePosition) {
+  bootWithId(5);
+  home();
+  sendAndSettle("m5C0");
+  EXPECT_EQ(splitFlap().currentFlapIndex(), FLAP_UNKNOWN);
+  reel.forwardWhenClockwise = false;  // so counter-clockwise turns the reel forward
+  sendAndSettle("m5+10");
+  EXPECT_EQ(flapShowing(), 10);
+  EXPECT_EQ(splitFlap().currentFlapIndex(), 10);
+}
+
+TEST(Motion, ChangingTheDirectionMidMoveStopsIt) {
+  bootWithId(5);
+  home();
+  send("m5+40");
+  runMs(50);
+  send("m5C0");
+  runMs(1);
+  EXPECT_FALSE(splitFlap().busy());
+  EXPECT_EQ(splitFlap().currentFlapIndex(), FLAP_UNKNOWN);
+}
+
+TEST(Motion, SettingTheSameDirectionKeepsThePosition) {
+  bootWithId(5);
+  home();
+  sendAndSettle("m5C1");
+  EXPECT_EQ(splitFlap().currentFlapIndex(), 0);
+}
+
+TEST(Motion, NudgeWhileThePositionIsUnknownGoesItsDistancePastTheEdge) {
+  bootWithId(5);
+  runMs(500);            // well past power-on
+  reel.position = 4000;  // 96 steps before the home edge
+  uint32_t before = reel.forwardSteps;
+  sendAndSettle("m5n200");
+  EXPECT_EQ(reel.forwardSteps - before, 200u);
+  EXPECT_EQ(splitFlap().currentFlapIndex(), FLAP_UNKNOWN);
+}
+
+TEST(Motion, AnEarlyEdgeThatJumpsOverTheTargetEndsTheMove) {
+  bootWithId(5);
+  home();
+  reel.position += 10;  // the reel is 10 steps ahead of where it's tracked
+  uint32_t before = reel.forwardSteps;
+  // The edge is tracked at 4096 - 480 = 3616, but comes 10 steps early, at
+  // 3606: the snap to 3616 jumps over the target.
+  sendAndSettle("m5g3610");
+  EXPECT_EQ(reel.forwardSteps - before, 3606u);  // not on round another revolution
+  EXPECT_EQ(splitFlap().currentStepPosition(), 3616);
+  EXPECT_EQ(splitFlap().lastDrift(), -10);
+}
+
+TEST(Motion, NewTotalStepsWrapsAHomeOffsetPastTheRevolution) {
+  bootWithId(5);
+  sendAndSettle("m5T400");
+  EXPECT_EQ(EepromStore::getHomeOffset(), OFFSET % 400);
+}
+
+// ---- The home sensor ----
+
+TEST(HomeSensor, ABounceAsTheContactOpensIsNotAnEdge) {
+  bootWithId(5);
+  home();
+  sendAndSettle("m5-w");  // flap 57: stops inside the home contact
+  ASSERT_TRUE(reel.homeContactClosed());
+  runMs(2000);  // shown for longer than the debounce time
+  uint32_t revolutions = splitFlap().revolutionCount();
+  send("m5-r");
+  runMs(10);
+  reel.sensorConnected = false;  // the contact bounces open for 1 ms
+  runMs(1);
+  reel.sensorConnected = true;
+  EXPECT_TRUE(runUntilIdle());
+  EXPECT_EQ(splitFlap().revolutionCount(), revolutions);
+  EXPECT_EQ(flapShowing(), 58);
+}
+
+TEST(HomeSensor, AnEdgeRightAfterPowerOnCounts) {
+  bootWithId(0);
+  sendAndSettle("m0A1");
+  reel.position = 4096 - 36;  // home is 36 steps (ms) away
+  boot();                     // module 0 has no stagger
+  EXPECT_TRUE(runUntilIdle());
+  EXPECT_EQ(reel.forwardSteps, 36u + OFFSET);
+  EXPECT_EQ(flapShowing(), 0);
+}

@@ -143,12 +143,17 @@ uint16_t SplitFlap::moveStepDelayUs() const {
 void SplitFlap::afterStep(bool edge) {
   switch (phase) {
     case PHASE_MOVE:
-      if (edge && EepromStore::recalculateHome()) {
-        // currentStepPos was just snapped to ground truth, recompute the
-        // remaining steps again to compensate for any drift.
-        stepsRemaining = stepsToTarget(targetStepPos);
-      } else {
-        stepsRemaining--;
+      stepsRemaining--;
+      // currentStepPos was just snapped to ground truth: recompute the
+      // remaining steps to compensate for any drift. Not for a raw move from
+      // an unknown position (a nudge), whose target is a distance rather
+      // than a place, nor for a move whose position was forgotten mid-way.
+      if (edge && EepromStore::recalculateHome() && targetFlapIdx != FLAP_UNKNOWN) {
+        // A negative drift means the edge came early and the snap moved the
+        // position forward by -drift. If that jumped over the target, the
+        // move has arrived; recomputing would wrap round a whole revolution.
+        bool jumpedTarget = drift < 0 && stepsRemaining <= (uint16_t)-drift;
+        stepsRemaining = jumpedTarget ? 0 : stepsToTarget(targetStepPos);
       }
       break;
     case PHASE_OFFSET:
@@ -178,8 +183,11 @@ void SplitFlap::afterSeekStep(bool edge) {
     return;
   }
   // A revolution plus a margin, saturating at 65535 rather than wrapping
-  // when total steps is near the top of its range.
+  // when total steps is near the top of its range. A calibration searches
+  // at least the longest revolution it accepts, since it may be measuring
+  // because total steps is wrong (say, 2048 for a 4096-step reel).
   uint16_t total = EepromStore::getTotalSteps();
+  if (calibrating && total < CALIBRATION_MAX_STEPS) total = CALIBRATION_MAX_STEPS;
   uint16_t limit = total > 0xFFFF - HOME_SEARCH_MARGIN ? 0xFFFF : total + HOME_SEARCH_MARGIN;
   if (stepsTaken >= limit) {
     failHoming(SPLITFLAP_HOME_NOT_FOUND);
@@ -309,6 +317,15 @@ void SplitFlap::setTotalSteps(uint16_t steps) {
   if (phase == PHASE_MOVE) stop();  // its target is in the old units too
   forgetPosition();
   currentStepPos = 0;  // keep it below the new total
+}
+
+void SplitFlap::setMotorClockwise(bool clockwise) {
+  if (clockwise == EepromStore::isMotorClockwise()) return;
+  EepromStore::saveMotorDir(clockwise);
+  // The reel now turns the other way, so whatever it was doing, and the
+  // position it was counted to, no longer hold.
+  stop();
+  forgetPosition();
 }
 
 // =============================================================================

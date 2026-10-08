@@ -117,6 +117,32 @@ TEST(Settings, ASettingsResetKeepsTheIdAndRevolutionsThenReboots) {
   EXPECT_EQ(EepromStore::getRevolutions(), 40u);
 }
 
+TEST(Settings, ASettingsResetCutShortIsFinishedOnTheNextBoot) {
+  bootWithId(5);
+  sendAndSettle("m5S1500");
+  EepromStore::saveRevolutions(40);
+  EEPROM.writesBeforePowerCut = 1;  // the power goes part way through
+  sendAndSettle("m5!");
+  EEPROM.writesBeforePowerCut = UINT32_MAX;
+  boot();
+  EXPECT_EQ(EepromStore::getModuleId(), 5);
+  EXPECT_EQ(EepromStore::getStepDelayUs(), 1000);
+  EXPECT_EQ(EepromStore::getRevolutions(), 40u);
+  EXPECT_TRUE(EepromStore::isInitialized());
+}
+
+TEST(Settings, AFirstBootCutShortIsFinishedOnTheNextBoot) {
+  EEPROM.bytes[1 + 3 * 2] = 0x12;   // a step delay from whatever was there before
+  EEPROM.writesBeforePowerCut = 6;  // the count, the reset mark, then one more
+  boot();
+  EEPROM.writesBeforePowerCut = UINT32_MAX;
+  boot();
+  EXPECT_TRUE(EepromStore::isInitialized());
+  EXPECT_EQ(EepromStore::getModuleId(), EepromStore::UNPROVISIONED_ID);
+  EXPECT_EQ(EepromStore::getStepDelayUs(), 1000);
+  EXPECT_EQ(EepromStore::getRevolutions(), 0u);
+}
+
 TEST(Settings, RebootResetsTheModule) {
   bootWithId(5);
   sendAndSettle("m5r");

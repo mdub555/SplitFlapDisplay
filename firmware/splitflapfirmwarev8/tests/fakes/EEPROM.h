@@ -12,12 +12,17 @@ class FakeEeprom {
  public:
   uint8_t bytes[EEPROM_SIZE];
   uint32_t writes = 0;  // bytes actually written, as update() and put() skip unchanged ones
+  // How many more bytes get written before the power is cut: later writes
+  // are lost. Unlimited unless a test sets it.
+  uint32_t writesBeforePowerCut = UINT32_MAX;
 
   FakeEeprom() { erase(); }
   void erase() { memset(bytes, 0xFF, sizeof(bytes)); }
 
   uint8_t read(int address) { return bytes[address]; }
   void write(int address, uint8_t value) {
+    if (writesBeforePowerCut == 0) return;
+    if (writesBeforePowerCut != UINT32_MAX) writesBeforePowerCut--;
     bytes[address] = value;
     writes++;
   }

@@ -114,6 +114,11 @@ class SplitFlap {
   // calibration in progress.
   void setTotalSteps(uint16_t steps);
 
+  // Saves the motor direction. A changed direction reverses the reel, so it
+  // stops whatever the reel was doing (as stop()) and marks the position
+  // unknown, and the next move homes first.
+  void setMotorClockwise(bool clockwise);
+
   // ---- Per-flap correction ----
 
   // Saves the offset of the flap showing, as stored by EepromStore (steps +

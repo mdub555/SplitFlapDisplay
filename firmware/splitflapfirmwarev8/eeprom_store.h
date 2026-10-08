@@ -38,6 +38,7 @@ namespace EepromStore {
   void saveHomeOffset(uint16_t offset);
   uint16_t getHomeOffset();
 
+  // Also wraps the home offset to below `steps`, to the same place.
   void saveTotalSteps(uint16_t steps);
   uint16_t getTotalSteps();
 

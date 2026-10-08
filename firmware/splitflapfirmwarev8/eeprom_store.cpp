@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <EEPROM.h>
+#include <stddef.h>
 
 namespace {
   // Every setting except the revolution count. The whole struct is stored as
@@ -67,6 +68,9 @@ namespace {
   // 0x08: the settings are stored as one Config block.
   // 0x09: the flap offsets follow the revolution count.
   const uint8_t INIT_VALUE = 0x09;
+  // Written to ADDR_INIT while a settings reset is under way, so a reset cut
+  // short by a power cut is finished on the next boot, keeping the ID.
+  const uint8_t INIT_RESETTING = INIT_VALUE | 0x80;
 
   Config config;
 
@@ -77,23 +81,34 @@ namespace {
 
 namespace EepromStore {
 void begin(uint8_t hardcodedId) {
-  if (!isInitialized()) {
-    writeDefaults(hardcodedId);
-    // Only on first initialization: the counter survives a settings reset.
+  uint8_t init = EEPROM.read(ADDR_INIT);
+  if (init == INIT_RESETTING) {
+    // A settings reset was cut short. The ID it was keeping is intact, as
+    // the reset never changes that byte.
+    EEPROM.get(ADDR_CONFIG, config);
+    writeDefaults(config.moduleId);
+  } else if (init != INIT_VALUE) {
+    // First boot. The counter is only cleared here: it survives a settings
+    // reset. It and the ID go first, so if the power is cut while the
+    // defaults are written, the next boot finishes them as a reset.
     saveRevolutions(0);
+    EEPROM.update(ADDR_CONFIG + offsetof(Config, moduleId), hardcodedId);
+    writeDefaults(hardcodedId);
   }
   EEPROM.get(ADDR_CONFIG, config);
 }
 
 void writeDefaults(uint8_t hardcodedId) {
+  // Marked first, so a power cut part way through leaves a mix of old and
+  // default settings that the next boot knows to finish resetting.
+  EEPROM.update(ADDR_INIT, INIT_RESETTING);
   config = DEFAULTS;
   config.moduleId = hardcodedId;
   save();
   for (uint8_t flap = 0; flap < NUM_FLAP_OFFSETS; flap++) {
     saveFlapOffset(flap, FLAP_OFFSET_ZERO);
   }
-  // Last, so a power cut part way through leaves the module uninitialized
-  // and it starts again from the defaults on the next boot.
+  // Last, to mark the defaults complete.
   EEPROM.write(ADDR_INIT, INIT_VALUE);
 }
 
@@ -104,7 +119,13 @@ bool isInitialized() {
 void saveHomeOffset(uint16_t offset) { config.homeOffset = offset; save(); }
 uint16_t getHomeOffset() { return config.homeOffset; }
 
-void saveTotalSteps(uint16_t steps) { config.totalSteps = steps; save(); }
+void saveTotalSteps(uint16_t steps) {
+  config.totalSteps = steps;
+  // An offset of a revolution or more lands where its remainder does, and
+  // keeping it below the total keeps the home edge's position in range.
+  config.homeOffset %= steps;
+  save();
+}
 uint16_t getTotalSteps() { return config.totalSteps; }
 
 void saveModuleId(uint8_t id) { config.moduleId = id; save(); }
