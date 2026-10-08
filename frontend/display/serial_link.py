@@ -62,18 +62,24 @@ def is_connected() -> bool:
 
 
 def write_serial(data: str) -> bool:
-    """Writes `data` to the bus, if there's a port. Call with serial_lock
-    held. False if there's no port, or the write failed (and the port is now
-    treated as gone), so the caller can skip waiting for the bus."""
+    """Writes `data` to the bus, if there's a port, and logs it to the
+    Debug page's serial log either way (as SENT, SIMULATED SENT or NOT
+    SENT), so every message shows there however it was sent. Call with
+    serial_lock held. False if there's no port, or the write failed (and the
+    port is now treated as gone), so the caller can skip waiting for the bus."""
+    shown = data.strip()
     if ser is None:
+        state.log_serial(f"SIMULATED SENT: {shown}")
         return False
     try:
         ser.write(data.encode())
         ser.flush()
-        return True
     except PORT_ERRORS as e:
         _lost(e)
+        state.log_serial(f"NOT SENT (serial lost): {shown}")
         return False
+    state.log_serial(f"SENT: {shown}")
+    return True
 
 
 def keep_connected(interval=5.0):
@@ -97,13 +103,8 @@ def send_raw(cmd: str):
     if not cmd.endswith('\n'):
         cmd += '\n'
     with serial_lock:
-        if ser is None:
-            state.log_serial(f"SIMULATED SENT: {cmd.strip()}")
-        elif write_serial(cmd):
-            state.log_serial(f"SENT: {cmd.strip()}")
+        if write_serial(cmd):   # which logs it
             time.sleep(0.02)
-        else:
-            state.log_serial(f"NOT SENT (serial lost): {cmd.strip()}")
 
 
 def read_dump(mod_id: int, timeout: float = 5.0):

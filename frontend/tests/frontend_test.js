@@ -1089,6 +1089,24 @@ async function main() {
   check('typing (or any key in the grid) ends it', !document.getElementById('composeWrapper').classList.contains('previewing') &&
     row0().startsWith('AB'));
 
+  console.log('\n--- Every page sent shows in the serial log ---');
+  const logStream = MockEventSource.instances.find(s => s.url === '/serial_log/stream');
+  const serialLines = () => [...document.querySelectorAll('#debugLog .debug-log-line')];
+  const pairsFor = text => Array.from(text.padEnd(64)).map((ch, i) => ch + String.fromCharCode(33 + i)).join('');
+  logStream.emit({ msg: 'SIMULATED SENT: m*f21:' + pairsFor('HELLO'.padEnd(16) + 'WORLD') });
+  const frameLine = serialLines().slice(-1)[0];
+  check('a frame broadcast is shown with what it puts on the display',
+    frameLine.classList.contains('sent') &&
+    frameLine.querySelector('.log-note').textContent === ' → page "HELLO / WORLD", modules 21 ms apart');
+  logStream.emit({ msg: 'SENT: m05h' });
+  check('other messages are shown as they are', !serialLines().slice(-1)[0].querySelector('.log-note'));
+  logStream.emit({ msg: 'NOT SENT (serial lost): m00-A' });
+  check('a message that did not reach the bus stands out', serialLines().slice(-1)[0].classList.contains('lost'));
+  let logThrew = false;
+  try { logStream.emitRaw('{not json'); } catch (e) { logThrew = true; }
+  logStream.emit({ msg: 'SENT: m06h' });
+  check('a bad log message is skipped, and the log carries on', !logThrew && serialLines().slice(-1)[0].textContent.endsWith('SENT: m06h'));
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

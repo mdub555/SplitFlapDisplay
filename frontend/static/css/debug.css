@@ -98,6 +98,16 @@
   color: var(--log-recv);
 }
 
+/* A write that didn't reach the bus, or the port going. */
+.debug-log-line.lost {
+  color: var(--orange);
+}
+
+/* What a page message means, after it (see describeFrame in debug.js). */
+.debug-log-line .log-note {
+  color: var(--text-muted);
+}
+
 /* A parsed dump reply: keep each "name value unit" together when wrapping. */
 .debug-log-line.dump {
   word-break: normal;

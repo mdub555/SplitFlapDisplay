@@ -183,6 +183,32 @@ class ReconnectTest(unittest.TestCase):
         self.assertTrue(broken.closed)
         self.assertFalse(serial_link.state.snapshot()['hardware_connected'])
 
+    def logged(self, action):
+        q = serial_link.state.subscribe_serial()
+        try:
+            action()
+        finally:
+            serial_link.state.unsubscribe_serial(q)
+        return [q.get_nowait() for _ in range(q.qsize())]
+
+    def test_every_write_is_logged_however_it_is_sent(self):
+        # The player writes pages with write_serial() directly, not send_raw().
+        serial_link.ser = FakeSerial([])
+        with serial_link.serial_lock:
+            self.assertEqual(self.logged(lambda: serial_link.write_serial('m*f21:H!I"\n')), ['SENT: m*f21:H!I"'])
+        serial_link.ser = None
+        with serial_link.serial_lock:
+            self.assertEqual(self.logged(lambda: serial_link.write_serial('m00-A\n')), ['SIMULATED SENT: m00-A'])
+        serial_link.ser = BrokenSerial()
+        with serial_link.serial_lock:
+            log = self.logged(lambda: serial_link.write_serial('m00-A\n'))
+        self.assertEqual(log[-1], 'NOT SENT (serial lost): m00-A')
+
+    def test_send_raw_logs_each_message_once(self):
+        serial_link.ser = FakeSerial([])
+        with mock.patch.object(serial_link.time, 'sleep'):
+            self.assertEqual(self.logged(lambda: serial_link.send_raw('m05h')), ['SENT: m05h'])
+
     def test_sending_with_no_port_is_simulated(self):
         q = serial_link.state.subscribe_serial()
         serial_link.send_raw('m00h')
