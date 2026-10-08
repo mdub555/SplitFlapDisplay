@@ -44,6 +44,9 @@ class Cmd:
     SET_RAMP_STEPS = 'L'
     SET_SETTLE_MS = 'W'
     SET_STAGGER_MS = 'P'
+    # With a value, sets the offset of the flap showing; without, asks for
+    # every flap's offset (see FLAP_OFFSET_ZERO).
+    SET_FLAP_OFFSET = 'J'
 
 
 BROADCAST = '*'
@@ -51,6 +54,13 @@ BROADCAST = '*'
 # The ID of a module that hasn't been given one yet (UNPROVISIONED_ID in the
 # firmware's eeprom_store.h).
 UNPROVISIONED_ID = 255
+
+
+# A flap offset goes on the wire, and is stored, as the offset in steps plus
+# this, so it needs no sign (FLAP_OFFSET_ZERO in the firmware's
+# eeprom_store.h). The offset dump (m<ID>J) replies m<ID>J and then each
+# flap's stored value as two hex digits, from flap 0.
+FLAP_OFFSET_ZERO = 128
 
 
 # A frame broadcast (m*f<interval>:<pairs>) gives each module's place in the
