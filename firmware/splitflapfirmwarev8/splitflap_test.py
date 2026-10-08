@@ -23,6 +23,7 @@ transceiver.h for the full reference):
     m<ID>?              Dump state (reply: m<ID>?\\tO480\\tT4096...)
     m<ID>!              Reset all settings to defaults (keeps ID), reboot
     m<ID>@<n>           Set module ID                  e.g. m255@5
+    m<ID>%              Dump flap offsets (reply: m<ID>% + 2 hex digits per flap)
 
   Settings (saved to EEPROM)
     m<ID>O<n>  Home offset, steps (0 = make current position blank flap)
@@ -40,7 +41,6 @@ transceiver.h for the full reference):
     m<ID>P<n>  Power-on stagger, ms per module ID (0–255)
     m<ID>J<n>  Offset of the flap showing, steps + 128 (128 = none), then
                move to it. Not flap 0, not broadcast
-    m<ID>J     Dump the flap offsets (reply: m<ID>J + 2 hex digits per flap)
 
   Use * as ID to broadcast to all modules.
 
@@ -132,10 +132,10 @@ FLAP_OFFSET_ZERO = 128
 
 def format_flap_offsets(line):
     """
-    Pretty-print a flap offset dump ("m05J8080837D..."), listing the flaps
+    Pretty-print a flap offset dump ("m05%8080837D..."), listing the flaps
     with an offset, or return None if the line isn't one.
     """
-    head, _, hexes = line.partition("J")
+    head, _, hexes = line.partition("%")
     if not (head.startswith("m") and head[1:].isdigit() and len(hexes) == 2 * NUM_FLAPS):
         return None
     try:
@@ -201,7 +201,7 @@ _listener_running = False
 def start_listener(ser):
     """
     Spawn a daemon thread that prints any lines arriving from the bus.
-    Modules only transmit in response to '?' (dump state) and 'J' (flap
+    Modules only transmit in response to '?' (dump state) and '%' (flap
     offsets); both replies are decoded, one field or flap per line.
     """
     global _listener_running
@@ -470,9 +470,9 @@ def cmd_set_flap_offset(ser):
     print(dim("  (a smaller offset turns the reel nearly a full revolution to get there)"))
 
 def cmd_dump_flap_offsets(ser):
-    """m<ID>J  — dump every flap's offset.  Reply decoded by the listener."""
+    """m<ID>%  — dump every flap's offset.  Reply decoded by the listener."""
     mid = prompt_module_id()
-    send(ser, build_message(mid, "J"))
+    send(ser, build_message(mid, "%"))
     time.sleep(0.5)
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
@@ -515,13 +515,13 @@ MENU = [
     ("Frame broadcast (all modules)", cmd_frame),
     ("Module", None),
     ("Dump module state",            cmd_dump),
+    ("Dump flap offsets",            cmd_dump_flap_offsets),
     ("Set module ID",                cmd_set_id),
     ("Reset settings to defaults",   cmd_reset_settings),
     ("Settings (saved to EEPROM)", None),
     *[(label, make_setting_handler(letter, prompt, lo, hi, note))
       for letter, label, prompt, lo, hi, note in SETTINGS],
     ("Set flap offset (flap showing)", cmd_set_flap_offset),
-    ("Dump flap offsets",            cmd_dump_flap_offsets),
     ("Utilities", None),
     ("Send raw message",             cmd_raw),
     ("Show flap character table",    cmd_show_flap_table),

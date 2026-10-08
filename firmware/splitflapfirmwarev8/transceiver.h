@@ -59,6 +59,11 @@
 //         @, Set the module ID. data must be a number. A broadcast ('m*@')
 //            is only accepted by unprovisioned modules (ID 255), so it can't
 //            give every module on the bus the same ID
+//         %, Dump the flap offsets (see 'J'): every flap's offset, as stored,
+//            in two hex digits per flap from flap 0 (format at
+//            Transceiver::dumpFlapOffsets() below). Sent once the module is
+//            idle, as for '?'. Addressed to one module only; a broadcast is
+//            ignored, as the replies would collide. No data expected
 //
 //     Settings
 //         O, Set the offset number of steps from where home is detected to the
@@ -93,17 +98,13 @@
 //         P, Set the power-on stagger: the auto-home waits this many
 //            milliseconds per module ID after power-on (0-255). Takes effect
 //            on the next boot.
-//         J, Flap offsets, for flaps that don't land quite where an even
-//            division of the revolution puts them. Addressed to one module
-//            only; a broadcast is ignored.
-//            With data (0-255): set the offset of the flap showing, in steps
-//            plus 128 (128 = none, 125 = 3 steps back, 131 = 3 forward),
-//            then move to its new position. Ignored unless a flap other than
-//            0 is showing (the home offset 'O' places flap 0).
-//            With no data: reply with every flap's offset, as stored, in two
-//            hex digits per flap from flap 0 (format at
-//            Transceiver::dumpFlapOffsets() below). Sent once the module is
-//            idle, as for '?'.
+//         J, Set the offset of the flap showing, for a flap that doesn't
+//            land quite where an even division of the revolution puts it, in
+//            steps plus 128 (0-255: 128 = none, 125 = 3 steps back, 131 = 3
+//            forward), then move to its new position. Ignored unless a flap
+//            other than 0 is showing (the home offset 'O' places flap 0).
+//            Addressed to one module only; a broadcast is ignored. Read the
+//            offsets back with '%'.
 //
 // Frame broadcast: "m*f<interval>:<pairs>\n" sets every module at once.
 //   <pairs> has two bytes per module, for IDs 0, 1, 2, ... in order: the
@@ -135,6 +136,7 @@ enum CommandType : uint8_t {
   DUMP_STATE,             // '?'
   RESET_SETTINGS,         // '!'
   SET_MODULE_ID,          // '@'
+  DUMP_FLAP_OFFSETS,      // '%'
   // Settings
   SET_OFFSET,             // 'O'
   SET_TOTAL_STEPS,        // 'T'
@@ -149,8 +151,7 @@ enum CommandType : uint8_t {
   SET_RAMP_STEPS,         // 'L'
   SET_SETTLE_MS,          // 'W'
   SET_STAGGER_MS,         // 'P'
-  SET_FLAP_OFFSET,        // 'J' with data
-  DUMP_FLAP_OFFSETS,      // 'J' without
+  SET_FLAP_OFFSET,        // 'J'
 };
 
 struct Command {
@@ -213,9 +214,9 @@ class Transceiver {
   // bytes.
   void dump(uint32_t revolutions, int16_t drift);
 
-  // Sends m<ID>J and then each flap's stored offset (see the 'J' command) as
+  // Sends m<ID>% and then each flap's stored offset (see the 'J' command) as
   // two uppercase hex digits, from flap 0 to 63:
-  //   m05J8080837D8080...
+  //   m05%8080837D8080...
   // 133 bytes in all, about 140 ms at 9600 baud.
   void dumpFlapOffsets();
 

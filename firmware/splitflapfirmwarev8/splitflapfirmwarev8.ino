@@ -48,7 +48,7 @@ const uint8_t DUMP_SLOT_MS = 105;
 bool dumpPending = false;
 uint16_t dumpDelayMs = 0;  // wait before replying, once idle
 uint32_t dumpAtMs = 0;     // millis() to reply at
-// A flap offset dump ('J' with no data) waits for the module to be idle in
+// A flap offset dump ('%') waits for the module to be idle in
 // the same way. It's only ever addressed to this module, so has no slot.
 bool flapOffsetsPending = false;
 
