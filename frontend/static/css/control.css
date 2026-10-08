@@ -234,6 +234,27 @@
   outline-color: transparent;
 }
 
+/* While previewing (preview.js): no cursor, and a label saying so. */
+.compose-wrapper.previewing .flap-unit.cursor,
+.compose-wrapper.previewing.focused .flap-unit.cursor {
+  outline-color: transparent;
+  animation: none;
+}
+
+.compose-wrapper.previewing::after {
+  content: 'PREVIEW';
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--btn-primary);
+  color: var(--on-color);
+  font-size: .65rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
 .compose-wrapper.focused .flap-unit.cursor {
   animation: compose-blink 1s steps(1) infinite;
 }
@@ -429,4 +450,10 @@
   .saved-pl-item {
     flex-wrap: wrap;
   }
+}
+
+/* Renaming a saved playlist in its row. */
+.saved-pl-rename {
+  flex: 1;
+  min-width: 0;
 }

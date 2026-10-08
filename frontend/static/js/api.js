@@ -63,6 +63,8 @@ const api = {
   savePlaylist:       (name, pages, delay) => apiPost('/playlists', {name, pages, delay}, 'Could not save playlist'),
   deletePlaylist:     (name) => apiFetchJson(`/playlists/${encodeURIComponent(name)}`, {method: 'DELETE'},
                                              'Could not delete playlist'),
+  renamePlaylist:     (name, to) => apiPost(`/playlists/${encodeURIComponent(name)}/rename`, {name: to},
+                                            'Could not rename playlist'),
   runPlaylist:        (name) => apiPost(`/playlists/${encodeURIComponent(name)}/run`, undefined,
                                         'Could not run playlist'),
 

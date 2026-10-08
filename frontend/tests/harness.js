@@ -125,14 +125,23 @@ window.fetch = async (url, options = {}) => {
     }
     return ok(JSON.parse(JSON.stringify(savedPlaylists)));
   }
-  const playlistRoute = url.match(/^\/playlists\/(.+?)(\/run)?$/);
+  const playlistRoute = url.match(/^\/playlists\/(.+?)(\/run|\/rename)?$/);
   if (playlistRoute) {
     const name = decodeURIComponent(playlistRoute[1]);
-    if (playlistRoute[2]) {
+    if (playlistRoute[2] === '/run') {
       return name in savedPlaylists ? ok({ status: 'running', name }) : ok({ status: 'error', message: 'No such playlist' }, 404);
     }
+    if (playlistRoute[2] === '/rename') {
+      const to = JSON.parse(options.body).name;
+      if (to in savedPlaylists) return ok({ status: 'error', message: `There is already a playlist called "${to}"` }, 409);
+      const renamed = Object.fromEntries(Object.entries(savedPlaylists).map(([k, v]) => [k === name ? to : k, v]));
+      Object.keys(savedPlaylists).forEach(k => delete savedPlaylists[k]);
+      Object.assign(savedPlaylists, renamed);
+      return ok({ status: 'renamed', name: to, schedule_updated: 1 });
+    }
+    const deleted = savedPlaylists[name] || null;
     delete savedPlaylists[name];
-    return ok({ status: 'deleted' });
+    return ok({ status: 'deleted', playlist: deleted });
   }
   if (url === '/schedule') {
     if (options.method === 'POST') {

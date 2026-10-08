@@ -111,12 +111,32 @@ implement `frames()`; the update-order and speed settings are built for it.
   updates the display straight away.
 - **Saved playlists are edited in place**: Edit loads one and keeps its name
   in the box, so Save updates it. Saving under a name that's already taken
-  by a different playlist asks first.
+  by a different playlist asks first. **Rename** edits the name in its row
+  (`POST /playlists/<name>/rename`); the schedule's slots and default that
+  pointed at it, the playlist that's playing and the one being edited all
+  follow the new name. A name that's taken is refused.
+- **Undo**: deleting a saved playlist, removing a playlist page or a
+  schedule slot, and Clear each show a toast with Undo (8 s), and Ctrl+Z /
+  ⌘Z does the same while it's up, unless you're typing in a field. Deleting
+  a saved playlist no longer asks "are you sure?": `DELETE /playlists/<name>`
+  answers with the playlist, and Undo saves it again. A removed schedule
+  slot only stays removed once the schedule is saved.
+- **Preview** (▷ Preview, next to Center Lines) plays the page, or with
+  Multi-Page Playlist on the whole playlist, in the compose grid the way the
+  display will: starting from what's on the display now, each flap starts
+  at its turn in the transition (its rank × the page's speed, plus bus
+  time) and turns forward through the reel at the reel's speed, then the
+  page holds for its delay. Nothing is sent. Typing or clicking in the grid
+  ends it. The page config carries each transition's order for this
+  (Random's is one random order; the display picks a new one each time).
 - **The schedule** (Apps page; `display/scheduler.py`, `GET/POST /schedule`,
   stored as `settings['schedule']`) picks an app or saved playlist by time
   of day and weekday, in the timezone from the global settings. Time slots
   are checked in order and the first that covers the time wins; outside
-  them the default runs, or nothing changes. The scheduler only acts when
+  them the default runs, or nothing changes. A slot (or the default) can
+  also **blank the display**, for quiet hours: it shows a blank page and
+  keeps it blank (the banner says so) until something else starts. The
+  scheduler only acts when
   what the schedule calls for changes (checked every 20 s, and straight
   away on startup or when the schedule is saved), so starting or stopping
   something by hand lasts until the next scheduled change.

@@ -31,11 +31,46 @@ def playlists():
 
 @bp.route('/playlists/<path:name>', methods=['DELETE'])
 def delete_playlist(name):
+    """Deletes a saved playlist, and answers with it, so the page can offer
+    to undo (by saving it again)."""
     plists = settings.get('saved_playlists', {})
-    if name in plists:
-        del plists[name]
+    deleted = plists.pop(name, None)
+    if deleted is not None:
         save_settings(settings)
-    return jsonify(status='deleted')
+    return jsonify(status='deleted', playlist=deleted)
+
+
+@bp.route('/playlists/<path:name>/rename', methods=['POST'])
+def rename_playlist(name):
+    """Renames a saved playlist, keeping its place in the list, and
+    everything that refers to it: the schedule's slots and default, and the
+    playlist that's playing."""
+    plists = settings.get('saved_playlists', {})
+    if name not in plists:
+        return error('No such playlist', 404)
+    new = (json_body().get('name') or '').strip()
+    if not new:
+        return error('Name required', 400)
+    if new == name:
+        return jsonify(status='renamed', name=new, schedule_updated=0)
+    if new in plists:
+        return error(f'There is already a playlist called "{new}"', 409)
+    settings['saved_playlists'] = {(new if key == name else key): value for key, value in plists.items()}
+
+    old_target, new_target = f'playlist:{name}', f'playlist:{new}'
+    updated = 0
+    schedule = settings.get('schedule')
+    if schedule:
+        for entry in schedule.get('entries', []):
+            if entry.get('target') == old_target:
+                entry['target'] = new_target
+                updated += 1
+        if schedule.get('default') == old_target:
+            schedule['default'] = new_target
+            updated += 1
+    save_settings(settings)
+    state.rename_playlist(name, new)
+    return jsonify(status='renamed', name=new, schedule_updated=updated)
 
 
 @bp.route('/playlists/<path:name>/run', methods=['POST'])

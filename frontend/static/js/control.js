@@ -152,6 +152,7 @@ function composeBackspace() {
 }
 
 function renderComposer() {
+  cancelPreview();   // an edit ends a preview (preview.js)
   composeFlaps.forEach((flap, i) => {
     flap.textContent = composed[i] === ' ' ? '' : composed[i];
     flap.classList.toggle('cursor', i === Math.min(composeCursor, composeCells() - 1));
@@ -230,6 +231,19 @@ function stopEditing() {
 function clearDisplay() {
   setComposedText('');
   if (editingIndex !== null) stopEditing();
+}
+
+// The Clear button: as clearDisplay, with a way back.
+function clearGrid() {
+  const text = composedText();
+  const editing = editingIndex;
+  clearDisplay();
+  if (!text.trim()) return;
+  showToast('Grid cleared', 'success', {undo: () => {
+    setComposedText(text);
+    if (editing !== null && editing < playlist.length) startEditing(editing);
+    saveDraft();
+  }});
 }
 
 function toggleMultiMode() {
@@ -408,8 +422,19 @@ function movePlaylist(button) {
 
 function removeFromPlaylist(button) {
   const idx = rowIndex(button);
+  const page = playlist[idx];
+  const wasEditing = editingIndex === idx;
+  const text = composedText();
   changePlaylist(pages => pages.splice(idx, 1));
   focusPlaylistRow(Math.min(idx, playlist.length - 1), '[data-onclick="removeFromPlaylist"]');
+  showToast(`Page ${idx + 1} removed`, 'success', {undo: () => {
+    changePlaylist(pages => pages.splice(Math.min(idx, pages.length), 0, page));
+    if (wasEditing) {   // back to editing it, as it was
+      setComposedText(text);
+      startEditing(playlist.indexOf(page));
+    }
+    focusPlaylistRow(playlist.indexOf(page), '[data-onclick="removeFromPlaylist"]');
+  }});
 }
 
 function duplicatePlaylistPage(button) {
@@ -501,6 +526,8 @@ function buildSavedPlaylistRow(name, item) {
                   dataset: {onclick: 'loadSavedPlaylist'}}, 'Edit'),
     el('button', {class: 'btn btn-success btn-sm', ariaLabel: `Run ${name}`,
                   dataset: {onclick: 'runSavedPlaylist'}}, 'Run'),
+    el('button', {class: 'btn btn-secondary btn-sm', ariaLabel: `Rename ${name}`,
+                  dataset: {onclick: 'startRenamePlaylist'}}, 'Rename'),
     el('button', {class: 'btn btn-danger btn-sm', ariaLabel: `Delete ${name}`, title: 'Delete',
                   dataset: {onclick: 'deleteSavedPlaylist'}}, '✕'));
 }
@@ -588,15 +615,67 @@ function runSavedPlaylist(button) {
   });
 }
 
+// No "are you sure?": the toast offers Undo instead, which saves it again.
 function deleteSavedPlaylist(button) {
   const name = button.closest('[data-name]').dataset.name;
-  if (!confirm(`Delete playlist "${name}"?`)) return;
+  const wasLoaded = name === loadedPlaylist;
   api.deletePlaylist(name).then(result => {
     if (!result) return;
-    showToast(`Deleted "${name}"`, 'warn');
-    if (name === loadedPlaylist) setLoadedPlaylist(null);
+    if (wasLoaded) setLoadedPlaylist(null);
     loadSavedPlaylists();
+    const deleted = result.playlist;
+    if (!deleted) return;
+    showToast(`Deleted "${name}"`, 'warn', {undo: () => {
+      api.savePlaylist(name, deleted.pages, deleted.delay).then(saved => {
+        if (!saved) return;
+        if (wasLoaded) setLoadedPlaylist(name);
+        loadSavedPlaylists();
+        showToast(`"${name}" is back`);
+      });
+    }});
   });
+}
+
+// --- Renaming a saved playlist, in place in its row --------------------------
+
+function startRenamePlaylist(button) {
+  const row = button.closest('[data-name]');
+  const name = row.dataset.name;
+  const input = el('input', {class: 'input input-sm saved-pl-rename', type: 'text', value: name,
+                             ariaLabel: `New name for ${name}`});
+  const save = () => finishRenamePlaylist(row, name, input.value.trim());
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+    if (e.key === 'Escape') { e.preventDefault(); renderSavedPlaylists(savedPlaylists); focusSavedRow(name, 'startRenamePlaylist'); }
+  });
+  row.replaceChildren(input,
+    el('button', {class: 'btn btn-success btn-sm', type: 'button', onclick: save}, 'Save'),
+    el('button', {class: 'btn btn-ghost btn-sm', type: 'button',
+                  onclick: () => { renderSavedPlaylists(savedPlaylists); focusSavedRow(name, 'startRenamePlaylist'); }}, 'Cancel'));
+  input.focus();
+  input.select();
+}
+
+function finishRenamePlaylist(row, name, to) {
+  if (!to) { showToast('Enter a name first', 'warn'); return; }
+  if (to === name) { renderSavedPlaylists(savedPlaylists); return; }
+  api.renamePlaylist(name, to).then(result => {
+    if (!result) return;   // the api layer shows why (say, the name's taken)
+    if (loadedPlaylist === name) {
+      byId('savePlaylistName').value = to;
+      setLoadedPlaylist(to);
+    }
+    const followed = result.schedule_updated;
+    showToast(`Renamed to "${to}"${followed ? `; the schedule follows it` : ''}`);
+    loadSavedPlaylists().then(() => focusSavedRow(to, 'startRenamePlaylist'));
+  });
+}
+
+// Focuses the `action` button in saved playlist `name`'s row, if it's there.
+function focusSavedRow(name, action) {
+  const row = [...document.querySelectorAll('.saved-pl-item')].find(r => r.dataset.name === name);
+  const button = row && row.querySelector(`[data-onclick="${action}"]`);
+  if (button) button.focus();
 }
 
 // --- The draft: what's on this page survives a reload --------------------
@@ -678,7 +757,7 @@ function initControlPage() {
 }
 
 registerActions({
-  clearDisplay, saveMessage, sync, saveCurrentPlaylist, stopApp,
+  clearDisplay: clearGrid, startRenamePlaylist, saveMessage, sync, saveCurrentPlaylist, stopApp,
   toggleMultiMode, centerLines, updatePlaylistItemFromInput,
   movePlaylist, editPlaylist, removeFromPlaylist, duplicatePlaylistPage, pushPlaylistPage,
   loadSavedPlaylist, runSavedPlaylist, deleteSavedPlaylist,

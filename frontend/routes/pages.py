@@ -3,12 +3,12 @@
 the page when it's rendered, so the frontend never keeps its own copy."""
 from flask import Blueprint, jsonify, render_template, url_for
 
-from config import GRID_ROWS, GRID_COLS, NUM_MODULES
-from display.charset import COLOR_TILES, DISPLAY_CHARS, FLAP_CHARS, SYMBOL_TILES
+from config import BAUD_RATE, GRID_ROWS, GRID_COLS, NUM_MODULES
+from display.charset import COLOR_TILES, DISPLAY_CHARS, FLAP_CHARS, SECONDS_PER_FLAP, SYMBOL_TILES
 from display.debug_commands import DEBUG_COMMANDS
 from display.layout import STYLES
 from display.module_protocol import (
-    BROADCAST, DUMP_FIELDS, GLOBAL_SETTINGS, MODULE_TOGGLES, UNPROVISIONED_ID, dump_format)
+    BROADCAST, DUMP_FIELDS, GLOBAL_SETTINGS, MODULE_TOGGLES, UNPROVISIONED_ID, Cmd, dump_format, message)
 
 bp = Blueprint('pages', __name__)
 
@@ -24,7 +24,13 @@ def client_config():
         'display_chars': DISPLAY_CHARS,
         'color_tiles': [{'emoji': emoji, 'name': name} for emoji, _, name in COLOR_TILES],
         'symbol_tiles': [{'char': char, 'name': name} for char, _, name in SYMBOL_TILES],
-        'styles': [{'value': key, 'label': style.label} for key, style in STYLES.items()],
+        # Each transition with the order it starts the modules in, for the
+        # compose grid's preview (Random's is one random order of many).
+        'styles': [{'value': key, 'label': style.label, 'order': style.order()} for key, style in STYLES.items()],
+        'seconds_per_flap': SECONDS_PER_FLAP,
+        # Bus time each module's start is spaced by, on top of the page's
+        # speed (as display/player.py spaces a frame).
+        'bus_ms_per_module': (len(message(0, Cmd.DISPLAY_CHAR, 'A')) + 1) * 10 * 1000.0 / BAUD_RATE,
         # The shared settings each module reports in its dump, which the
         # inspector compares with the saved values.
         'timing_fields': [

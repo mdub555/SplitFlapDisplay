@@ -83,7 +83,9 @@ let liveState = {};
 function nowPlayingText(data) {
   let text = '';
   const playing = data.playlist;
-  if (data.active_app) {
+  if (data.blank) {
+    text = '■ The display is blanked';
+  } else if (data.active_app) {
     text = `▶ ${appName(data.active_app)} is running`;
   } else if (playing && (playing.name || playing.pages > 1)) {
     const what = playing.name ? `Playlist "${playing.name}"` : 'Playlist';
@@ -135,6 +137,8 @@ function settingsChanged() {
 function renderBanner() {
   const playing = nowPlayingText(liveState);
   byId('live-banner').classList.toggle('visible', !!playing);
+  // A blank display has nothing to stop: starting anything replaces it.
+  byId('live-banner').querySelector('.aab-stop').hidden = !!liveState.blank;
   byId('liveBannerText').textContent = playing;
 }
 

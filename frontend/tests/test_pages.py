@@ -51,6 +51,14 @@ class PageTest(unittest.TestCase):
         self.assertEqual(config['display_chars']['q'], '"')
         self.assertEqual(len(config['color_tiles']), 8)
 
+    def test_config_carries_what_the_preview_needs(self):
+        config = json.loads(re.search(r'const CONFIG = (.*?);</script>', self.html).group(1))
+        for style in config['styles']:
+            with self.subTest(style=style['value']):
+                self.assertEqual(sorted(style['order']), list(range(NUM_MODULES)))
+        self.assertGreater(config['seconds_per_flap'], 0)
+        self.assertGreater(config['bus_ms_per_module'], 0)
+
     def test_debug_page_offers_every_command(self):
         letters = {value for name, value in vars(Cmd).items() if not name.startswith('_')}
         offered = [command['cmd'] for command in DEBUG_COMMANDS if command['cmd']]

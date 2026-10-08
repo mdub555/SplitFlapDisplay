@@ -155,6 +155,44 @@ class SettingsRoutesTest(unittest.TestCase):
             self.assertEqual((res.status_code, res.get_json()['message']), (400, 'Volume must be at most 10'))
             self.assertEqual(self.settings['volume'], 7)
 
+    def test_deleting_answers_with_the_playlist_so_it_can_be_undone(self):
+        self.client.post('/playlists', json={'name': 'Morning', 'pages': ['HI'], 'delay': 4})
+        res = self.client.delete('/playlists/Morning')
+        self.assertEqual(res.get_json()['playlist'], {'pages': [{'text': 'HI'}], 'delay': 4})
+        self.assertIsNone(self.client.delete('/playlists/Morning').get_json()['playlist'])
+
+    def rename(self, name, to):
+        return self.client.post(f'/playlists/{name}/rename', json={'name': to})
+
+    def test_renaming_keeps_its_place_and_its_pages(self):
+        for name in ('A', 'B', 'C'):
+            self.client.post('/playlists', json={'name': name, 'pages': [name]})
+        res = self.rename('B', ' Bee ')
+        self.assertEqual(res.get_json(), {'status': 'renamed', 'name': 'Bee', 'schedule_updated': 0})
+        self.assertEqual(list(self.settings['saved_playlists']), ['A', 'Bee', 'C'])
+        self.assertEqual(self.settings['saved_playlists']['Bee']['pages'], [{'text': 'B'}])
+
+    def test_the_schedule_and_the_display_follow_a_rename(self):
+        self.client.post('/playlists', json={'name': 'Morning', 'pages': ['HI']})
+        self.settings['schedule'] = {'enabled': True, 'default': 'playlist:Morning', 'entries': [
+            {'days': [0], 'start': '07:00', 'end': '09:00', 'target': 'playlist:Morning'},
+            {'days': [0], 'start': '09:00', 'end': '10:00', 'target': 'app:time'}]}
+        self.client.post('/playlists/Morning/run')
+        res = self.rename('Morning', 'Dawn')
+        self.assertEqual(res.get_json()['schedule_updated'], 2)
+        self.assertEqual([e['target'] for e in self.settings['schedule']['entries']], ['playlist:Dawn', 'app:time'])
+        self.assertEqual(self.settings['schedule']['default'], 'playlist:Dawn')
+        self.assertEqual(self.state.playlist_name, 'Dawn')
+
+    def test_a_rename_is_refused_when_it_would_clash_or_has_nothing_to_rename(self):
+        for name in ('A', 'B'):
+            self.client.post('/playlists', json={'name': name, 'pages': [name]})
+        res = self.rename('A', 'B')
+        self.assertEqual((res.status_code, res.get_json()['message']), (409, 'There is already a playlist called "B"'))
+        self.assertEqual(self.rename('A', '  ').status_code, 400)
+        self.assertEqual(self.rename('Nope', 'X').status_code, 404)
+        self.assertEqual(list(self.settings['saved_playlists']), ['A', 'B'])
+
     def test_a_playlist_needs_a_name(self):
         res = self.client.post('/playlists', json={'name': '  '})
         self.assertEqual(res.status_code, 400)

@@ -83,6 +83,11 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(schedule, {'enabled': True, 'default': '', 'entries': [
             {'days': [0, 4], 'start': '07:00', 'end': '23:59', 'target': 'playlist:Any name: here'}]})
 
+    def test_blank_is_a_target(self):
+        schedule, problem = self.check({'default': 'blank', 'entries': [slot('22:00', '06:00', target='blank')]})
+        self.assertIsNone(problem)
+        self.assertEqual(schedule['default'], 'blank')
+
     def test_problems_are_named(self):
         cases = [
             ({'default': 'app:nope'}, 'Unknown default: app:nope'),
@@ -183,6 +188,18 @@ class SchedulerTest(unittest.TestCase):
         self.scheduler.check_soon()
         self.scheduler.tick()
         self.assertIsNone(self.state.current_target())
+
+    def test_a_slot_can_blank_the_display(self):
+        self.settings['schedule']['entries'] = [slot('22:00', '06:00', days=[0], target='blank')]
+        self.now = at(0, '23:00')
+        self.scheduler.tick()
+        snap = self.state.snapshot()
+        self.assertTrue(snap['blank'])
+        self.assertTrue(snap['scheduled'])
+        self.now = at(1, '06:00')   # morning: the default comes back
+        self.scheduler.tick()
+        self.assertEqual(self.state.active_app, 'time')
+        self.assertFalse(self.state.snapshot()['blank'])
 
     def test_what_is_already_running_is_not_restarted(self):
         self.state.run_playlist([{'text': 'A'}, {'text': 'B'}], 5, 'Morning')

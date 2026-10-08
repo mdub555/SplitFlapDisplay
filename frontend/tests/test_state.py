@@ -93,6 +93,29 @@ class PlayingTest(unittest.TestCase):
         self.state.settings_changed()
         self.assertEqual(q.get_nowait()['settings_version'], 1)
 
+    def test_blanking_shows_a_blank_page_and_says_so(self):
+        self.state.run_app('weather')
+        self.state.run_blank()
+        snap = self.state.snapshot()
+        self.assertTrue(snap['blank'])
+        self.assertIsNone(snap['playlist'], 'no "playlist" banner for it')
+        self.assertIsNone(snap['active_app'])
+        self.assertEqual(self.state.current_playlist[0]['text'].strip(), '')
+        self.assertEqual(self.state.current_target(), 'blank')
+
+    def test_starting_anything_ends_the_blank(self):
+        for start in (lambda: self.state.run_app('time'), lambda: self.state.run_playlist(['A']), self.state.stop):
+            self.state.run_blank()
+            start()
+            self.assertFalse(self.state.snapshot()['blank'])
+
+    def test_renaming_the_playing_playlist_keeps_it_playing_and_scheduled(self):
+        self.state.run_playlist(['A'], 5, 'Morning')
+        self.state.set_scheduled_target('playlist:Morning')
+        self.state.rename_playlist('Morning', 'Dawn')
+        snap = self.state.snapshot()
+        self.assertEqual((snap['playlist']['name'], snap['scheduled']), ('Dawn', True))
+
     def test_scheduled_only_while_the_scheduled_thing_runs(self):
         self.state.run_app('time')
         self.state.set_scheduled_target('app:time')

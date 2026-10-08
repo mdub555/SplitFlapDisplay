@@ -968,6 +968,127 @@ async function main() {
     !report.hidden && report.textContent.includes('Restored: 2 modules, the schedule.') &&
     report.querySelector('li').textContent === 'Timezone must be one of: ...' && report.classList.contains('warning'));
 
+  console.log('\n--- Blank the display ---');
+  live.emit(snapshot({ blank: true, scheduled: true }));
+  check('a blanked display says so in the banner, with no STOP',
+    document.getElementById('liveBannerText').textContent === '■ The display is blanked (scheduled)' &&
+    document.querySelector('#live-banner .aab-stop').hidden);
+  live.emit(snapshot({ active_app: 'weather' }));
+  check('STOP comes back for anything else', !document.querySelector('#live-banner .aab-stop').hidden);
+  click(document.getElementById('tab-apps'));
+  await sleep(40);
+  const defaultSelect = document.getElementById('scheduleDefault');
+  check('the schedule can blank the display', !!defaultSelect.querySelector('option[value="blank"]') &&
+    window.targetLabel('blank') === 'a blank display');
+
+  console.log('\n--- Undo ---');
+  const undoToasts = () => [...document.querySelectorAll('.toast.has-action')];
+  const lastUndo = () => undoToasts().slice(-1)[0];
+  click(document.querySelector('[data-onclick="addScheduleEntry"]'));
+  const slotCount = document.querySelectorAll('.schedule-entry').length;
+  const lastSlot = [...document.querySelectorAll('.schedule-entry')].slice(-1)[0];
+  click(lastSlot.querySelector('[data-onclick="removeScheduleEntry"]'));
+  check('removing a time slot offers Undo', document.querySelectorAll('.schedule-entry').length === slotCount - 1 &&
+    lastUndo().textContent.includes('Time slot removed'));
+  click(lastUndo().querySelector('.toast-action'));
+  check('Undo puts the slot back where it was', document.querySelectorAll('.schedule-entry').length === slotCount &&
+    [...document.querySelectorAll('.schedule-entry')].slice(-1)[0] === lastSlot);
+
+  click(document.getElementById('tab-control'));
+  await sleep(20);
+  window.eval(`playlist = [{text: 'ONE', delay: 5, style: 'ltr', speed: 15}, {text: 'TWO', delay: 5, style: 'ltr', speed: 15}]`);
+  window.stopEditing();
+  window.renderPlaylist();
+  click(document.querySelector('#playlistList .playlist-item[data-idx="0"] [data-onclick="removeFromPlaylist"]'));
+  check('removing a page offers Undo', globalVar('playlist').map(p => p.text).join() === 'TWO' && lastUndo().textContent.includes('Page 1 removed'));
+  const pageToast = lastUndo();
+  await sleep(20);   // let it finish appearing
+  document.body.focus();
+  document.body.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  check('Ctrl+Z undoes it: the page is back in its place', globalVar('playlist').map(p => p.text).join() === 'ONE,TWO');
+  check('and the Undo toast goes', globalVar('latestUndo') === null && !pageToast.classList.contains('show'));
+
+  click(document.querySelector('#preview .flap-unit[data-cell="0"]'));
+  typeKeys('keep');
+  click(document.querySelector('[data-onclick="clearDisplay"]'));
+  check('Clear offers Undo', row0().trim() === '' && lastUndo().textContent.includes('Grid cleared'));
+  click(lastUndo().querySelector('.toast-action'));
+  check('which brings the grid back', row0().startsWith('KEEP'));
+
+  savedPlaylists.Evening = { pages: [{ text: 'EVE' }], delay: 6 };
+  await window.loadSavedPlaylists();
+  window.confirm = () => { throw new Error('no confirm any more'); };
+  calls.length = 0;
+  click(document.querySelector('.saved-pl-item[data-name="Evening"] [data-onclick="deleteSavedPlaylist"]'));
+  await sleep(50);
+  check('deleting a saved playlist needs no confirm, and offers Undo',
+    !('Evening' in savedPlaylists) && lastUndo().textContent.includes('Deleted "Evening"'));
+  click(lastUndo().querySelector('.toast-action'));
+  await sleep(50);
+  check('Undo saves it again, as it was', savedPlaylists.Evening &&
+    JSON.stringify(savedPlaylists.Evening) === JSON.stringify({ pages: [{ text: 'EVE' }], delay: 6 }) &&
+    !!document.querySelector('.saved-pl-item[data-name="Evening"]'));
+
+  console.log('\n--- Renaming a saved playlist ---');
+  click(document.querySelector('.saved-pl-item[data-name="Evening"] [data-onclick="startRenamePlaylist"]'));
+  const renameBox = document.querySelector('.saved-pl-rename');
+  check('Rename turns the name into a box, focused', !!renameBox && document.activeElement === renameBox && renameBox.value === 'Evening');
+  renameBox.value = 'Morning';
+  renameBox.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await sleep(50);
+  check('a name that is taken is refused, and the box stays', 'Evening' in savedPlaylists && !!document.querySelector('.saved-pl-rename') &&
+    [...document.querySelectorAll('.toast.error')].some(t => t.textContent.includes('already a playlist called "Morning"')));
+  const box2 = document.querySelector('.saved-pl-rename');
+  box2.value = 'Night';
+  box2.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await sleep(60);
+  check('Enter renames it, keeping its place, and says the schedule follows',
+    Object.keys(savedPlaylists).indexOf('Night') >= 0 && !('Evening' in savedPlaylists) &&
+    [...document.querySelectorAll('.toast')].some(t => t.textContent === 'Renamed to "Night"; the schedule follows it') &&
+    document.activeElement === document.querySelector('.saved-pl-item[data-name="Night"] [data-onclick="startRenamePlaylist"]'));
+  click(document.querySelector('.saved-pl-item[data-name="Night"] [data-onclick="loadSavedPlaylist"]'));
+  await sleep(50);
+  click(document.querySelector('.saved-pl-item[data-name="Night"] [data-onclick="startRenamePlaylist"]'));
+  const box3 = document.querySelector('.saved-pl-rename');
+  box3.value = 'Late';
+  box3.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await sleep(60);
+  check('renaming the playlist being edited carries the editor along',
+    globalVar('loadedPlaylist') === 'Late' && document.getElementById('savePlaylistName').value === 'Late');
+  click(document.querySelector('.saved-pl-item[data-name="Late"] [data-onclick="startRenamePlaylist"]'));
+  document.querySelector('.saved-pl-rename').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  check('Escape cancels', !document.querySelector('.saved-pl-rename') && !!document.querySelector('.saved-pl-item[data-name="Late"]'));
+
+  console.log('\n--- Preview ---');
+  document.getElementById('modeToggle').checked = false;
+  change(document.getElementById('modeToggle'));
+  click(document.querySelector('[data-onclick="clearDisplay"]'));
+  click(document.querySelector('#preview .flap-unit[data-cell="0"]'));
+  typeKeys('ab');
+  document.getElementById('speedInput').value = '300';
+  live.emit(snapshot({ state: ' '.repeat(64) }));
+  const previewBtn = document.getElementById('previewBtn');
+  calls.length = 0;
+  click(previewBtn);
+  check('Preview starts: the grid says so, and nothing is sent',
+    document.getElementById('composeWrapper').classList.contains('previewing') &&
+    previewBtn.getAttribute('aria-pressed') === 'true' && calls.length === 0);
+  await sleep(180);
+  check('flaps start in the transition\'s order, a speed apart: the first has turned, the second not yet', row0().startsWith('A '));
+  await sleep(400);
+  check('then the next turns, through the reel, to its character', row0().startsWith('AB'));
+  click(previewBtn);
+  check('Stop preview puts the page back, ending the preview',
+    !document.getElementById('composeWrapper').classList.contains('previewing') && row0().startsWith('AB') &&
+    previewBtn.textContent === '▷ Preview');
+  live.emit(snapshot({ state: 'Z'.repeat(64) }));
+  click(previewBtn);
+  await sleep(40);
+  check('a preview starts from what the display shows now', row0().startsWith('ZZ'));
+  key('ArrowRight');
+  check('typing (or any key in the grid) ends it', !document.getElementById('composeWrapper').classList.contains('previewing') &&
+    row0().startsWith('AB'));
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

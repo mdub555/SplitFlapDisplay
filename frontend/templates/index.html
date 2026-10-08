@@ -111,7 +111,9 @@
 
     <div class="control-panel">
       <label class="check-label"><input type="checkbox" id="modeToggle" data-onchange="toggleMultiMode"> <strong>Multi-Page Playlist</strong></label>
-      <button class="btn btn-secondary btn-sm push-right" data-onclick="centerLines">Center Lines</button>
+      <button class="btn btn-secondary btn-sm push-right" id="previewBtn" data-onclick="togglePreview" aria-pressed="false"
+              title="Play the page (with Multi-Page Playlist on, the whole playlist) in the grid as the display would show it. Nothing is sent.">▷ Preview</button>
+      <button class="btn btn-secondary btn-sm" data-onclick="centerLines">Center Lines</button>
       <button class="btn btn-secondary btn-sm" data-onclick="clearDisplay">Clear</button>
     </div>
 
@@ -379,7 +381,7 @@
 <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
 <script>const CONFIG = {{ config | tojson }};</script>
-{% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control',
+{% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control', 'preview',
                   'apps', 'schedule', 'app-settings-modal', 'modules', 'debug', 'install', 'main'] %}
 <script src="{{ url_for('static', filename='js/' + script + '.js') }}"></script>
 {% endfor %}

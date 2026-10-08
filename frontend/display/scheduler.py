@@ -12,7 +12,8 @@ The schedule lives in settings['schedule']:
         ],
     }
 
-A target is 'app:<key>' or 'playlist:<saved playlist name>'. Entries are
+A target is 'app:<key>', 'playlist:<saved playlist name>', or 'blank' to
+clear the display and keep it clear (quiet hours, say). Entries are
 checked in order and the first that covers the current time wins. An entry
 whose end is before its start runs past midnight (into the next day), and
 one whose start and end are equal runs all day.
@@ -28,6 +29,7 @@ import threading
 from datetime import datetime, timedelta
 
 DAYS = range(7)
+BLANK = 'blank'   # the target that clears the display (DisplayState.run_blank)
 _TIME = re.compile(r'^([01]\d|2[0-3]):([0-5]\d)$')
 _UNSET = object()   # the target before the first check, so that one always acts
 
@@ -63,6 +65,8 @@ def target_for(schedule, now):
 
 def _valid_target(target, app_keys, allow_empty=False):
     if target == '' and allow_empty:
+        return True
+    if target == BLANK:
         return True
     if not isinstance(target, str):
         return False
@@ -138,7 +142,9 @@ class Scheduler:
     def _run(self, target):
         if self.state.current_target() != target:
             kind, _, key = target.partition(':')
-            if kind == 'app':
+            if target == BLANK:
+                self.state.run_blank()
+            elif kind == 'app':
                 if not self.app_exists(key):
                     logging.warning(f'Schedule: no app {key!r}')
                     return

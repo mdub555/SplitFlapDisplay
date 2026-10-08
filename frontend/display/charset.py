@@ -36,6 +36,9 @@ DISPLAY_CHARS = {
 
 NUM_FLAPS = len(FLAP_CHARS)
 
+# Seconds for a module to turn one flap position (a revolution takes about 4 s).
+SECONDS_PER_FLAP = 4.0 / NUM_FLAPS
+
 
 def normalize_text(text: str, raw: bool = False) -> str:
     """`text` the way the modules take it: uppercased (unless `raw`), colour

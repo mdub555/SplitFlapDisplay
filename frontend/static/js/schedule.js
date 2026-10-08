@@ -10,6 +10,7 @@ let schedulePlaylists = {};   // the saved playlists, for the target lists
 // What a target ('app:<key>' or 'playlist:<name>') is called on screen.
 function targetLabel(target) {
   if (!target) return 'nothing';
+  if (target === 'blank') return 'a blank display';
   const [kind, ...rest] = target.split(':');
   const key = rest.join(':');
   return kind === 'app' ? appName(key) : `playlist "${key}"`;
@@ -22,10 +23,11 @@ function targetLabel(target) {
 function targetSelect(selected, blank, props = {}) {
   const apps = Object.values(window.appsByKey);
   const names = Object.keys(schedulePlaylists);
-  const known = new Set([...apps.map(a => `app:${a.key}`), ...names.map(n => `playlist:${n}`)]);
+  const known = new Set(['blank', ...apps.map(a => `app:${a.key}`), ...names.map(n => `playlist:${n}`)]);
   const select = el('select', {class: 'input', ...props},
     el('option', {value: ''}, blank),
     ...(selected && !known.has(selected) ? [el('option', {value: selected}, `${targetLabel(selected)} (missing)`)] : []),
+    el('optgroup', {label: 'Display'}, el('option', {value: 'blank'}, '■ Blank the display')),
     el('optgroup', {label: 'Apps'}, ...apps.map(a => el('option', {value: `app:${a.key}`}, `${a.icon} ${a.name}`))),
     ...(names.length
       ? [el('optgroup', {label: 'Saved playlists'}, ...names.map(n => el('option', {value: `playlist:${n}`}, n)))]
@@ -113,9 +115,16 @@ function moveScheduleEntry(button) {
 
 function removeScheduleEntry(button) {
   const row = button.closest('.schedule-entry');
+  const list = byId('scheduleEntries');
+  const after = row.nextElementSibling;   // where it goes back, on undo
   const next = row.nextElementSibling || row.previousElementSibling;
   row.remove();
   (next ? next.querySelector('[data-onclick="removeScheduleEntry"]') : document.querySelector('[data-onclick="addScheduleEntry"]')).focus();
+  showToast('Time slot removed (Save Schedule to keep it that way)', 'success', {undo: () => {
+    if (after && after.parentNode === list) list.insertBefore(row, after);
+    else list.append(row);
+    row.querySelector('[data-onclick="removeScheduleEntry"]').focus();
+  }});
 }
 
 registerActions({ saveSchedule, addScheduleEntry, moveScheduleEntry, removeScheduleEntry });

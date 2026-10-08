@@ -84,6 +84,7 @@ class DisplayState:
         self.loop_delay = 5          # default seconds/page for the manual playlist
         self.playlist_name = None    # the saved playlist being played, if it is one
         self.playlist_page = 0       # index of the playlist page on the display
+        self.blanked = False         # showing a blank page on purpose (see run_blank)
 
         # Whether the serial port opened (display/serial_link.py sets it). When
         # it didn't, nothing physically moves and the page says so.
@@ -131,7 +132,7 @@ class DisplayState:
         and every value pushed over the SSE stream."""
         with self.lock:
             playing = None
-            if self.active_app is None and self.current_playlist:
+            if self.active_app is None and self.current_playlist and not self.blanked:
                 playing = {
                     'name': self.playlist_name,
                     'page': self.playlist_page,
@@ -143,6 +144,7 @@ class DisplayState:
                 'state': self.current_display_string,
                 'active_app': self.active_app,
                 'playlist': playing,
+                'blank': self.blanked,
                 'scheduled': target is not None and target == self.scheduled_target,
                 'hardware_connected': self.hardware_connected,
                 'settings_version': self.settings_version,
@@ -156,6 +158,8 @@ class DisplayState:
     def _current_target(self):
         """What's running as a scheduler target string, or None for nothing
         (or an unsaved playlist). Call with the lock held."""
+        if self.blanked:
+            return 'blank'
         if self.active_app:
             return f'app:{self.active_app}'
         if self.current_playlist and self.playlist_name:
@@ -181,6 +185,7 @@ class DisplayState:
             self.active_app = app_key
             self.current_playlist = []
             self.playlist_name = None
+            self.blanked = False
         self.request_stop()
         self._broadcast()
 
@@ -194,7 +199,16 @@ class DisplayState:
             self.playlist_name = name
             self.playlist_page = 0
             self.last_sent_page = None
+            self.blanked = False
         self.request_stop()
+        self._broadcast()
+
+    def run_blank(self):
+        """Clear the display and keep it clear (say, overnight), until
+        something else is started."""
+        self.run_playlist([{'text': ' ' * NUM_MODULES}], 60)
+        with self.lock:
+            self.blanked = True
         self._broadcast()
 
     def stop(self):
@@ -203,7 +217,18 @@ class DisplayState:
             self.active_app = None
             self.current_playlist = []
             self.playlist_name = None
+            self.blanked = False
         self.request_stop()
+        self._broadcast()
+
+    def rename_playlist(self, old, new):
+        """A saved playlist was renamed: if it's playing, or what the
+        schedule started, it's still the same one."""
+        with self.lock:
+            if self.playlist_name == old:
+                self.playlist_name = new
+            if self.scheduled_target == f'playlist:{old}':
+                self.scheduled_target = f'playlist:{new}'
         self._broadcast()
 
     def set_playlist_page(self, index):

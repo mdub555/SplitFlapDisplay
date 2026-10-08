@@ -3,7 +3,7 @@ import time
 
 from config import NUM_MODULES, BAUD_RATE, FRAME_BROADCAST
 from display.state import state
-from display.charset import FLAP_CHARS, NUM_FLAPS, normalize_text
+from display.charset import FLAP_CHARS, NUM_FLAPS, SECONDS_PER_FLAP, normalize_text
 from display.layout import get_animation_order
 from display.module_protocol import BROADCAST, FRAME_MAX_MODULES, Cmd, message
 from display.serial_link import serial_lock, write_serial
@@ -12,8 +12,6 @@ from apps.registry import registry
 from settings.store import settings
 
 
-# Seconds for a module to turn one flap position (a revolution takes about 4 s).
-SECONDS_PER_FLAP = 4.0 / NUM_FLAPS
 
 def _bus_ms(num_bytes):
     """Time to send `num_bytes` at BAUD_RATE (8N1: 10 bits per byte)."""
