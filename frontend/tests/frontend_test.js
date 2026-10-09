@@ -561,7 +561,7 @@ async function main() {
     picker.getAttribute('aria-valuetext') === 'D' && picker.getAttribute('aria-disabled') === 'false');
   calls.length = 0;
   wheel(40);
-  check('scrolling down turns it forward a flap', pickerName() === 'E · flap 5');
+  check('scrolling down turns it forward a flap', pickerName() === 'E · flap 5' && !picker.classList.contains('tile'));
   wheel(30);
   wheel(30);
   check('small scrolls add up to a flap', pickerName() === 'F · flap 6');
@@ -584,6 +584,7 @@ async function main() {
   pickerKey('ArrowUp');
   pickerKey('ArrowUp');
   check('it wraps from blank to the last flap', picker.getAttribute('aria-valuenow') === '63');
+  check('a colour tile is marked, to draw it smaller', picker.classList.contains('tile'));
   pickerKey('Enter');
   await sleep(20);
   check('Enter sends it straight away', flapCalls().join() === '/modules/2/show_flap {"flap":63}');

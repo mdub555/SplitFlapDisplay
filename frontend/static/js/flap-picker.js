@@ -169,6 +169,7 @@ const flapPicker = {
     const flap = byId('flapPicker');
     flap.querySelector('.ft .fc').textContent = displayChar(ch);
     flap.querySelector('.fb .fc').textContent = displayChar(ch);
+    flap.classList.toggle('tile', displayChar(ch) in TILE_CODES);   // drawn smaller, as in the compose grid
     flap.setAttribute('aria-valuenow', index);
     flap.setAttribute('aria-valuetext', flapLabel(ch));
     byId('pickerName').textContent = `${flapLabel(ch)} · flap ${index}`;
