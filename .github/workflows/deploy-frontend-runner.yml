@@ -1,0 +1,37 @@
+# Deploys the frontend on the Raspberry Pi itself: this job runs on a
+# self-hosted runner installed on the Pi, rebuilds the image from the merged
+# code and replaces the container. See frontend/README.md ("Deploying").
+#
+# Only ever triggered by pushes to main (never pull_request), so code from a
+# fork can't run on the Pi.
+name: Deploy frontend (self-hosted runner)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - frontend/**
+      - .github/workflows/deploy-frontend-runner.yml
+  workflow_dispatch:
+
+# Never run two deploys at once; a newer one waits for the current one.
+concurrency:
+  group: deploy-frontend-runner
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild and restart the container
+        working-directory: frontend
+        env:
+          # .env isn't in the repo; keep a copy at this path on the Pi
+          # (override with a repository variable if you keep it elsewhere).
+          ENV_FILE: ${{ vars.SPLITFLAP_ENV_FILE || '~/splitflap/.env' }}
+        run: |
+          cp "${ENV_FILE/#\~/$HOME}" .env
+          docker compose up -d --build --remove-orphans
+          docker image prune -f

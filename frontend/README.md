@@ -73,6 +73,47 @@ Containers built before this change kept settings.json inside the container
 itself, where a rebuild loses it: download a backup (Modules → Backup &
 Restore) before updating, and restore it afterwards.
 
+### Deploying to the Pi
+
+Two ways to update the Pi automatically when a PR is merged to `main`
+(changes under `frontend/`). They're both set up so you can try each; run
+only one at a time, since they share the container name, port 5000 mapping
+and `/dev/ttyUSB0`. Both keep the `splitflap-settings` volume, so switching
+doesn't lose your settings. Both need a `.env` with `APP_PORT` on the Pi.
+
+**A. Self-hosted runner** (`.github/workflows/deploy-frontend-runner.yml`,
+uses `compose.yaml`). The Pi builds the image itself.
+
+1. Repo Settings → Actions → Runners → New self-hosted runner. Choose Linux
+   and ARM64 (or ARM for a 32-bit OS) and run the commands it shows on the Pi.
+2. Install it as a service: `sudo ./svc.sh install && sudo ./svc.sh start`.
+3. Add the runner's user to the docker group: `sudo usermod -aG docker <user>`
+   (then restart the service).
+4. Keep your `.env` at `~/splitflap/.env` on the Pi, or set the repository
+   variable `SPLITFLAP_ENV_FILE` to wherever it lives.
+
+A merge now runs `docker compose up -d --build` on the Pi. The workflow is
+only triggered by pushes to `main`, never pull requests, so fork code can't
+run on your Pi; still, only use a self-hosted runner on a repo whose
+contributors you trust.
+
+**B. Watchtower** (`.github/workflows/publish-frontend-image.yml`, uses
+`compose.watchtower.yaml`). GitHub builds the image and the Pi pulls it.
+
+1. Merge once (or run the "Publish frontend image" workflow manually) so the
+   image exists at `ghcr.io/mdub555/splitflapdisplay-frontend`.
+2. If the package is private (GitHub's default), either make it public
+   (Packages → the package → Package settings → Change visibility) or run
+   `docker login ghcr.io` on the Pi with a token that has `read:packages` and
+   uncomment the `config.json` mount in `compose.watchtower.yaml`.
+3. On the Pi, stop any container from option A
+   (`docker compose down`), then
+   `docker compose -f compose.watchtower.yaml up -d`.
+
+Watchtower checks every 5 minutes (`WATCHTOWER_POLL_INTERVAL`), so a deploy
+takes a few minutes after the image is published, and restarts only
+containers labelled for it.
+
 The page gets everything the backend already knows (grid size, character
 set, animation styles, the firmware settings and module toggles with their
 labels) when it's rendered, as `CONFIG` (see `routes/pages.py`), so the
