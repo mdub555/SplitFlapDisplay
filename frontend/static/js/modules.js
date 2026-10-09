@@ -237,16 +237,19 @@ function toggleModuleSetting(input) {
   });
 }
 
-// Manual controls under the toggles: set total steps, show a flap, jump to a
-// raw step, exercise. Disabled for an unprovisioned module, like
-// the toggles (the backend answers those with a 404 anyway).
+// The inspector's two boxes of controls: the actions (show a flap, jump to a
+// raw step, exercise) and the module's settings (home offset, the toggles,
+// total steps). Disabled for an unprovisioned module (the backend answers
+// those with a 404 anyway), apart from their ⓘ buttons.
 const MAX_TOTAL_STEPS = 32767;
 
 function refreshManualControls() {
   const mod = moduleSettings();
-  const box = byId('manualControls');
-  box.classList.toggle('disabled', !mod);
-  box.querySelectorAll('input, select, button').forEach(control => { control.disabled = !mod; });
+  ['manualControls', 'moduleConfig'].forEach(id => {
+    const box = byId(id);
+    box.classList.toggle('disabled', !mod);
+    box.querySelectorAll('input, select, button:not(.info-btn)').forEach(control => { control.disabled = !mod; });
+  });
   // Not while it's being typed in (a reload can come at any time).
   const steps = byId('totalStepsInput');
   if (document.activeElement !== steps) steps.value = mod && mod.totalSteps !== undefined ? mod.totalSteps : '';

@@ -327,6 +327,11 @@ async function main() {
   check('toggles are disabled and cleared for an unprovisioned module',
     MODULE_TOGGLES_ALL().every(k => modToggle(k).disabled && !modToggle(k).checked) &&
     document.getElementById('moduleToggles').classList.contains('disabled'));
+  check('an unprovisioned module\'s settings and actions are disabled, but their ⓘ still open',
+    ['moduleConfig', 'manualControls'].every(id => document.getElementById(id).classList.contains('disabled')) &&
+    document.querySelector('#moduleConfig [data-onclick="adjustOffset"]').disabled &&
+    document.querySelector('#showCharInput').disabled &&
+    [...document.querySelectorAll('#moduleConfig .info-btn, #manualControls .info-btn')].every(b => !b.disabled));
   click(document.querySelector('#modMatrix .mod-cell[data-id="0"]'));
   await sleep(20);
   check('selecting a provisioned module again re-enables its toggles', !modToggle('motorClockwise').disabled);

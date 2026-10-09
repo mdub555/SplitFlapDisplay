@@ -231,6 +231,15 @@
             <button class="btn btn-secondary btn-sm" data-onclick="syncOneFromHardware">Sync EEPROM</button>
           </div>
         </div>
+        <!-- Things to do with the module. -->
+        <div class="inset-box" id="manualControls">
+          {{ manual_row('showCharInput', 'Show character', [('SHOW', 'showChar')], type='select') }}
+          {{ manual_row('gotoStepInput', 'Go to step', [('GO', 'gotoStep')], attrs={'min': 0, 'step': 1},
+                        tip='A raw step position from flap 0. Only moves forward from where the reel is, wrapping at total steps.') }}
+          {{ manual_row('exerciseInput', 'Exercise (cycles, 1–255)', [('RUN', 'exerciseSelected'), ('STOP', 'stopSelected')],
+                        attrs={'min': 1, 'max': 255, 'step': 1, 'value': 1},
+                        tip='Steps through every flap one at a time, round the reel this many times. STOP, or any other move, ends it.') }}
+        </div>
         <div class="sync-failed-note" id="inspectSyncFailed" hidden>
           <strong>Sync failed</strong>
           <span>This module didn't answer the last sync, so the values below may be out of date. Check its power and bus connection, then press Sync EEPROM to try again.</span>
@@ -244,32 +253,31 @@
             {{ info('driftTip', 'drift', "Steps the module's position was off by at the last pass over the home sensor, from the last sync. Positive means missed steps: try a longer step delay or a ramp.") }}</span><span class="stat-val" id="inspectDrift">---</span></div>
         </div>
         <div class="module-timing" id="inspectTiming"></div>
-        <div class="adj-controls has-info">
-          {% for delta in [-32, -16, -4, -1] %}
-          <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="{{ delta }}">{{ delta }}</button>
-          {% endfor %}
-          <span class="adj-label label-line">OFFSET
-            {{ info('adjTip', 'the home offset buttons', 'Moves flap 0 (the blank flap) this many steps from the home sensor. Saves to the module straight away; press Home Motor to check it.') }}</span>
-          {% for delta in [1, 4, 16, 32] %}
-          <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="{{ delta }}">+{{ delta }}</button>
-          {% endfor %}
-        </div>
-        <div class="inset-box" id="moduleToggles">
-          {% for key, toggle in module_toggles.items() %}
-          {{ toggle_row('modToggle-' + key, toggle.label, toggle.hint,
-                        {'data-onchange': 'toggleModuleSetting', 'data-setting': key}) }}
-          {% endfor %}
-        </div>
-        <div class="inset-box" id="manualControls">
+        <!-- The module's own settings, saved in its EEPROM. -->
+        <div class="inset-box" id="moduleConfig">
+          <div class="manual-row has-info">
+            <div class="manual-label label-line">
+              <span>Home offset</span>
+              {{ info('adjTip', 'the home offset', 'Moves flap 0 (the blank flap) this many steps from the home sensor. Saves to the module straight away; press Home Motor to check it.') }}
+            </div>
+            <div class="adj-buttons">
+              {% for delta in [-16, -4, -1] %}
+              <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="{{ delta }}">{{ delta }}</button>
+              {% endfor %}
+              {% for delta in [1, 4, 16] %}
+              <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="{{ delta }}">+{{ delta }}</button>
+              {% endfor %}
+            </div>
+          </div>
+          <div id="moduleToggles">
+            {% for key, toggle in module_toggles.items() %}
+            {{ toggle_row('modToggle-' + key, toggle.label, toggle.hint,
+                          {'data-onchange': 'toggleModuleSetting', 'data-setting': key}) }}
+            {% endfor %}
+          </div>
           {{ manual_row('totalStepsInput', 'Total steps per revolution', [('SET', 'setTotalSteps')],
                         attrs={'min': 1, 'max': 32767, 'step': 1},
                         tip="Only writes the module's EEPROM; home the module afterwards. Measure Reel finds it for you.") }}
-          {{ manual_row('showCharInput', 'Show character', [('SHOW', 'showChar')], type='select') }}
-          {{ manual_row('gotoStepInput', 'Go to step', [('GO', 'gotoStep')], attrs={'min': 0, 'step': 1},
-                        tip='A raw step position from flap 0. Only moves forward from where the reel is, wrapping at total steps.') }}
-          {{ manual_row('exerciseInput', 'Exercise (cycles, 1–255)', [('RUN', 'exerciseSelected'), ('STOP', 'stopSelected')],
-                        attrs={'min': 1, 'max': 255, 'step': 1, 'value': 1},
-                        tip='Steps through every flap one at a time, round the reel this many times. STOP, or any other move, ends it.') }}
         </div>
         <!-- Per-flap offsets, one flap at a time (flap-tuner.js) -->
         <details class="inset-box tuner" id="flapTuner">

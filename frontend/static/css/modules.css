@@ -179,11 +179,10 @@
   font-weight: bold;
 }
 
-/* Home offset buttons. */
-.adj-controls {
+/* Home offset buttons, at the end of their row. */
+.adj-buttons {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 4px;
 }
 
@@ -212,22 +211,7 @@
   border: 1px solid var(--adj-pos-border);
 }
 
-.adj-label {
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  padding: 0 8px;
-  font-size: .85rem;
-}
-
-.adj-hint {
-  text-align: center;
-  color: var(--text-faint);
-  font-size: .75rem;
-  margin-top: -6px;
-}
-
-/* The toggles and the manual controls, each a black box of rows. */
+/* The inspector's actions and the module's settings, each a box of rows. */
 .inset-box {
   display: flex;
   flex-direction: column;
@@ -352,7 +336,7 @@
     flex-wrap: wrap;
   }
 
-  .adj-controls {
+  .adj-buttons {
     gap: 3px;
   }
 
