@@ -113,9 +113,10 @@ def show_flap(mod_id):
         return error(f'flap must be an integer from 0 to {NUM_FLAPS - 1}', 400)
     offsets = read_flap_offsets(mod_id, before=[message(mod_id, Cmd.DISPLAY_INDEX, flap)],
                                 timeout=FLAP_MOVE_TIMEOUT_S)
+    # Sent either way, so the live display follows it.
+    state.mark_module_char(mod_id, FLAP_CHARS[flap])
     if offsets is None:
         return error('The module did not report back', 504)
-    state.mark_module_char(mod_id, FLAP_CHARS[flap])
     return jsonify(flap=flap, offsets=offsets)
 
 

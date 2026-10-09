@@ -155,20 +155,6 @@
   font-weight: bold;
 }
 
-/* The flap tuner's flap number, and its label. */
-.stat-label {
-  font-size: .75rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-.stat-val {
-  font-family: monospace;
-  font-size: 1.5rem;
-  color: var(--display-green);
-  display: block;
-}
-
 /* In the timing settings' ⓘ: a value that differs from the shared one. */
 .info-tip .mismatch {
   color: var(--orange);
@@ -370,68 +356,9 @@
   display: none;
 }
 
-/* ── FLAP OFFSET TUNER ── */
-/* A section that opens and closes: its title is the <summary>. */
-.tuner {
-  display: block;
-}
-
-.tuner > summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-.tuner > summary::-webkit-details-marker {
-  display: none;
-}
-
-.tuner > summary::before {
-  content: '▸';
-  width: 1em;
-  color: var(--text-muted);
-}
-
-.tuner[open] > summary::before {
-  content: '▾';
-}
-
-.tuner-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-/* Previous, the flap showing, Next. */
-.tuner-flap {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.tuner-current {
-  text-align: center;
-}
-
-.tuner-char {
-  display: block;
-  min-height: 1.2em;
-  color: var(--text-dim);
-  font-size: .85rem;
-}
-
-.tuner .manual-row {
-  flex-wrap: wrap;
-}
-
-.tuner .manual-row .input {
+/* ── FLAP OFFSET ROW ── */
+#flapTuner .input {
   width: 70px;
-}
-
-.tuner-title {
-  color: var(--text-soft);
-  font-size: .9rem;
 }
 
 .tuner-status:empty {
@@ -452,10 +379,6 @@
   .btn-adj {
     padding: 8px 9px;
     font-size: .8rem;
-  }
-
-  .stat-val {
-    white-space: nowrap;
   }
 
   /* The buttons go under both the picker and the other actions. */
@@ -507,7 +430,7 @@
   }
 
   .manual-row .input,
-  .tuner .manual-row .input {
+  #flapTuner .input {
     flex: 1;
     width: auto;
     min-width: 0;
@@ -544,8 +467,4 @@
 .restore-report ul {
   margin: 4px 0 0;
   padding-left: 20px;
-}
-
-.stat-label.label-line {
-  justify-content: center;
 }

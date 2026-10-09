@@ -180,9 +180,12 @@ class ReadFlapOffsetsTest(unittest.TestCase):
         offsets, _ = self.read([offsets_reply(hex_digits='80' * 63)])
         self.assertIsNone(offsets)
 
-    def test_no_port_is_no_reply(self):
-        with mock.patch.object(serial_link, 'ser', None):
-            self.assertIsNone(serial_link.read_flap_offsets(5))
+    def test_no_port_is_no_reply_but_what_was_sent_is_logged(self):
+        logged = []
+        with mock.patch.object(serial_link, 'ser', None), \
+                mock.patch.object(serial_link.state, 'log_serial', logged.append):
+            self.assertIsNone(serial_link.read_flap_offsets(5, before=['m05+7']))
+        self.assertEqual(logged, ['SIMULATED SENT: m05+7'])
 
 
 class BrokenSerial(FakeSerial):

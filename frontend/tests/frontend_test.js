@@ -543,85 +543,17 @@ async function main() {
   click(document.querySelector('[data-onclick="clearDebugLog"]'));
   check('the log can be cleared', logLines().length === 0);
 
-  console.log('\n--- The inspector tunes one flap at a time ---');
-  const tuner = id => document.getElementById(id);
-  const tunerButton = action => tuner('flapTuner').querySelector(`[data-onclick="${action}"]`);
-  const nextBtn = tuner('flapTuner').querySelector('[data-step="1"]');
-  const prevBtn = tuner('flapTuner').querySelector('[data-step="-1"]');
-  const nudge = delta => tuner('flapTuner').querySelector(`[data-onclick="tunerNudge"][data-delta="${delta}"]`);
-  const pickModule = id => click(document.querySelector(`#modMatrix .mod-cell[data-id="${id}"]`));
-  const tunerCalls = () => calls.filter(c => /show_flap|flap_offset/.test(c.url))
-    .map(c => `${c.url} ${c.body}`);
-  click(document.getElementById('tab-modules'));
-  await sleep(20);   // the page loads the stored settings
-  pickModule(1);   // not provisioned
-  check('an unprovisioned module can\'t be tuned', nextBtn.disabled && prevBtn.disabled &&
-    tuner('flapTuner').classList.contains('disabled'));
-  check('the flap offsets start closed', tuner('flapTuner').tagName === 'DETAILS' && !tuner('flapTuner').open);
-  pickModule(2);
-  check('until it has moved a flap, only Previous and Next can be used',
-    tuner('tunerFlap').textContent === '—' && tuner('tunerChar').textContent === 'Step to a flap to start' &&
-    tuner('tunerOffset').disabled && tunerButton('tunerApply').disabled && !nextBtn.disabled && !prevBtn.disabled);
-  calls.length = 0;
-  click(nextBtn);
-  check('while the module moves, the controls are disabled and say what is happening',
-    nextBtn.disabled && tuner('tunerStatus').textContent === 'Moving to flap 1…');
-  await sleep(20);
-  check('Next starts at flap 1, and shows its offset once there',
-    tunerCalls().join() === '/modules/2/show_flap {"flap":1}' && tuner('tunerFlap').textContent === '1' &&
-    tuner('tunerChar').textContent === 'A' && tuner('tunerOffset').value === '0' && !tuner('tunerOffset').disabled &&
-    tuner('tunerStatus').textContent === '' && tuner('tunerSummary').textContent === 'No flap has an offset.');
-  click(nextBtn);
-  await sleep(20);
-  calls.length = 0;
-  click(nudge(4));
-  await sleep(20);
-  check('+4 sets the showing flap four steps further on',
-    tunerCalls().join() === '/modules/2/flap_offset {"flap":2,"offset":4}' && tuner('tunerOffset').value === '4' &&
-    tuner('tunerSummary').textContent === 'Flaps with an offset: 2 B +4');
-  calls.length = 0;
-  tuner('tunerOffset').value = '-3';
-  click(tunerButton('tunerApply'));
-  check('lowering an offset warns it takes nearly a revolution',
-    tuner('tunerStatus').textContent === 'Moving flap 2 to -3 (nearly a full revolution)…');
-  await sleep(20);
-  check('SET sends the offset typed', tunerCalls().join() === '/modules/2/flap_offset {"flap":2,"offset":-3}' &&
-    tunedModule.offsets[2] === -3);
-  calls.length = 0;
-  tuner('tunerOffset').value = '200';
-  click(tunerButton('tunerApply'));
-  await sleep(20);
-  check('an offset out of range is refused', tunerCalls().length === 0 &&
-    lastToastText().includes('from -128 to 127'));
-  click(prevBtn);
-  await sleep(20);
-  click(prevBtn);
-  await sleep(20);
-  check('flap 0 is left to the home offset', tuner('tunerFlap').textContent === '0' &&
-    tuner('tunerOffset').disabled && tuner('tunerOffset').placeholder === 'home offset' && nudge(4).disabled &&
-    !tuner('flapTuner').querySelector('.info-btn').disabled);
-  click(prevBtn);
-  await sleep(20);
-  check('Previous wraps from flap 0 to the last flap', tuner('tunerFlap').textContent === '63');
-  pickModule(2);
-  check('picking the same module keeps its flap', tuner('tunerFlap').textContent === '63');
-  pickModule(0);
-  check('another module starts again', tuner('tunerFlap').textContent === '—' && tuner('tunerSummary').textContent === '');
-  calls.length = 0;
-  click(nextBtn);
-  pickModule(2);   // while module 0 is still moving
-  await sleep(20);
-  check('a reply for a module no longer selected is not shown as this one\'s',
-    tunerCalls().join() === '/modules/0/show_flap {"flap":1}' && tuner('tunerFlap').textContent === '—');
-
   console.log('\n--- The flap picker turns, then shows its character ---');
+  const pickModule = id => click(document.querySelector(`#modMatrix .mod-cell[data-id="${id}"]`));
+  click(document.getElementById('tab-modules'));
+  await sleep(20);
   const picker = document.getElementById('flapPicker');
   const pickerApi = globalVar('flapPicker');
   pickerApi.delayMs = 60;   // rather than 3 s
   const pickerName = () => document.getElementById('pickerName').textContent;
   const wheel = deltaY => picker.dispatchEvent(new window.WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true }));
   const pickerKey = k => picker.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
-  const displayCalls = () => calls.filter(c => c.url.endsWith('/display')).map(c => `${c.url} ${c.body}`);
+  const flapCalls = () => calls.filter(c => /show_flap|flap_offset/.test(c.url)).map(c => `${c.url} ${c.body}`);
   globalVar('liveState').state = '  D';
   pickModule(0);
   pickModule(2);
@@ -638,29 +570,82 @@ async function main() {
   wheel(-100);
   check('scrolling up turns it back', pickerName() === 'D · flap 4' &&
     document.getElementById('pickerStatus').textContent === 'Sending…');
-  check('nothing is sent while it\'s still turning', displayCalls().length === 0);
+  check('nothing is sent while it\'s still turning', flapCalls().length === 0);
   await sleep(120);
-  check('once it stands still, the module shows it', displayCalls().join() === '/modules/2/display {"index":4}' &&
+  check('once it stands still, the module shows it', flapCalls().join() === '/modules/2/show_flap {"flap":4}' &&
     document.getElementById('pickerStatus').textContent === '');
   calls.length = 0;
   pickerKey('ArrowUp');
   pickerKey('ArrowUp');
   pickerKey('Escape');
   await sleep(120);
-  check('Escape cancels it', pickerName() === 'B · flap 2' && displayCalls().length === 0);
+  check('Escape cancels it', pickerName() === 'B · flap 2' && flapCalls().length === 0);
   pickerKey('ArrowUp');
   pickerKey('ArrowUp');
   pickerKey('ArrowUp');
   check('it wraps from blank to the last flap', picker.getAttribute('aria-valuenow') === '63');
   pickerKey('Enter');
-  check('Enter sends it straight away', displayCalls().join() === '/modules/2/display {"index":63}');
+  await sleep(20);
+  check('Enter sends it straight away', flapCalls().join() === '/modules/2/show_flap {"flap":63}');
+
+  console.log('\n--- The flap offset row works on the flap the module is showing ---');
+  const tuner = id => document.getElementById(id);
+  const tunerButton = action => tuner('flapTuner').querySelector(`[data-onclick="${action}"]`);
+  const nudge = delta => tuner('flapTuner').querySelector(`[data-onclick="tunerNudge"][data-delta="${delta}"]`);
+  check('it names the flap the picker moved the module to, and shows its offset',
+    tuner('tunerFlapName').textContent === '🟪 (p)' && tuner('tunerOffset').value === '0' &&
+    !tuner('tunerOffset').disabled && tuner('tunerSummary').textContent === 'No flap has an offset.');
+  pickerKey('Home');
+  pickerKey('ArrowDown');
+  pickerKey('ArrowDown');
+  pickerKey('Enter');
+  await sleep(20);
+  calls.length = 0;
+  click(nudge(4));
+  check('while the module moves, the row is disabled and says what is happening',
+    nudge(4).disabled && tuner('tunerStatus').textContent === 'Moving B to +4…');
+  await sleep(20);
+  check('+4 sets the showing flap four steps further on',
+    flapCalls().join() === '/modules/2/flap_offset {"flap":2,"offset":4}' && tuner('tunerOffset').value === '4' &&
+    tuner('tunerSummary').textContent === 'Flaps with an offset: B +4' && tuner('tunerStatus').textContent === '');
+  calls.length = 0;
+  tuner('tunerOffset').value = '-3';
+  click(tunerButton('tunerApply'));
+  check('lowering an offset warns it takes nearly a revolution',
+    tuner('tunerStatus').textContent === 'Moving B to -3 (nearly a full revolution)…');
+  await sleep(20);
+  check('SET sends the offset typed', flapCalls().join() === '/modules/2/flap_offset {"flap":2,"offset":-3}' &&
+    tunedModule.offsets[2] === -3);
+  calls.length = 0;
+  tuner('tunerOffset').value = '200';
+  click(tunerButton('tunerApply'));
+  await sleep(20);
+  check('an offset out of range is refused', flapCalls().length === 0 && lastToastText().includes('from -128 to 127'));
+  pickerKey('Home');
+  pickerKey('Enter');
+  await sleep(20);
+  check('flap 0 is left to the home offset', tuner('tunerFlapName').textContent === 'blank' &&
+    tuner('tunerOffset').disabled && tuner('tunerOffset').placeholder === 'home offset' && nudge(4).disabled &&
+    !tuner('flapTuner').querySelector('.info-btn').disabled);
+  pickModule(2);
+  check('picking the same module keeps its flap', tuner('tunerFlapName').textContent === 'blank');
+  pickModule(0);
+  check('another module starts again', tuner('tunerFlapName').textContent === '—' &&
+    tuner('tunerSummary').textContent === '' && tuner('tunerOffset').disabled);
+  calls.length = 0;
+  pickerKey('ArrowDown');
+  pickerKey('Enter');
+  pickModule(2);   // while module 0 is still moving
+  await sleep(20);
+  check('a reply for a module no longer selected is not shown as this one\'s',
+    flapCalls().join() === '/modules/0/show_flap {"flap":1}' && tuner('tunerFlapName').textContent === '—');
   calls.length = 0;
   pickModule(1);   // not provisioned
   wheel(40);
   pickerKey('ArrowDown');
   await sleep(120);
-  check('an unprovisioned module\'s picker doesn\'t turn or send', picker.getAttribute('aria-disabled') === 'true' &&
-    pickerName() === 'blank · flap 0' && displayCalls().length === 0);
+  check('an unprovisioned module can\'t be picked or tuned', picker.getAttribute('aria-disabled') === 'true' &&
+    pickerName() === 'blank · flap 0' && flapCalls().length === 0 && tuner('tunerOffset').disabled);
   click(document.getElementById('tab-debug'));
 
   console.log('\n--- Typing straight into the compose grid ---');

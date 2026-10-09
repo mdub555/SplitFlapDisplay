@@ -280,6 +280,7 @@ function refreshManualControls() {
   // Not while it's being typed in (a reload can come at any time).
   const steps = byId('totalStepsInput');
   if (document.activeElement !== steps) steps.value = mod && mod.totalSteps !== undefined ? mod.totalSteps : '';
+  flapTuner.render();   // its row has its own rules for when it can be used
 }
 
 // Whole number from a number input, or null (after a warning toast) if it's

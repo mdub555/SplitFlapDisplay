@@ -112,7 +112,8 @@ class FlapOffsetRoutesTest(unittest.TestCase):
     def test_showing_with_no_reply_is_a_gateway_timeout(self):
         self.module.answers = False
         self.assertEqual(self.post('show_flap', {'flap': 7}).status_code, 504)
-        self.assertEqual(self.marked, [])
+        # It was sent all the same, so the live display follows it.
+        self.assertEqual(self.marked, [(5, 'G')])
 
     # ---- setting an offset ------------------------------------------------
 

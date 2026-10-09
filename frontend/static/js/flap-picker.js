@@ -1,7 +1,7 @@
 // The flap in the inspector's actions: turn it to a character by scrolling
 // over it, dragging it, tapping its top or bottom half, or with the arrow
 // keys, and once it has stood still for a moment the selected module shows
-// that character.
+// that character (through flapTuner.show(), in flap-tuner.js).
 
 const flapPicker = {
   index: 0,               // the flap showing, as an index into CHAR_MAP
@@ -146,7 +146,9 @@ const flapPicker = {
     this.timer = null;
     this.stopBar();
     this.setStatus('');
-    showOnModule({index: this.index});
+    // Through the flap offset row, which reads the flap's offset once the
+    // module is there.
+    flapTuner.show(this.index);
   },
 
   stopBar() {

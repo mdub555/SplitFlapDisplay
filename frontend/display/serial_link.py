@@ -111,16 +111,15 @@ def send_raw(cmd: str):
 def _ask(requests, parse, timeout: float):
     """Sends each message in `requests`, then reads until `parse(received)`
     returns something other than None, and returns that. Returns None on
-    timeout, or if the port is missing or goes."""
+    timeout, or if the port is missing or goes (the messages are still
+    logged, as simulated or not sent)."""
     with serial_lock:
-        if ser is None:
-            return None
         try:
-            ser.reset_input_buffer()
+            if ser is not None:
+                ser.reset_input_buffer()
             for request in requests:
-                ser.write(f"{request}\n".encode())
-                state.log_serial(f"SENT: {request}")
-            ser.flush()
+                if not write_serial(f"{request}\n"):   # which logs it
+                    return None
             start = time.time()
             buffer = ""
             while time.time() - start < timeout:
