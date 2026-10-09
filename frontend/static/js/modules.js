@@ -237,8 +237,8 @@ function toggleModuleSetting(input) {
   });
 }
 
-// Manual controls under the toggles: set total steps, show a character or
-// flap index, jump to a raw step. Disabled for an unprovisioned module, like
+// Manual controls under the toggles: set total steps, show a flap, jump to a
+// raw step, exercise. Disabled for an unprovisioned module, like
 // the toggles (the backend answers those with a 404 anyway).
 const MAX_TOTAL_STEPS = 32767;
 
@@ -306,11 +306,6 @@ function buildShowCharOptions() {
 
 function showChar() {
   showOnModule({index: Number(byId('showCharInput').value)});
-}
-
-function showIndex() {
-  const index = readIntInput('showIndexInput', 'Flap index', 0, CHAR_MAP.length - 1);
-  if (index !== null) showOnModule({index});
 }
 
 function gotoStep() {
@@ -533,7 +528,7 @@ registerActions({
   selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected, identifySelected,
   rebootSelected, resetSettingsSelected, exerciseSelected, stopSelected,
   syncOneFromHardware, syncAllFromHardware, provisionModule,
-  setTotalSteps, showChar, showIndex, gotoStep,
+  setTotalSteps, showChar, gotoStep,
   applyFirmwareConfig,
   toggleModuleSetting,
   downloadBackup, triggerBackupFileInput, uploadBackup,

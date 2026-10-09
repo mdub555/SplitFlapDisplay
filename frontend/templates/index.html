@@ -258,13 +258,10 @@
           {% endfor %}
         </div>
         <div class="inset-box" id="manualControls">
-          {% set last_flap = config.flap_chars | length - 1 %}
           {{ manual_row('totalStepsInput', 'Total steps per revolution', [('SET', 'setTotalSteps')],
                         attrs={'min': 1, 'max': 32767, 'step': 1},
                         tip="Only writes the module's EEPROM; home the module afterwards. Measure Reel finds it for you.") }}
           {{ manual_row('showCharInput', 'Show character', [('SHOW', 'showChar')], type='select') }}
-          {{ manual_row('showIndexInput', 'Show flap index (0–' ~ last_flap ~ ')', [('SHOW', 'showIndex')],
-                        attrs={'min': 0, 'max': last_flap, 'step': 1}) }}
           {{ manual_row('gotoStepInput', 'Go to step', [('GO', 'gotoStep')], attrs={'min': 0, 'step': 1},
                         tip='A raw step position from flap 0. Only moves forward from where the reel is, wrapping at total steps.') }}
           {{ manual_row('exerciseInput', 'Exercise (cycles, 1–255)', [('RUN', 'exerciseSelected'), ('STOP', 'stopSelected')],
