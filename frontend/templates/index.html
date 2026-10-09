@@ -23,22 +23,35 @@
 
 {# ── Macros for the blocks the page repeats ── #}
 
-{# A labelled on/off switch. #}
+{# An ⓘ button that explains `about`: `text` shows beneath it while it's
+   hovered or focused, or once it's clicked (info.js), across the nearest
+   .has-info around it. #}
+{% macro info(tip_id, about, text) -%}
+  <button type="button" class="info-btn" aria-label="About {{ about }}" aria-expanded="false"
+          aria-controls="{{ tip_id }}" data-onclick="toggleInfo">i</button>
+  <span class="info-tip" id="{{ tip_id }}" role="tooltip">{{ text }}</span>
+{%- endmacro %}
+
+{# A labelled on/off switch, with its hint behind an ⓘ. #}
 {% macro toggle_row(input_id, name, hint='', attrs={}) %}
-  <div class="toggle-row">
-    <div>
+  <div class="toggle-row has-info">
+    <div class="label-line">
       <label class="toggle-name" for="{{ input_id }}">{{ name }}</label>
-      {% if hint %}<span class="hint" id="{{ input_id }}-hint">{{ hint }}</span>{% endif %}
+      {% if hint %}{{ info(input_id ~ '-hint', name, hint) }}{% endif %}
     </div>
     <label class="switch"><input type="checkbox" role="switch" id="{{ input_id }}"
       {%- if hint %} aria-describedby="{{ input_id }}-hint"{% endif %}{{ attrs | xmlattr }}><span class="slider"></span></label>
   </div>
 {% endmacro %}
 
-{# A manual-control row in the inspector: label, number/text input and buttons. #}
-{% macro manual_row(input_id, label, buttons, type='number', attrs={}) %}
-  <div class="manual-row">
-    <label class="manual-label" for="{{ input_id }}">{{ label }}</label>
+{# A manual-control row in the inspector: label (with an ⓘ for `tip`),
+   number/text input and buttons. #}
+{% macro manual_row(input_id, label, buttons, type='number', attrs={}, tip='') %}
+  <div class="manual-row has-info">
+    <div class="manual-label label-line">
+      <label for="{{ input_id }}">{{ label }}</label>
+      {% if tip %}{{ info(input_id ~ '-tip', label, tip) }}{% endif %}
+    </div>
     <input type="{{ type }}" class="input" id="{{ input_id }}"{{ attrs | xmlattr }}>
     {% for text, action in buttons %}
     <button class="btn btn-secondary btn-sm" data-onclick="{{ action }}">{{ text }}</button>
@@ -215,23 +228,25 @@
           <strong>Sync failed</strong>
           <span>This module didn't answer the last sync, so the values below may be out of date. Check its power and bus connection, then press Sync EEPROM to try again.</span>
         </div>
-        <div class="inspector-stats">
+        <div class="inspector-stats has-info">
           <div class="stat-box"><span class="stat-label">Home Offset</span><span class="stat-val" id="inspectOffset">---</span></div>
           <div class="stat-box"><span class="stat-label">Total Steps</span><span class="stat-val stat-val-alt" id="inspectCalib">---</span></div>
-          <div class="stat-box" title="Lifetime reel revolutions, from the last sync. Saved every 16 revolutions, so up to 15 can be lost at power-off."><span class="stat-label">Revolutions</span><span class="stat-val" id="inspectRevolutions">---</span></div>
-          <div class="stat-box" title="Steps the module's position was off by at the last pass over the home sensor, from the last sync. Positive means missed steps: try a longer step delay or a ramp."><span class="stat-label">Drift</span><span class="stat-val" id="inspectDrift">---</span></div>
+          <div class="stat-box"><span class="stat-label label-line">Revolutions
+            {{ info('revolutionsTip', 'revolutions', 'Lifetime reel revolutions, from the last sync. Saved every 16 revolutions, so up to 15 can be lost at power-off.') }}</span><span class="stat-val" id="inspectRevolutions">---</span></div>
+          <div class="stat-box"><span class="stat-label label-line">Drift
+            {{ info('driftTip', 'drift', "Steps the module's position was off by at the last pass over the home sensor, from the last sync. Positive means missed steps: try a longer step delay or a ramp.") }}</span><span class="stat-val" id="inspectDrift">---</span></div>
         </div>
         <div class="module-timing" id="inspectTiming"></div>
-        <div class="adj-controls">
+        <div class="adj-controls has-info">
           {% for delta in [-32, -16, -4, -1] %}
           <button class="btn-adj neg" data-onclick="adjustOffset" data-delta="{{ delta }}">{{ delta }}</button>
           {% endfor %}
-          <span class="adj-label">OFFSET</span>
+          <span class="adj-label label-line">OFFSET
+            {{ info('adjTip', 'the home offset buttons', 'Moves flap 0 (the blank flap) this many steps from the home sensor. Saves to the module straight away; press Home Motor to check it.') }}</span>
           {% for delta in [1, 4, 16, 32] %}
           <button class="btn-adj pos" data-onclick="adjustOffset" data-delta="{{ delta }}">+{{ delta }}</button>
           {% endfor %}
         </div>
-        <div class="adj-hint">(Saves instantly; press Home to verify)</div>
         <div class="inset-box" id="moduleToggles">
           {% for key, toggle in module_toggles.items() %}
           {{ toggle_row('modToggle-' + key, toggle.label, toggle.hint,
@@ -241,18 +256,24 @@
         <div class="inset-box" id="manualControls">
           {% set last_flap = config.flap_chars | length - 1 %}
           {{ manual_row('totalStepsInput', 'Total steps per revolution', [('SET', 'setTotalSteps')],
-                        attrs={'min': 1, 'max': 32767, 'step': 1}) }}
+                        attrs={'min': 1, 'max': 32767, 'step': 1},
+                        tip="Only writes the module's EEPROM; home the module afterwards. Measure Reel finds it for you.") }}
           {{ manual_row('showCharInput', 'Show character', [('SHOW', 'showChar')],
                         type='text', attrs={'placeholder': 'A, 7, 🟥…', 'autocomplete': 'off'}) }}
           {{ manual_row('showIndexInput', 'Show flap index (0–' ~ last_flap ~ ')', [('SHOW', 'showIndex')],
                         attrs={'min': 0, 'max': last_flap, 'step': 1}) }}
-          {{ manual_row('gotoStepInput', 'Go to step', [('GO', 'gotoStep')], attrs={'min': 0, 'step': 1}) }}
+          {{ manual_row('gotoStepInput', 'Go to step', [('GO', 'gotoStep')], attrs={'min': 0, 'step': 1},
+                        tip='A raw step position from flap 0. Only moves forward from where the reel is, wrapping at total steps.') }}
           {{ manual_row('exerciseInput', 'Exercise (cycles, 1–255)', [('RUN', 'exerciseSelected'), ('STOP', 'stopSelected')],
-                        attrs={'min': 1, 'max': 255, 'step': 1, 'value': 1}) }}
-          <span class="hint">Setting total steps only writes the module's EEPROM; home the module afterwards. Go to step only moves forward from the current position (wrapping at total steps). Exercise steps through every flap one at a time, round the reel the given number of times; STOP (or any other move) ends it.</span>
+                        attrs={'min': 1, 'max': 255, 'step': 1, 'value': 1},
+                        tip='Steps through every flap one at a time, round the reel this many times. STOP, or any other move, ends it.') }}
         </div>
         <!-- Per-flap offsets, one flap at a time (flap-tuner.js) -->
-        <div class="inset-box tuner" id="flapTuner">
+        <div class="inset-box tuner has-info" id="flapTuner">
+          <div class="label-line">
+            <span class="tuner-title">Flap offsets</span>
+            {{ info('tunerTip', 'flap offsets', "For a flap that doesn't land quite right: step to it, then shift it a few steps either way. Each move waits until the reel has stopped. The reel only turns forward, so Previous and lowering an offset take nearly a full revolution. Flap 0 is placed by the home offset above.") }}
+          </div>
           <div class="tuner-flap">
             <button class="btn btn-secondary btn-sm" data-onclick="tunerStep" data-step="-1">◀ Previous</button>
             <div class="tuner-current" aria-live="polite">
@@ -272,33 +293,33 @@
           </div>
           <span class="hint tuner-status" id="tunerStatus" role="status"></span>
           <span class="hint" id="tunerSummary"></span>
-          <span class="hint">For a flap that doesn't land quite right: step to it, then shift it a few steps either way. Each move waits until the reel has stopped. The reel only turns forward, so Previous and lowering an offset take nearly a full revolution. Flap 0 is placed by the home offset above.</span>
         </div>
-        <div class="button-row">
-          <button class="btn btn-secondary" data-onclick="homeSelected">HOME MOTOR</button>
-          <button class="btn btn-ghost" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
-          <button class="btn btn-ghost" data-onclick="identifySelected" title="Blink this module's status LED for 10 seconds">IDENTIFY</button>
-        </div>
-        <div class="button-row">
-          <button class="btn btn-ghost" data-onclick="rebootSelected">REBOOT</button>
-          <button class="btn btn-ghost" data-onclick="resetSettingsSelected" title="Reset every setting on this module to its firmware default, keeping its ID">RESET SETTINGS</button>
+        <div class="button-row inspector-actions">
+          <button class="btn btn-secondary btn-sm" data-onclick="homeSelected">HOME MOTOR</button>
+          <button class="btn btn-ghost btn-sm" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
+          <button class="btn btn-ghost btn-sm" data-onclick="identifySelected" title="Blink this module's status LED for 10 seconds">IDENTIFY</button>
+          <button class="btn btn-ghost btn-sm" data-onclick="rebootSelected">REBOOT</button>
+          <button class="btn btn-ghost btn-sm" data-onclick="resetSettingsSelected" title="Reset every setting on this module to its firmware default, keeping its ID">RESET SETTINGS</button>
         </div>
       </div>
     </div>
 
     <!-- Firmware settings: identical on every module, sent to all of them by broadcast -->
     <div class="config-section">
-      <h3>Settings for All Modules</h3>
-      <p class="note">Shared by every module: saved here and sent to all modules at once (each keeps them in its EEPROM).</p>
+      <h3 class="label-line has-info">Settings for All Modules
+        {{ info('sharedSettingsTip', 'settings for all modules', 'Shared by every module: saved here and sent to all modules at once (each keeps them in its EEPROM).') }}</h3>
       <div class="settings-grid" id="firmwareSettings">
         {% for key, spec in firmware_settings.items() %}
         {% if spec.type == 'bool' %}
         {{ toggle_row('fw-' + key, spec.label, spec.hint) }}
         {% else %}
-        <div>
-          <label class="field-label" for="fw-{{ key }}">{{ spec.label }} ({{ spec.unit }})</label>
-          <input type="number" class="input" id="fw-{{ key }}" data-label="{{ spec.label }}" step="1">
-          <span class="hint">{{ spec.hint }}</span>
+        <div class="has-info">
+          <div class="label-line field-label">
+            <label for="fw-{{ key }}">{{ spec.label }} ({{ spec.unit }})</label>
+            {{ info('fw-' ~ key ~ '-hint', spec.label, spec.hint) }}
+          </div>
+          <input type="number" class="input" id="fw-{{ key }}" data-label="{{ spec.label }}" step="1"
+                 aria-describedby="fw-{{ key }}-hint">
         </div>
         {% endif %}
         {% endfor %}
@@ -308,8 +329,8 @@
 
     <!-- Backup / Restore -->
     <div class="config-section">
-      <h3>Backup &amp; Restore</h3>
-      <p class="note">Everything in one file: each module's home offset, step calibration and motor settings, the settings for all modules, saved playlists, the schedule, and every app and global setting. Restoring merges in the saved playlists and replaces the rest. A backup from before playlists were included restores just the modules.</p>
+      <h3 class="label-line has-info">Backup &amp; Restore
+        {{ info('backupTip', 'backup and restore', "Everything in one file: each module's home offset, step calibration and motor settings, the settings for all modules, saved playlists, the schedule, and every app and global setting. Restoring merges in the saved playlists and replaces the rest. A backup from before playlists were included restores just the modules.") }}</h3>
       <div class="restore-report" id="restoreReport" role="status" hidden></div>
       <div class="backup-row">
         <button class="btn btn-secondary" data-onclick="downloadBackup">⬇ Download Backup JSON</button>
@@ -405,7 +426,7 @@
 
 <script>const CONFIG = {{ config | tojson }};</script>
 {% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control', 'preview',
-                  'apps', 'schedule', 'app-settings-modal', 'modules', 'flap-tuner', 'debug', 'install',
+                  'apps', 'schedule', 'app-settings-modal', 'modules', 'flap-tuner', 'debug', 'info', 'install',
                   'main'] %}
 <script src="{{ url_for('static', filename='js/' + script + '.js') }}"></script>
 {% endfor %}
