@@ -2,6 +2,27 @@
    Page-specific styles are in control.css, apps.css, modules.css, modals.css
    and debug.css. */
 
+/* Kosugi Maru, the font on the physical flaps (static/fonts/README.md): the
+   two subsets of it the flaps need, served from here so no internet
+   connection is needed. */
+@font-face {
+  font-family: 'Kosugi Maru';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/kosugi-maru-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF;
+}
+
+@font-face {
+  font-family: 'Kosugi Maru';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/kosugi-maru-heart.woff2') format('woff2');
+  unicode-range: U+2665;
+}
+
 :root {
   /* Native controls (selects, date pickers, scrollbars) follow the theme. */
   color-scheme: dark;
@@ -79,6 +100,9 @@
   --focus: #6ea8fe;          /* the keyboard focus ring */
 
   --mono: 'Courier New', monospace;
+  /* Anything drawn as a flap: the live display, the compose grid and the
+     previews, the flap picker, the ° and ♥ buttons, the flap table. */
+  --flap-font: 'Kosugi Maru', var(--mono);
 }
 
 /* Light mode, when the system asks for it. Only the theme's colours change;

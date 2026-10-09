@@ -81,6 +81,17 @@ class PageTest(unittest.TestCase):
                 self.assertTrue(os.path.exists(os.path.join(FRONTEND, icon['src'].lstrip('/'))))
         self.assertTrue(os.path.exists(os.path.join(FRONTEND, 'static/icons/apple-touch-icon.png')))
 
+    def test_every_file_a_stylesheet_uses_exists(self):
+        css_dir = os.path.join(FRONTEND, 'static', 'css')
+        for sheet in os.listdir(css_dir):
+            with open(os.path.join(css_dir, sheet)) as f:
+                urls = re.findall(r"url\('?([^')]+)'?\)", f.read())
+            for url in urls:
+                if url.startswith('data:'):
+                    continue
+                with self.subTest(sheet=sheet, url=url):
+                    self.assertTrue(os.path.exists(os.path.normpath(os.path.join(css_dir, url))))
+
     def test_every_script_exists(self):
         scripts = re.findall(r'<script src="/(static/js/[^"]+)"', self.html)
         self.assertTrue(scripts)
