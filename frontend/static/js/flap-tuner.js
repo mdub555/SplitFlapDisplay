@@ -1,12 +1,13 @@
-// The Debug page's flap offset tuner: step one module through its flaps, and
-// shift the one showing a few steps either way. Every request answers once
-// the module has stopped moving, with every flap's offset (see the
-// show_flap and flap_offset routes), so the panel always shows what the
-// module has saved.
+// The flap offset tuner in the Modules page's inspector: step the selected
+// module through its flaps, and shift the one showing a few steps either
+// way. Every request answers once the module has stopped moving, with every
+// flap's offset (see the show_flap and flap_offset routes), so the tuner
+// always shows what the module has saved.
 
 const flapTuner = {
-  flap: null,      // the flap the module is showing, once the tuner has moved it
-  offsets: null,   // every flap's offset, in steps, as the module last reported
+  moduleId: null,  // the module the flap and offsets below are for
+  flap: null,      // the flap it's showing, once the tuner has moved it
+  offsets: null,   // every flap's offset, in steps, as it last reported
   busy: false,
 
   init() {
@@ -14,14 +15,11 @@ const flapTuner = {
     this.render();
   },
 
-  moduleId() {
-    const raw = byId('tunerModuleId').value.trim();
-    const id = Number(raw);
-    return /^\d+$/.test(raw) && id <= CONFIG.max_module_id ? id : null;
-  },
-
-  // A different module: its flap and offsets aren't known until it moves.
-  moduleChanged() {
+  // Called when the inspector shows a module. Another module's flap and
+  // offsets aren't known until it moves.
+  moduleSelected(id) {
+    if (id === this.moduleId) return this.render();
+    this.moduleId = id;
     this.flap = null;
     this.offsets = null;
     this.setStatus('');
@@ -52,21 +50,18 @@ const flapTuner = {
     this.request(`Moving flap ${flap} to ${signed(offset)}${note}…`, id => api.setFlapOffset(id, flap, offset));
   },
 
-  // Runs one request for the chosen module, keeping the controls disabled
+  // Runs one request for the selected module, keeping the controls disabled
   // until it answers.
   async request(status, call) {
-    const id = this.moduleId();
-    if (id === null) {
-      showToast(`Module ID must be 0–${CONFIG.max_module_id}`, 'error');
-      return;
-    }
     if (this.busy) return;
+    const id = this.moduleId;
     this.busy = true;
     this.setStatus(status);
     this.render();
     const result = await call(id);
     this.busy = false;
-    if (result) {
+    // Another module may have been picked while this one moved.
+    if (result && id === this.moduleId) {
       this.flap = result.flap;
       this.offsets = result.offsets;
     }
@@ -79,26 +74,28 @@ const flapTuner = {
   },
 
   render() {
+    // Like the inspector's other controls, only for a provisioned module.
+    const usable = this.moduleId !== null && !!moduleSettings(this.moduleId);
     const known = this.flap !== null;
-    byId('tunerFlap').textContent = known ? this.flap : '—';
-    byId('tunerChar').textContent = known ? debugPage.flapLabel(CHAR_MAP[this.flap]) : 'Step to a flap to start';
     // Flap 0 is where homing ends: the home offset places it.
-    const editable = known && this.flap !== 0;
+    const editable = usable && known && this.flap !== 0;
+    byId('flapTuner').classList.toggle('disabled', !usable);
+    byId('tunerFlap').textContent = known ? this.flap : '—';
+    byId('tunerChar').textContent = known ? flapLabel(CHAR_MAP[this.flap])
+                                          : usable ? 'Step to a flap to start' : '';
     byId('tunerOffset').value = editable ? this.offsets[this.flap] : '';
     byId('tunerOffset').placeholder = known && !editable ? 'home offset' : '';
-    byId('flapTuner').querySelectorAll('button').forEach(button => {
-      button.disabled = this.busy || (!editable && !button.dataset.step);
-    });
     byId('tunerOffset').disabled = this.busy || !editable;
-    byId('tunerModuleId').disabled = this.busy;
+    byId('flapTuner').querySelectorAll('button').forEach(button => {
+      button.disabled = this.busy || !usable || (!editable && !button.dataset.step);
+    });
 
     let summary = '';
     if (this.offsets) {
       const shifted = this.offsets.flatMap((offset, flap) =>
-        offset ? [`${flap} ${debugPage.flapLabel(CHAR_MAP[flap])} ${signed(offset)}`] : []);
+        offset ? [`${flap} ${flapLabel(CHAR_MAP[flap])} ${signed(offset)}`] : []);
       summary = shifted.length ? `Flaps with an offset: ${shifted.join(' · ')}` : 'No flap has an offset.';
     }
-    if (known && !editable) summary = `Flap 0 is placed by the home offset (Modules page). ${summary}`;
     byId('tunerSummary').textContent = summary;
   },
 };
@@ -107,7 +104,6 @@ const flapTuner = {
 const signed = n => n > 0 ? `+${n}` : String(n);
 
 registerActions({
-  tunerModuleChanged: () => flapTuner.moduleChanged(),
   tunerStep: button => flapTuner.step(Number(button.dataset.step)),
   tunerNudge: button => flapTuner.apply(Number(button.dataset.delta)),
   tunerApply: () => flapTuner.apply(),

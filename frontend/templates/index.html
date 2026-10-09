@@ -251,6 +251,29 @@
                         attrs={'min': 1, 'max': 255, 'step': 1, 'value': 1}) }}
           <span class="hint">Setting total steps only writes the module's EEPROM; home the module afterwards. Go to step only moves forward from the current position (wrapping at total steps). Exercise steps through every flap one at a time, round the reel the given number of times; STOP (or any other move) ends it.</span>
         </div>
+        <!-- Per-flap offsets, one flap at a time (flap-tuner.js) -->
+        <div class="inset-box tuner" id="flapTuner">
+          <div class="tuner-flap">
+            <button class="btn btn-secondary btn-sm" data-onclick="tunerStep" data-step="-1">◀ Previous</button>
+            <div class="tuner-current" aria-live="polite">
+              <span class="stat-label">Flap</span>
+              <span class="stat-val" id="tunerFlap">—</span>
+              <span class="tuner-char" id="tunerChar"></span>
+            </div>
+            <button class="btn btn-secondary btn-sm" data-onclick="tunerStep" data-step="1">Next ▶</button>
+          </div>
+          <div class="manual-row">
+            <label class="manual-label" for="tunerOffset">Offset (steps)</label>
+            <button class="btn-adj neg" data-onclick="tunerNudge" data-delta="-1" aria-label="One step back">−1</button>
+            <input type="number" class="input" id="tunerOffset"
+                   min="{{ config.flap_offsets.min }}" max="{{ config.flap_offsets.max }}" step="1">
+            <button class="btn-adj pos" data-onclick="tunerNudge" data-delta="1" aria-label="One step forward">+1</button>
+            <button class="btn btn-primary btn-sm" data-onclick="tunerApply">SET</button>
+          </div>
+          <span class="hint tuner-status" id="tunerStatus" role="status"></span>
+          <span class="hint" id="tunerSummary"></span>
+          <span class="hint">For a flap that doesn't land quite right: step to it, then shift it a few steps either way. Each move waits until the reel has stopped. The reel only turns forward, so Previous and lowering an offset take nearly a full revolution. Flap 0 is placed by the home offset above.</span>
+        </div>
         <div class="button-row">
           <button class="btn btn-secondary" data-onclick="homeSelected">HOME MOTOR</button>
           <button class="btn btn-ghost" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
@@ -339,42 +362,6 @@
       </div>
     </div>
 
-    <!-- Per-flap offsets, one flap at a time (flap-tuner.js) -->
-    <div class="config-section">
-      <h3>Flap Offset Tuning</h3>
-      <p class="hint tuner-intro">For a flap that doesn't land quite right: step to it, then shift it a few steps
-        either way. Each move waits until the reel has stopped. The reel only turns forward, so Previous and
-        lowering an offset take nearly a full revolution.</p>
-      <div class="tuner" id="flapTuner">
-        <div>
-          <label class="field-label" for="tunerModuleId">Module ID</label>
-          <input type="number" class="input input-id" id="tunerModuleId" value="0"
-                 min="0" max="{{ config.max_module_id }}" step="1" data-onchange="tunerModuleChanged">
-        </div>
-        <div class="tuner-flap">
-          <button class="btn btn-secondary btn-sm" data-onclick="tunerStep" data-step="-1">◀ Previous</button>
-          <div class="tuner-current" aria-live="polite">
-            <span class="stat-label">Flap</span>
-            <span class="stat-val" id="tunerFlap">—</span>
-            <span class="tuner-char" id="tunerChar">Step to a flap to start</span>
-          </div>
-          <button class="btn btn-secondary btn-sm" data-onclick="tunerStep" data-step="1">Next ▶</button>
-        </div>
-        <div class="tuner-offset">
-          <label class="field-label" for="tunerOffset">Offset of this flap (steps)</label>
-          <div class="row-tight">
-            <button class="btn-adj neg" data-onclick="tunerNudge" data-delta="-1" aria-label="One step back">−1</button>
-            <input type="number" class="input tuner-offset-input" id="tunerOffset"
-                   min="{{ config.flap_offsets.min }}" max="{{ config.flap_offsets.max }}" step="1">
-            <button class="btn-adj pos" data-onclick="tunerNudge" data-delta="1" aria-label="One step forward">+1</button>
-            <button class="btn btn-primary btn-sm" data-onclick="tunerApply">SET</button>
-          </div>
-        </div>
-        <div class="hint tuner-status" id="tunerStatus" role="status"></div>
-        <div class="hint" id="tunerSummary"></div>
-      </div>
-    </div>
-
     <!-- Everything sent or received on the bus, live -->
     <div class="config-section">
       <div class="section-head">
@@ -418,7 +405,7 @@
 
 <script>const CONFIG = {{ config | tojson }};</script>
 {% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control', 'preview',
-                  'apps', 'schedule', 'app-settings-modal', 'modules', 'debug', 'flap-tuner', 'install',
+                  'apps', 'schedule', 'app-settings-modal', 'modules', 'flap-tuner', 'debug', 'install',
                   'main'] %}
 <script src="{{ url_for('static', filename='js/' + script + '.js') }}"></script>
 {% endfor %}

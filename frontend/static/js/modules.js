@@ -162,6 +162,7 @@ function selectModule(id) {
   refreshModuleToggles();
   refreshManualControls();
   refreshSyncNote();
+  flapTuner.moduleSelected(id);
 }
 
 function selectModuleAction(cell) {

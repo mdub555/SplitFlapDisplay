@@ -179,7 +179,7 @@ const debugPage = {
     const command = this.command();
     let note = built.warning || '';
     if (!built.error && command.key === 'show_index') {
-      note = `Flap ${this.paramValue('index')}: ${this.flapLabel(CHAR_MAP[Number(this.paramValue('index'))])}`;
+      note = `Flap ${this.paramValue('index')}: ${flapLabel(CHAR_MAP[Number(this.paramValue('index'))])}`;
     } else if (!built.error && command.key === 'show_char' && !note) {
       note = `Flap index ${CHAR_MAP.indexOf(built.messages[0].slice(-1))}`;
     }
@@ -206,13 +206,6 @@ const debugPage = {
   },
 
   // ── The flap table ──
-
-  flapLabel(ch) {
-    if (ch === undefined) return '?';
-    if (ch === ' ') return 'blank';
-    const shown = displayChar(ch);
-    return shown === ch ? ch : `${shown} (${ch})`;
-  },
 
   buildFlapTable() {
     byId('flapTable').replaceChildren(...Array.from(CHAR_MAP, (ch, i) =>
@@ -329,7 +322,7 @@ const debugPage = {
       if (!offset) return;
       if (fields.length) fields.push(' · ');
       fields.push(el('span', {class: 'dump-field', dataset: {flap}},
-        `flap ${flap} ${this.flapLabel(CHAR_MAP[flap])} ${offset > 0 ? '+' : ''}${offset} steps`));
+        `flap ${flap} ${flapLabel(CHAR_MAP[flap])} ${offset > 0 ? '+' : ''}${offset} steps`));
     });
     const line = this.appendLine(`RECV m${id}${CONFIG.flap_offsets.marker} (module ${formatModuleId(Number(id))}) ` +
       `flap offsets: ${fields.length ? '' : 'none'}`);

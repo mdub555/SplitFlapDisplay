@@ -17,6 +17,15 @@ function displayChar(ch) {
   return shown === ' ' ? '' : shown;
 }
 
+// A flap character as a person reads it: the blank flap as "blank", and a
+// code shown as something else with both, e.g. "🟥 (r)".
+function flapLabel(ch) {
+  if (ch === undefined) return '?';
+  if (ch === ' ') return 'blank';
+  const shown = displayChar(ch);
+  return shown === ch ? ch : `${shown} (${ch})`;
+}
+
 // Each colour tile's flap code ({emoji: code}). The black tile is the blank
 // flap (' '): no flap is shown as it, so it's the one tile display_chars
 // doesn't name. Worked out here rather than only trusting `code` in the

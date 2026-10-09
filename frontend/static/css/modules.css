@@ -262,6 +262,38 @@
   border-radius: 4px;
 }
 
+/* ── FLAP OFFSET TUNER ── */
+/* Previous, the flap showing, Next. */
+.tuner-flap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tuner-current {
+  text-align: center;
+}
+
+.tuner-char {
+  display: block;
+  min-height: 1.2em;
+  color: var(--text-dim);
+  font-size: .85rem;
+}
+
+.tuner .manual-row {
+  flex-wrap: wrap;
+}
+
+.tuner .manual-row .input {
+  width: 70px;
+}
+
+.tuner-status:empty {
+  display: none;
+}
+
 @media (max-width: 600px) {
   /* A full row of 16 is too narrow to tap on a phone, so a wide display's
      grid wraps (see phoneColumns() in modules.js). */

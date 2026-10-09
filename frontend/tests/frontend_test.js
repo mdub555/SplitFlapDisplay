@@ -515,26 +515,31 @@ async function main() {
   click(document.querySelector('[data-onclick="clearDebugLog"]'));
   check('the log can be cleared', logLines().length === 0);
 
-  console.log('\n--- Debug page tunes one flap at a time ---');
+  console.log('\n--- The inspector tunes one flap at a time ---');
   const tuner = id => document.getElementById(id);
   const tunerButton = action => tuner('flapTuner').querySelector(`[data-onclick="${action}"]`);
   const nextBtn = tuner('flapTuner').querySelector('[data-step="1"]');
   const prevBtn = tuner('flapTuner').querySelector('[data-step="-1"]');
   const nudge = delta => tuner('flapTuner').querySelector(`[data-onclick="tunerNudge"][data-delta="${delta}"]`);
+  const pickModule = id => click(document.querySelector(`#modMatrix .mod-cell[data-id="${id}"]`));
   const tunerCalls = () => calls.filter(c => /show_flap|flap_offset/.test(c.url))
     .map(c => `${c.url} ${c.body}`);
+  click(document.getElementById('tab-modules'));
+  await sleep(20);   // the page loads the stored settings
+  pickModule(1);   // not provisioned
+  check('an unprovisioned module can\'t be tuned', nextBtn.disabled && prevBtn.disabled &&
+    tuner('flapTuner').classList.contains('disabled'));
+  pickModule(2);
   check('until it has moved a flap, only Previous and Next can be used',
-    tuner('tunerFlap').textContent === '—' && tuner('tunerOffset').disabled && tunerButton('tunerApply').disabled &&
-    !nextBtn.disabled && !prevBtn.disabled);
-  tuner('tunerModuleId').value = '5';
-  change(tuner('tunerModuleId'));
+    tuner('tunerFlap').textContent === '—' && tuner('tunerChar').textContent === 'Step to a flap to start' &&
+    tuner('tunerOffset').disabled && tunerButton('tunerApply').disabled && !nextBtn.disabled && !prevBtn.disabled);
   calls.length = 0;
   click(nextBtn);
   check('while the module moves, the controls are disabled and say what is happening',
-    nextBtn.disabled && tuner('tunerModuleId').disabled && tuner('tunerStatus').textContent === 'Moving to flap 1…');
+    nextBtn.disabled && tuner('tunerStatus').textContent === 'Moving to flap 1…');
   await sleep(20);
   check('Next starts at flap 1, and shows its offset once there',
-    tunerCalls().join() === '/modules/5/show_flap {"flap":1}' && tuner('tunerFlap').textContent === '1' &&
+    tunerCalls().join() === '/modules/2/show_flap {"flap":1}' && tuner('tunerFlap').textContent === '1' &&
     tuner('tunerChar').textContent === 'A' && tuner('tunerOffset').value === '0' && !tuner('tunerOffset').disabled &&
     tuner('tunerStatus').textContent === '' && tuner('tunerSummary').textContent === 'No flap has an offset.');
   click(nextBtn);
@@ -543,7 +548,7 @@ async function main() {
   click(nudge(1));
   await sleep(20);
   check('+1 sets the showing flap one step further on',
-    tunerCalls().join() === '/modules/5/flap_offset {"flap":2,"offset":1}' && tuner('tunerOffset').value === '1' &&
+    tunerCalls().join() === '/modules/2/flap_offset {"flap":2,"offset":1}' && tuner('tunerOffset').value === '1' &&
     tuner('tunerSummary').textContent === 'Flaps with an offset: 2 B +1');
   calls.length = 0;
   tuner('tunerOffset').value = '-3';
@@ -551,7 +556,7 @@ async function main() {
   check('lowering an offset warns it takes nearly a revolution',
     tuner('tunerStatus').textContent === 'Moving flap 2 to -3 (nearly a full revolution)…');
   await sleep(20);
-  check('SET sends the offset typed', tunerCalls().join() === '/modules/5/flap_offset {"flap":2,"offset":-3}' &&
+  check('SET sends the offset typed', tunerCalls().join() === '/modules/2/flap_offset {"flap":2,"offset":-3}' &&
     tunedModule.offsets[2] === -3);
   calls.length = 0;
   tuner('tunerOffset').value = '200';
@@ -564,14 +569,21 @@ async function main() {
   click(prevBtn);
   await sleep(20);
   check('flap 0 is left to the home offset', tuner('tunerFlap').textContent === '0' &&
-    tuner('tunerOffset').disabled && nudge(1).disabled &&
-    tuner('tunerSummary').textContent.startsWith('Flap 0 is placed by the home offset'));
+    tuner('tunerOffset').disabled && tuner('tunerOffset').placeholder === 'home offset' && nudge(1).disabled);
   click(prevBtn);
   await sleep(20);
   check('Previous wraps from flap 0 to the last flap', tuner('tunerFlap').textContent === '63');
-  tuner('tunerModuleId').value = '6';
-  change(tuner('tunerModuleId'));
+  pickModule(2);
+  check('picking the same module keeps its flap', tuner('tunerFlap').textContent === '63');
+  pickModule(0);
   check('another module starts again', tuner('tunerFlap').textContent === '—' && tuner('tunerSummary').textContent === '');
+  calls.length = 0;
+  click(nextBtn);
+  pickModule(2);   // while module 0 is still moving
+  await sleep(20);
+  check('a reply for a module no longer selected is not shown as this one\'s',
+    tunerCalls().join() === '/modules/0/show_flap {"flap":1}' && tuner('tunerFlap').textContent === '—');
+  click(document.getElementById('tab-debug'));
 
   console.log('\n--- Typing straight into the compose grid ---');
   click(document.getElementById('tab-control'));
