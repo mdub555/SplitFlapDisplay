@@ -245,13 +245,36 @@
                 title="This module didn't answer the last sync, so these values may be out of date. Check its power and bus connection, then press Sync EEPROM to try again.">⚠ Sync failed</span>
         </div>
         <!-- Things to do with the module. -->
-        <div class="inset-box" id="manualControls">
-          {{ manual_row('showCharInput', 'Show character', [('SHOW', 'showChar')], type='select') }}
-          {{ manual_row('gotoStepInput', 'Go to step', [('GO', 'gotoStep')], attrs={'min': 0, 'step': 1},
-                        tip='A raw step position from flap 0. Only moves forward from where the reel is, wrapping at total steps.') }}
-          {{ manual_row('exerciseInput', 'Exercise (cycles, 1–255)', [('RUN', 'exerciseSelected'), ('STOP', 'stopSelected')],
-                        attrs={'min': 1, 'max': 255, 'step': 1, 'value': 1},
-                        tip='Steps through every flap one at a time, round the reel this many times. STOP, or any other move, ends it.') }}
+        <div class="inset-box actions-box" id="manualControls">
+          <!-- A flap to turn to the character to show (flap-picker.js). -->
+          <div class="picker has-info">
+            <div class="live-flap flap-picker" id="flapPicker" tabindex="0" role="spinbutton"
+                 aria-label="Character to show" aria-valuemin="0" aria-valuemax="{{ config.flap_chars | length - 1 }}"
+                 aria-describedby="pickerTip">
+              <div class="fh ft"><span class="fc"></span></div>
+              <div class="fh fb"><span class="fc"></span></div>
+              <div class="fd"></div>
+            </div>
+            <div class="picker-caption label-line">
+              <span id="pickerName"></span>
+              {{ info('pickerTip', 'the character to show', 'Scroll over the flap, drag it up or down, tap its top or bottom half, or use the arrow keys, to turn it to a character. Three seconds after it stops, the module shows it. Enter shows it straight away; Escape cancels.') }}
+            </div>
+            <div class="picker-progress" aria-hidden="true"><div id="pickerProgress"></div></div>
+            <span class="hint picker-status" id="pickerStatus" role="status"></span>
+          </div>
+          <div class="actions-rows">
+            {{ manual_row('gotoStepInput', 'Go to step', [('GO', 'gotoStep')], attrs={'min': 0, 'step': 1},
+                          tip='A raw step position from flap 0. Only moves forward from where the reel is, wrapping at total steps.') }}
+            {{ manual_row('exerciseInput', 'Exercise', [('RUN', 'exerciseSelected'), ('STOP', 'stopSelected')],
+                          attrs={'min': 1, 'max': 255, 'step': 1, 'value': 1, 'aria-label': 'Exercise laps (1–255)'},
+                          tip='Steps through every flap one at a time, round the reel this many times (1–255). STOP, or any other move, ends it.') }}
+          </div>
+          <div class="actions-buttons">
+            <button class="btn btn-ghost btn-sm" data-onclick="calibrateSelected">MEASURE REEL</button>
+            <button class="btn btn-ghost btn-sm" data-onclick="identifySelected" title="Blink this module's status LED for 10 seconds">IDENTIFY</button>
+            <button class="btn btn-ghost btn-sm" data-onclick="rebootSelected">REBOOT</button>
+            <button class="btn btn-ghost btn-sm" data-onclick="resetSettingsSelected" title="Reset every setting on this module to its firmware default, keeping its ID">RESET SETTINGS</button>
+          </div>
         </div>
         <!-- The module's own settings, saved in its EEPROM. -->
         <div class="inset-box" id="moduleConfig">
@@ -308,12 +331,6 @@
             <span class="hint" id="tunerSummary"></span>
           </div>
         </details>
-        <div class="button-row inspector-actions">
-          <button class="btn btn-ghost btn-sm" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
-          <button class="btn btn-ghost btn-sm" data-onclick="identifySelected" title="Blink this module's status LED for 10 seconds">IDENTIFY</button>
-          <button class="btn btn-ghost btn-sm" data-onclick="rebootSelected">REBOOT</button>
-          <button class="btn btn-ghost btn-sm" data-onclick="resetSettingsSelected" title="Reset every setting on this module to its firmware default, keeping its ID">RESET SETTINGS</button>
-        </div>
       </div>
     </div>
 
@@ -439,8 +456,8 @@
 
 <script>const CONFIG = {{ config | tojson }};</script>
 {% for script in ['dom', 'actions', 'constants', 'toast', 'api', 'fields', 'live-flap', 'tabs', 'control', 'preview',
-                  'apps', 'schedule', 'app-settings-modal', 'modules', 'flap-tuner', 'debug', 'info', 'install',
-                  'main'] %}
+                  'apps', 'schedule', 'app-settings-modal', 'modules', 'flap-tuner', 'flap-picker', 'debug', 'info',
+                  'install', 'main'] %}
 <script src="{{ url_for('static', filename='js/' + script + '.js') }}"></script>
 {% endfor %}
 </body>

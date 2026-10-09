@@ -242,6 +242,134 @@
   border-radius: 4px;
 }
 
+/* ── ACTIONS ──
+   The flap picker on the left, with the other actions beside it and the
+   buttons under them. */
+.inset-box.actions-box {
+  display: grid;
+  /* minmax(0, ...) so the actions column shrinks to fit rather than
+     pushing past the box on a phone. */
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "picker rows"
+    "picker buttons";
+  gap: 12px 20px;
+  align-items: start;
+}
+
+.picker {
+  grid-area: picker;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 112px;
+}
+
+.actions-rows {
+  grid-area: rows;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.actions-buttons {
+  grid-area: buttons;
+  align-self: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.actions-buttons .btn {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+/* The flap itself: a split-flap like the live display's (control.css). */
+.flap-picker.live-flap {
+  width: 84px;
+  font-size: 3rem;
+  cursor: ns-resize;
+  touch-action: none;   /* a drag turns the flap rather than scrolling the page */
+  border-radius: 4px;
+}
+
+.flap-picker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.actions-box.disabled .flap-picker {
+  cursor: default;
+}
+
+/* Turning back: the bottom half lifts away, then the top half comes down. */
+.flap-picker .ffu-back {
+  bottom: 0;
+  border-top: none;
+  border-radius: 0 0 2px 2px;
+  transform-origin: top center;
+  animation: lfBackUp 40ms ease-in forwards;
+}
+
+.flap-picker .ffd-back {
+  top: 0;
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
+  transform-origin: bottom center;
+  transform: rotateX(-90deg);
+  animation: lfBackDown 40ms ease-out forwards;
+  animation-delay: 40ms;
+}
+
+.flap-picker .ffu-back .fc {
+  bottom: 0;
+}
+
+.flap-picker .ffd-back .fc {
+  top: 0;
+}
+
+@keyframes lfBackUp {
+  from { transform: rotateX(0); }
+  to { transform: rotateX(90deg); }
+}
+
+@keyframes lfBackDown {
+  from { transform: rotateX(-90deg); }
+  to { transform: rotateX(0); }
+}
+
+.picker-caption {
+  font-size: .8rem;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+/* Runs down while the picker waits to send. */
+.picker-progress {
+  width: 84px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.picker-progress div {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+}
+
+.picker-status {
+  text-align: center;
+}
+
+.picker-status:empty {
+  display: none;
+}
+
 /* ── FLAP OFFSET TUNER ── */
 /* A section that opens and closes: its title is the <summary>. */
 .tuner {
@@ -306,16 +434,6 @@
   font-size: .9rem;
 }
 
-/* Home, Measure, Identify, Reboot and Reset, wrapping on a phone. */
-.inspector-actions {
-  flex-wrap: wrap;
-}
-
-.inspector-actions .btn {
-  flex: 1 1 auto;
-  white-space: nowrap;
-}
-
 .tuner-status:empty {
   display: none;
 }
@@ -325,11 +443,6 @@
      grid wraps (see phoneColumns() in modules.js). */
   .mod-matrix {
     grid-template-columns: repeat(var(--phone-cols), minmax(0, 72px));
-  }
-
-  /* The inspector's buttons wrap rather than run off the edge. */
-  .inspector-panel .button-row {
-    flex-wrap: wrap;
   }
 
   .adj-buttons {
@@ -343,6 +456,44 @@
 
   .stat-val {
     white-space: nowrap;
+  }
+
+  /* The buttons go under both the picker and the other actions. */
+  .inset-box.actions-box {
+    grid-template-areas:
+      "picker rows"
+      "buttons buttons";
+    gap: 12px 10px;
+  }
+
+  .picker {
+    width: 84px;
+  }
+
+  .flap-picker.live-flap {
+    width: 72px;
+    font-size: 2.6rem;
+  }
+
+  .picker-progress {
+    width: 72px;
+  }
+
+  /* Beside the picker: the label on its own line, then the input and
+     buttons on one that doesn't wrap, with slimmer buttons. */
+  .actions-rows .manual-row {
+    display: grid;
+    grid-template-columns: minmax(46px, 1fr) auto auto;
+    gap: 6px;
+  }
+
+  .actions-rows .manual-label {
+    grid-column: 1 / -1;
+  }
+
+  .actions-rows .btn-sm {
+    padding-left: 9px;
+    padding-right: 9px;
   }
 
   /* A manual control's label gets its own line, the input and buttons

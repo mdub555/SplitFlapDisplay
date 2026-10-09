@@ -353,7 +353,7 @@ async function main() {
   check('an unprovisioned module\'s settings and actions are disabled, but their ⓘ still open',
     ['moduleConfig', 'manualControls'].every(id => document.getElementById(id).classList.contains('disabled')) &&
     document.querySelector('#moduleConfig [data-onclick="adjustOffset"]').disabled &&
-    document.querySelector('#showCharInput').disabled &&
+    document.getElementById('flapPicker').getAttribute('aria-disabled') === 'true' &&
     [...document.querySelectorAll('#moduleConfig .info-btn, #manualControls .info-btn')].every(b => !b.disabled));
   click(document.querySelector('#modMatrix .mod-cell[data-id="0"]'));
   await sleep(20);
@@ -613,15 +613,54 @@ async function main() {
   await sleep(20);
   check('a reply for a module no longer selected is not shown as this one\'s',
     tunerCalls().join() === '/modules/0/show_flap {"flap":1}' && tuner('tunerFlap').textContent === '—');
-  const showChar = document.getElementById('showCharInput');
-  check('Show character lists every flap, by what it shows',
-    showChar.tagName === 'SELECT' && showChar.options.length === 64 && showChar.options[0].textContent === 'blank' &&
-    showChar.options[1].textContent === 'A' && [...showChar.options].some(o => o.textContent === '🟥 (r)'));
+
+  console.log('\n--- The flap picker turns, then shows its character ---');
+  const picker = document.getElementById('flapPicker');
+  const pickerApi = globalVar('flapPicker');
+  pickerApi.delayMs = 60;   // rather than 3 s
+  const pickerName = () => document.getElementById('pickerName').textContent;
+  const wheel = deltaY => picker.dispatchEvent(new window.WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true }));
+  const pickerKey = k => picker.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+  const displayCalls = () => calls.filter(c => c.url.endsWith('/display')).map(c => `${c.url} ${c.body}`);
+  globalVar('liveState').state = '  D';
+  pickModule(0);
+  pickModule(2);
+  check('the picker starts at the character the module is showing', pickerName() === 'D · flap 4' &&
+    picker.getAttribute('aria-valuetext') === 'D' && picker.getAttribute('aria-disabled') === 'false');
   calls.length = 0;
-  showChar.value = '3';
-  click(document.querySelector('[data-onclick="showChar"]'));
-  await sleep(20);
-  check('Show sends the chosen flap by index', calls.some(c => c.url === '/modules/2/display' && c.body === '{"index":3}'));
+  wheel(40);
+  check('scrolling down turns it forward a flap', pickerName() === 'E · flap 5');
+  wheel(30);
+  wheel(30);
+  check('small scrolls add up to a flap', pickerName() === 'F · flap 6');
+  wheel(-100);
+  check('a mouse wheel\'s notch turns it one flap', pickerName() === 'E · flap 5');
+  wheel(-100);
+  check('scrolling up turns it back', pickerName() === 'D · flap 4' &&
+    document.getElementById('pickerStatus').textContent === 'Sending…');
+  check('nothing is sent while it\'s still turning', displayCalls().length === 0);
+  await sleep(120);
+  check('once it stands still, the module shows it', displayCalls().join() === '/modules/2/display {"index":4}' &&
+    document.getElementById('pickerStatus').textContent === '');
+  calls.length = 0;
+  pickerKey('ArrowUp');
+  pickerKey('ArrowUp');
+  pickerKey('Escape');
+  await sleep(120);
+  check('Escape cancels it', pickerName() === 'B · flap 2' && displayCalls().length === 0);
+  pickerKey('ArrowUp');
+  pickerKey('ArrowUp');
+  pickerKey('ArrowUp');
+  check('it wraps from blank to the last flap', picker.getAttribute('aria-valuenow') === '63');
+  pickerKey('Enter');
+  check('Enter sends it straight away', displayCalls().join() === '/modules/2/display {"index":63}');
+  calls.length = 0;
+  pickModule(1);   // not provisioned
+  wheel(40);
+  pickerKey('ArrowDown');
+  await sleep(120);
+  check('an unprovisioned module\'s picker doesn\'t turn or send', picker.getAttribute('aria-disabled') === 'true' &&
+    pickerName() === 'blank · flap 0' && displayCalls().length === 0);
   click(document.getElementById('tab-debug'));
 
   console.log('\n--- Typing straight into the compose grid ---');

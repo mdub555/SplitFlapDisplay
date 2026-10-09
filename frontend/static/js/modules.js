@@ -163,6 +163,7 @@ function selectModule(id) {
   refreshModuleToggles();
   refreshManualControls();
   refreshSyncNote();
+  flapPicker.moduleSelected(id);
   flapTuner.moduleSelected(id);
 }
 
@@ -263,8 +264,8 @@ function toggleModuleSetting(input) {
   });
 }
 
-// The inspector's two boxes of controls: the actions (show a flap, jump to a
-// raw step, exercise) and the module's settings (home offset, the toggles,
+// The inspector's two boxes of controls: the actions (the flap picker in
+// flap-picker.js, a raw step, exercise, and the buttons) and the module's settings (home offset, the toggles,
 // total steps). Disabled for an unprovisioned module (the backend answers
 // those with a 404 anyway), apart from their ⓘ buttons.
 const MAX_TOTAL_STEPS = 32767;
@@ -324,16 +325,6 @@ function setTotalSteps() {
 
 function showOnModule(payload) {
   moduleCommand(id => api.showOnModule(id, payload), (id, d) => `${moduleName(id)} showing flap ${d.index}`);
-}
-
-// Show character's dropdown: every flap on the reel, by what it shows.
-function buildShowCharOptions() {
-  byId('showCharInput').replaceChildren(...Array.from(CHAR_MAP, (ch, index) =>
-    el('option', {value: index}, flapLabel(ch))));
-}
-
-function showChar() {
-  showOnModule({index: Number(byId('showCharInput').value)});
 }
 
 function gotoStep() {
@@ -556,7 +547,7 @@ registerActions({
   selectModuleAction, adjustOffset, homeSelected, homeAll, calibrateSelected, identifySelected,
   rebootSelected, resetSettingsSelected, exerciseSelected, stopSelected,
   syncOneFromHardware, syncAllFromHardware, provisionModule,
-  setTotalSteps, showChar, gotoStep,
+  setTotalSteps, gotoStep,
   applyFirmwareConfig,
   toggleModuleSetting,
   downloadBackup, triggerBackupFileInput, uploadBackup,
