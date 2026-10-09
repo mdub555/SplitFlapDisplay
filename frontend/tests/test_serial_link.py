@@ -149,6 +149,42 @@ class ReadAllDumpsTest(unittest.TestCase):
         self.assertEqual(seen, [(0, 1), (1, 0)])
 
 
+def offsets_reply(mod_id='05', hex_digits='80' * 3 + '7D83' + '80' * 59):
+    return f"m{mod_id}%{hex_digits}\r\n"
+
+
+class ReadFlapOffsetsTest(unittest.TestCase):
+    def read(self, chunks, **kwargs):
+        fake = FakeSerial(chunks)
+        written = []
+        fake.write = lambda data: written.append(data.decode())
+        with mock.patch.object(serial_link, 'ser', fake):
+            return serial_link.read_flap_offsets(5, timeout=0.3, **kwargs), written
+
+    def test_sends_the_messages_before_then_asks_and_parses_the_signed_offsets(self):
+        offsets, written = self.read([offsets_reply()], before=['m05+7'])
+        self.assertEqual(written, ['m05+7\n', 'm05%\n'])
+        self.assertEqual(len(offsets), 64)
+        self.assertEqual(offsets[:6], [0, 0, 0, -3, 3, 0])
+
+    def test_waits_for_the_whole_line(self):
+        reply_ = offsets_reply()
+        offsets, _ = self.read([reply_[:40], reply_[40:]])
+        self.assertEqual(offsets[3], -3)
+
+    def test_ignores_other_modules_replies_and_state_dumps(self):
+        offsets, _ = self.read([offsets_reply('06', '00' * 64) + reply('05') + offsets_reply()])
+        self.assertEqual(offsets[4], 3)
+
+    def test_a_short_reply_is_not_accepted(self):
+        offsets, _ = self.read([offsets_reply(hex_digits='80' * 63)])
+        self.assertIsNone(offsets)
+
+    def test_no_port_is_no_reply(self):
+        with mock.patch.object(serial_link, 'ser', None):
+            self.assertIsNone(serial_link.read_flap_offsets(5))
+
+
 class BrokenSerial(FakeSerial):
     """A port whose device has gone: every use fails."""
 

@@ -77,6 +77,10 @@ const savedPlaylists = {};
 let schedule = { enabled: true, default: 'app:time',
   entries: [{ days: [0, 1, 2, 3, 4], start: '07:00', end: '09:00', target: 'playlist:Gone' }] };
 
+// A module for the flap offset tuner: it shows the flaps it's sent, and sets
+// the offset of the one showing (not flap 0), as the firmware does.
+const tunedModule = { showing: null, offsets: Array(64).fill(0) };
+
 window.fetch = async (url, options = {}) => {
   calls.push({ url, method: options.method || 'GET', body: options.body });
 
@@ -221,6 +225,16 @@ window.fetch = async (url, options = {}) => {
   if (url === '/update_playlist') {
     return ok({ status: 'success' });
   }
+  if (url.match(/^\/modules\/\d+\/show_flap$/)) {
+    tunedModule.showing = JSON.parse(options.body).flap;
+    return ok({ flap: tunedModule.showing, offsets: [...tunedModule.offsets] });
+  }
+  if (url.match(/^\/modules\/\d+\/flap_offset$/)) {
+    const { flap, offset } = JSON.parse(options.body);
+    tunedModule.showing = flap;
+    tunedModule.offsets[flap] = offset;
+    return ok({ flap, offsets: [...tunedModule.offsets] });
+  }
   if (url === '/serial/send') {
     return ok({ status: 'success' });
   }
@@ -235,4 +249,4 @@ for (const f of scriptFiles) {
   window.document.head.appendChild(scriptEl);
 }
 
-module.exports = { dom, window, calls, MockEventSource, savedPlaylists };
+module.exports = { dom, window, calls, MockEventSource, savedPlaylists, tunedModule };

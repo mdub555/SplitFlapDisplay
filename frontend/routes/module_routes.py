@@ -5,8 +5,9 @@ from flask import Blueprint, jsonify
 
 from config import NUM_MODULES
 from settings.store import settings, save_settings
-from display.serial_link import send_raw, read_dump, read_all_dumps, calibrate_module
-from display.module_protocol import TOGGLE_COMMANDS, Cmd, message, toggle_command
+from display.serial_link import send_raw, read_dump, read_all_dumps, read_flap_offsets, calibrate_module
+from display.module_protocol import (
+    FLAP_OFFSET_MAX, FLAP_OFFSET_MIN, TOGGLE_COMMANDS, Cmd, flap_offset_message, message, toggle_command)
 from display.state import state
 from display.charset import FLAP_CHARS, NUM_FLAPS, to_flap_char
 from routes.common import error, is_int, json_body
@@ -18,6 +19,11 @@ REBOOT_WAIT_S = 1.0
 
 # Well past any real reel; the firmware accepts up to 65535.
 MAX_TOTAL_STEPS = 32767
+
+# How long to wait for a module to finish a move and report its flap
+# offsets: long enough to home first (up to two revolutions) or to lower an
+# offset (nearly one).
+FLAP_MOVE_TIMEOUT_S = 15.0
 
 
 def provisioned(view):
@@ -79,6 +85,65 @@ def sync_one(mod_id):
         return error('The module did not report back', 504)
     _store_dump(mod_id, dump)
     return jsonify(status='success', settings=settings)
+
+
+# --- Per-flap offsets (the Debug page's flap offset tuner) -------------------
+# These work on any module ID, like the Debug page. Each one answers with
+# every flap's offset, read back once the module has stopped moving.
+
+def _flap_number(value, lowest=0):
+    """`value` as a flap index from `lowest` to the last flap, or None."""
+    return value if is_int(value) and lowest <= value < NUM_FLAPS else None
+
+
+@bp.route('/modules/<int:mod_id>/flap_offsets', methods=['GET'])
+def flap_offsets(mod_id):
+    """Every flap's offset, in steps."""
+    offsets = read_flap_offsets(mod_id)
+    if offsets is None:
+        return error('The module did not report back', 504)
+    return jsonify(offsets=offsets)
+
+
+@bp.route('/modules/<int:mod_id>/show_flap', methods=['POST'])
+def show_flap(mod_id):
+    """Show flap `flap` (its offset included), and answer once it's there."""
+    flap = _flap_number(json_body().get('flap'))
+    if flap is None:
+        return error(f'flap must be an integer from 0 to {NUM_FLAPS - 1}', 400)
+    offsets = read_flap_offsets(mod_id, before=[message(mod_id, Cmd.DISPLAY_INDEX, flap)],
+                                timeout=FLAP_MOVE_TIMEOUT_S)
+    if offsets is None:
+        return error('The module did not report back', 504)
+    state.mark_module_char(mod_id, FLAP_CHARS[flap])
+    return jsonify(flap=flap, offsets=offsets)
+
+
+@bp.route('/modules/<int:mod_id>/flap_offset', methods=['POST'])
+def set_flap_offset(mod_id):
+    """Set flap `flap`'s offset to `offset` steps. The module moves to the
+    flap's new position."""
+    data = json_body()
+    flap = _flap_number(data.get('flap'), lowest=1)
+    offset = data.get('offset')
+    if flap is None:
+        # Flap 0 is where homing ends: the home offset places it.
+        return error(f'flap must be an integer from 1 to {NUM_FLAPS - 1}', 400)
+    if not is_int(offset) or not FLAP_OFFSET_MIN <= offset <= FLAP_OFFSET_MAX:
+        return error(f'offset must be an integer from {FLAP_OFFSET_MIN} to {FLAP_OFFSET_MAX}', 400)
+    # The module sets the offset of the flap it's showing, and ignores the
+    # offset mid-move, so show the flap and wait for it to arrive first.
+    offsets = read_flap_offsets(mod_id, before=[message(mod_id, Cmd.DISPLAY_INDEX, flap)],
+                                timeout=FLAP_MOVE_TIMEOUT_S)
+    if offsets is not None:
+        offsets = read_flap_offsets(mod_id, before=[flap_offset_message(mod_id, offset)],
+                                    timeout=FLAP_MOVE_TIMEOUT_S)
+    if offsets is None:
+        return error('The module did not report back', 504)
+    state.mark_module_char(mod_id, FLAP_CHARS[flap])
+    if offsets[flap] != offset:
+        return error(f'The module did not take the offset (flap {flap} is still at {offsets[flap]})', 409)
+    return jsonify(flap=flap, offsets=offsets)
 
 
 @bp.route('/modules/sync_all', methods=['POST'])

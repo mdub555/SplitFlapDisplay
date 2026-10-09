@@ -302,8 +302,11 @@ npm test
   compose UI accepts as `°` and `♥`.
 - Per-flap fine-tuning (the old `w<idx>:<pos>` and its Auto Fine-Tune wizard)
   is now the firmware's flap offsets: `J<n>` sets the offset of the flap
-  showing (steps + 128) and `%` dumps them all. Modules aren't expected
-  to need it, so it's only on the Debug page, not the Modules page.
+  showing (steps + 128) and `%` dumps them all. It's on the Debug page, not
+  the Modules page: Flap Offset Tuning steps one module through its flaps
+  and shifts the one showing (`/modules/<id>/show_flap` and
+  `/modules/<id>/flap_offset`, which answer once the reel has stopped, with
+  every flap's offset), and the command form can send either command.
 - Backend tests: run `python -m unittest discover -s tests` from `frontend/`
   (the route tests need Flask). They cover the dump parser and protocol
   (checked against the firmware source), the module, settings, playlist and

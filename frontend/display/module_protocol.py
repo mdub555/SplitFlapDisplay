@@ -9,6 +9,8 @@ the full message grammar.
 import re
 from collections import namedtuple
 
+from display.charset import NUM_FLAPS
+
 
 class Cmd:
     """Firmware command letters, named as in the firmware's CommandType.
@@ -61,6 +63,26 @@ UNPROVISIONED_ID = 255
 # the offset dump (m<ID>%) replies m<ID>% and then each flap's stored value
 # as two hex digits, from flap 0.
 FLAP_OFFSET_ZERO = 128
+FLAP_OFFSET_MIN = -FLAP_OFFSET_ZERO
+FLAP_OFFSET_MAX = 255 - FLAP_OFFSET_ZERO
+
+
+def flap_offset_message(mod_id, offset: int) -> str:
+    """The message that sets the offset of the flap module `mod_id` is
+    showing to `offset` steps (FLAP_OFFSET_MIN..FLAP_OFFSET_MAX)."""
+    return message(mod_id, Cmd.SET_FLAP_OFFSET, offset + FLAP_OFFSET_ZERO)
+
+
+def flap_offsets_reply_pattern(id_pattern: str = r'\d+') -> str:
+    """Regex for a complete flap offset reply line, with groups for the ID and
+    the hex digits (two per flap)."""
+    return (rf'm({id_pattern}){re.escape(Cmd.DUMP_FLAP_OFFSETS)}'
+            rf'((?:[0-9A-Fa-f]{{2}}){{{NUM_FLAPS}}})\r?\n')
+
+
+def parse_flap_offsets(hex_digits: str):
+    """Each flap's offset in steps, from a flap offset reply's hex digits."""
+    return [int(hex_digits[i:i + 2], 16) - FLAP_OFFSET_ZERO for i in range(0, len(hex_digits), 2)]
 
 
 # A frame broadcast (m*f<interval>:<pairs>) gives each module's place in the

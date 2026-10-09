@@ -40,7 +40,8 @@ class ManualControlRoutesTest(unittest.TestCase):
             'settings.store': _module('settings.store', settings=self.settings,
                                       save_settings=lambda _: setattr(self, 'saves', self.saves + 1)),
             'display.serial_link': _module('display.serial_link', send_raw=self.sent.append,
-                                           read_dump=None, read_all_dumps=None, calibrate_module=None),
+                                           read_dump=None, read_all_dumps=None, read_flap_offsets=None,
+                                           calibrate_module=None),
             'display.state': _module('display.state', state=types.SimpleNamespace(
                 mark_module_char=lambda mod_id, char: self.marked.append((mod_id, char)))),
         }
