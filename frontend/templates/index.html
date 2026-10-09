@@ -226,7 +226,10 @@
       <div class="inspector-panel" id="inspectorPanel" hidden>
         <div class="section-head">
           <h3 id="inspectTitle">MODULE 00</h3>
-          <button class="btn btn-secondary btn-sm" data-onclick="syncOneFromHardware">Sync EEPROM</button>
+          <div class="row">
+            <button class="btn btn-secondary btn-sm" data-onclick="homeSelected">HOME MOTOR</button>
+            <button class="btn btn-secondary btn-sm" data-onclick="syncOneFromHardware">Sync EEPROM</button>
+          </div>
         </div>
         <div class="sync-failed-note" id="inspectSyncFailed" hidden>
           <strong>Sync failed</strong>
@@ -297,7 +300,6 @@
           </div>
         </details>
         <div class="button-row inspector-actions">
-          <button class="btn btn-secondary btn-sm" data-onclick="homeSelected">HOME MOTOR</button>
           <button class="btn btn-ghost btn-sm" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>
           <button class="btn btn-ghost btn-sm" data-onclick="identifySelected" title="Blink this module's status LED for 10 seconds">IDENTIFY</button>
           <button class="btn btn-ghost btn-sm" data-onclick="rebootSelected">REBOOT</button>
