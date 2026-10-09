@@ -246,7 +246,7 @@ function refreshManualControls() {
   const mod = moduleSettings();
   const box = byId('manualControls');
   box.classList.toggle('disabled', !mod);
-  box.querySelectorAll('input, button').forEach(control => { control.disabled = !mod; });
+  box.querySelectorAll('input, select, button').forEach(control => { control.disabled = !mod; });
   // Not while it's being typed in (a reload can come at any time).
   const steps = byId('totalStepsInput');
   if (document.activeElement !== steps) steps.value = mod && mod.totalSteps !== undefined ? mod.totalSteps : '';
@@ -298,11 +298,14 @@ function showOnModule(payload) {
   moduleCommand(id => api.showOnModule(id, payload), (id, d) => `${moduleName(id)} showing flap ${d.index}`);
 }
 
+// Show character's dropdown: every flap on the reel, by what it shows.
+function buildShowCharOptions() {
+  byId('showCharInput').replaceChildren(...Array.from(CHAR_MAP, (ch, index) =>
+    el('option', {value: index}, flapLabel(ch))));
+}
+
 function showChar() {
-  // Array.from so a colour-tile emoji counts as one character, not two.
-  const chars = Array.from(byId('showCharInput').value);
-  if (chars.length !== 1) { showToast('Enter exactly one character', 'warn'); return; }
-  showOnModule({char: chars[0]});
+  showOnModule({index: Number(byId('showCharInput').value)});
 }
 
 function showIndex() {

@@ -45,14 +45,18 @@
 {% endmacro %}
 
 {# A manual-control row in the inspector: label (with an ⓘ for `tip`),
-   number/text input and buttons. #}
+   input (or, with type 'select', a dropdown its script fills) and buttons. #}
 {% macro manual_row(input_id, label, buttons, type='number', attrs={}, tip='') %}
   <div class="manual-row has-info">
     <div class="manual-label label-line">
       <label for="{{ input_id }}">{{ label }}</label>
       {% if tip %}{{ info(input_id ~ '-tip', label, tip) }}{% endif %}
     </div>
+    {% if type == 'select' %}
+    <select class="input" id="{{ input_id }}"{{ attrs | xmlattr }}></select>
+    {% else %}
     <input type="{{ type }}" class="input" id="{{ input_id }}"{{ attrs | xmlattr }}>
+    {% endif %}
     {% for text, action in buttons %}
     <button class="btn btn-secondary btn-sm" data-onclick="{{ action }}">{{ text }}</button>
     {% endfor %}
@@ -258,8 +262,7 @@
           {{ manual_row('totalStepsInput', 'Total steps per revolution', [('SET', 'setTotalSteps')],
                         attrs={'min': 1, 'max': 32767, 'step': 1},
                         tip="Only writes the module's EEPROM; home the module afterwards. Measure Reel finds it for you.") }}
-          {{ manual_row('showCharInput', 'Show character', [('SHOW', 'showChar')],
-                        type='text', attrs={'placeholder': 'A, 7, 🟥…', 'autocomplete': 'off'}) }}
+          {{ manual_row('showCharInput', 'Show character', [('SHOW', 'showChar')], type='select') }}
           {{ manual_row('showIndexInput', 'Show flap index (0–' ~ last_flap ~ ')', [('SHOW', 'showIndex')],
                         attrs={'min': 0, 'max': last_flap, 'step': 1}) }}
           {{ manual_row('gotoStepInput', 'Go to step', [('GO', 'gotoStep')], attrs={'min': 0, 'step': 1},
@@ -269,31 +272,33 @@
                         tip='Steps through every flap one at a time, round the reel this many times. STOP, or any other move, ends it.') }}
         </div>
         <!-- Per-flap offsets, one flap at a time (flap-tuner.js) -->
-        <div class="inset-box tuner has-info" id="flapTuner">
-          <div class="label-line">
+        <details class="inset-box tuner" id="flapTuner">
+          <summary class="label-line has-info">
             <span class="tuner-title">Flap offsets</span>
             {{ info('tunerTip', 'flap offsets', "For a flap that doesn't land quite right: step to it, then shift it a few steps either way. Each move waits until the reel has stopped. The reel only turns forward, so Previous and lowering an offset take nearly a full revolution. Flap 0 is placed by the home offset above.") }}
-          </div>
-          <div class="tuner-flap">
-            <button class="btn btn-secondary btn-sm" data-onclick="tunerStep" data-step="-1">◀ Previous</button>
-            <div class="tuner-current" aria-live="polite">
-              <span class="stat-label">Flap</span>
-              <span class="stat-val" id="tunerFlap">—</span>
-              <span class="tuner-char" id="tunerChar"></span>
+          </summary>
+          <div class="tuner-body">
+            <div class="tuner-flap">
+              <button class="btn btn-secondary btn-sm" data-onclick="tunerStep" data-step="-1">◀ Previous</button>
+              <div class="tuner-current" aria-live="polite">
+                <span class="stat-label">Flap</span>
+                <span class="stat-val" id="tunerFlap">—</span>
+                <span class="tuner-char" id="tunerChar"></span>
+              </div>
+              <button class="btn btn-secondary btn-sm" data-onclick="tunerStep" data-step="1">Next ▶</button>
             </div>
-            <button class="btn btn-secondary btn-sm" data-onclick="tunerStep" data-step="1">Next ▶</button>
+            <div class="manual-row">
+              <label class="manual-label" for="tunerOffset">Offset (steps)</label>
+              <button class="btn-adj neg" data-onclick="tunerNudge" data-delta="-4" aria-label="Four steps back">−4</button>
+              <input type="number" class="input" id="tunerOffset"
+                     min="{{ config.flap_offsets.min }}" max="{{ config.flap_offsets.max }}" step="1">
+              <button class="btn-adj pos" data-onclick="tunerNudge" data-delta="4" aria-label="Four steps forward">+4</button>
+              <button class="btn btn-primary btn-sm" data-onclick="tunerApply">SET</button>
+            </div>
+            <span class="hint tuner-status" id="tunerStatus" role="status"></span>
+            <span class="hint" id="tunerSummary"></span>
           </div>
-          <div class="manual-row">
-            <label class="manual-label" for="tunerOffset">Offset (steps)</label>
-            <button class="btn-adj neg" data-onclick="tunerNudge" data-delta="-1" aria-label="One step back">−1</button>
-            <input type="number" class="input" id="tunerOffset"
-                   min="{{ config.flap_offsets.min }}" max="{{ config.flap_offsets.max }}" step="1">
-            <button class="btn-adj pos" data-onclick="tunerNudge" data-delta="1" aria-label="One step forward">+1</button>
-            <button class="btn btn-primary btn-sm" data-onclick="tunerApply">SET</button>
-          </div>
-          <span class="hint tuner-status" id="tunerStatus" role="status"></span>
-          <span class="hint" id="tunerSummary"></span>
-        </div>
+        </details>
         <div class="button-row inspector-actions">
           <button class="btn btn-secondary btn-sm" data-onclick="homeSelected">HOME MOTOR</button>
           <button class="btn btn-ghost btn-sm" data-onclick="calibrateSelected">MEASURE REEL (360°)</button>

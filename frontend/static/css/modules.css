@@ -263,6 +263,37 @@
 }
 
 /* ── FLAP OFFSET TUNER ── */
+/* A section that opens and closes: its title is the <summary>. */
+.tuner {
+  display: block;
+}
+
+.tuner > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.tuner > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tuner > summary::before {
+  content: '▸';
+  width: 1em;
+  color: var(--text-muted);
+}
+
+.tuner[open] > summary::before {
+  content: '▾';
+}
+
+.tuner-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
 /* Previous, the flap showing, Next. */
 .tuner-flap {
   display: flex;

@@ -529,6 +529,7 @@ async function main() {
   pickModule(1);   // not provisioned
   check('an unprovisioned module can\'t be tuned', nextBtn.disabled && prevBtn.disabled &&
     tuner('flapTuner').classList.contains('disabled'));
+  check('the flap offsets start closed', tuner('flapTuner').tagName === 'DETAILS' && !tuner('flapTuner').open);
   pickModule(2);
   check('until it has moved a flap, only Previous and Next can be used',
     tuner('tunerFlap').textContent === '—' && tuner('tunerChar').textContent === 'Step to a flap to start' &&
@@ -545,11 +546,11 @@ async function main() {
   click(nextBtn);
   await sleep(20);
   calls.length = 0;
-  click(nudge(1));
+  click(nudge(4));
   await sleep(20);
-  check('+1 sets the showing flap one step further on',
-    tunerCalls().join() === '/modules/2/flap_offset {"flap":2,"offset":1}' && tuner('tunerOffset').value === '1' &&
-    tuner('tunerSummary').textContent === 'Flaps with an offset: 2 B +1');
+  check('+4 sets the showing flap four steps further on',
+    tunerCalls().join() === '/modules/2/flap_offset {"flap":2,"offset":4}' && tuner('tunerOffset').value === '4' &&
+    tuner('tunerSummary').textContent === 'Flaps with an offset: 2 B +4');
   calls.length = 0;
   tuner('tunerOffset').value = '-3';
   click(tunerButton('tunerApply'));
@@ -569,7 +570,8 @@ async function main() {
   click(prevBtn);
   await sleep(20);
   check('flap 0 is left to the home offset', tuner('tunerFlap').textContent === '0' &&
-    tuner('tunerOffset').disabled && tuner('tunerOffset').placeholder === 'home offset' && nudge(1).disabled);
+    tuner('tunerOffset').disabled && tuner('tunerOffset').placeholder === 'home offset' && nudge(4).disabled &&
+    !tuner('flapTuner').querySelector('.info-btn').disabled);
   click(prevBtn);
   await sleep(20);
   check('Previous wraps from flap 0 to the last flap', tuner('tunerFlap').textContent === '63');
@@ -583,6 +585,15 @@ async function main() {
   await sleep(20);
   check('a reply for a module no longer selected is not shown as this one\'s',
     tunerCalls().join() === '/modules/0/show_flap {"flap":1}' && tuner('tunerFlap').textContent === '—');
+  const showChar = document.getElementById('showCharInput');
+  check('Show character lists every flap, by what it shows',
+    showChar.tagName === 'SELECT' && showChar.options.length === 64 && showChar.options[0].textContent === 'blank' &&
+    showChar.options[1].textContent === 'A' && [...showChar.options].some(o => o.textContent === '🟥 (r)'));
+  calls.length = 0;
+  showChar.value = '3';
+  click(document.querySelector('[data-onclick="showChar"]'));
+  await sleep(20);
+  check('Show sends the chosen flap by index', calls.some(c => c.url === '/modules/2/display' && c.body === '{"index":3}'));
   click(document.getElementById('tab-debug'));
 
   console.log('\n--- Typing straight into the compose grid ---');

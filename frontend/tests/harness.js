@@ -225,6 +225,9 @@ window.fetch = async (url, options = {}) => {
   if (url === '/update_playlist') {
     return ok({ status: 'success' });
   }
+  if (url.match(/^\/modules\/\d+\/display$/)) {
+    return ok({ status: 'success', index: JSON.parse(options.body).index });
+  }
   if (url.match(/^\/modules\/\d+\/show_flap$/)) {
     tunedModule.showing = JSON.parse(options.body).flap;
     return ok({ flap: tunedModule.showing, offsets: [...tunedModule.offsets] });

@@ -1,4 +1,5 @@
-// The flap offset tuner in the Modules page's inspector: step the selected
+// The flap offset tuner in the Modules page's inspector (a section that
+// opens and closes): step the selected
 // module through its flaps, and shift the one showing a few steps either
 // way. Every request answers once the module has stopped moving, with every
 // flap's offset (see the show_flap and flap_offset routes), so the tuner
@@ -86,7 +87,7 @@ const flapTuner = {
     byId('tunerOffset').value = editable ? this.offsets[this.flap] : '';
     byId('tunerOffset').placeholder = known && !editable ? 'home offset' : '';
     byId('tunerOffset').disabled = this.busy || !editable;
-    byId('flapTuner').querySelectorAll('button').forEach(button => {
+    byId('flapTuner').querySelectorAll('.tuner-body button').forEach(button => {
       button.disabled = this.busy || !usable || (!editable && !button.dataset.step);
     });
 
