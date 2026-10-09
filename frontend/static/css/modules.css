@@ -101,23 +101,6 @@
   }
 }
 
-/* In the inspector, for a module whose last sync failed. */
-.sync-failed-note {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--orange);
-  border-radius: 6px;
-  background: var(--warn-bg);
-  font-size: .85rem;
-  color: var(--text-soft);
-}
-
-.sync-failed-note strong {
-  display: block;
-  color: var(--orange);
-  margin-bottom: 2px;
-}
-
 /* ── INSPECTOR ── */
 .inspector-panel {
   background: var(--surface-dark);
@@ -138,19 +121,41 @@
   color: var(--text-bright);
 }
 
-.inspector-stats {
+/* The status line under the title: revolutions, drift, and whether the
+   timing settings match the shared ones. */
+.module-status {
   display: flex;
-  justify-content: space-around;
-  background: var(--inset);
-  padding: 14px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  font-size: .85rem;
+  color: var(--text-muted);
 }
 
-.stat-box {
-  text-align: center;
+.module-status strong,
+.setting-val {
+  font-family: monospace;
+  font-size: .95rem;
+  color: var(--text-bright);
 }
 
+.module-status .drift-ok,
+.status-good {
+  color: var(--display-green);
+}
+
+.module-status .drift-warn,
+.status-warn {
+  color: var(--orange);
+}
+
+.module-status .drift-bad,
+.status-bad {
+  color: var(--red);
+  font-weight: bold;
+}
+
+/* The flap tuner's flap number, and its label. */
 .stat-label {
   font-size: .75rem;
   color: var(--text-muted);
@@ -164,17 +169,8 @@
   display: block;
 }
 
-.stat-val-alt {
-  color: var(--orange);
-}
-
-.module-timing {
-  font-size: .8rem;
-  color: var(--text-dim);
-  line-height: 1.5;
-}
-
-.module-timing .mismatch {
+/* In the timing settings' ⓘ: a value that differs from the shared one. */
+.info-tip .mismatch {
   color: var(--orange);
   font-weight: bold;
 }
@@ -343,13 +339,6 @@
   .btn-adj {
     padding: 8px 9px;
     font-size: .8rem;
-  }
-
-  /* The four stats go 2x2, so labels and values each fit on one line. */
-  .inspector-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px 8px;
   }
 
   .stat-val {

@@ -201,19 +201,41 @@ async function main() {
   const phoneColumns = globalVar('phoneColumns');
   check('on a phone the module grid wraps at a whole fraction of the display width',
     [[16, 8], [15, 5], [12, 6], [10, 5], [9, 9], [8, 8], [13, 8], [1, 1]].every(([cols, n]) => phoneColumns(cols) === n));
-  check('inspector shows the selected module\'s drift', document.getElementById('inspectDrift').textContent === '3');
+  check('inspector shows the selected module\'s drift, coloured as fine',
+    document.getElementById('inspectDrift').textContent === '3' &&
+    document.getElementById('inspectDrift').classList.contains('drift-ok'));
+  const driftClass = globalVar('driftClass');
+  check('drift is fine under 8 steps either way, worth a look under 16, and bad from 16',
+    [[0, 'ok'], [7, 'ok'], [-7, 'ok'], [8, 'warn'], [-15, 'warn'], [16, 'bad'], [-40, 'bad']]
+      .every(([drift, level]) => driftClass(drift) === `drift-${level}`));
   check('inspector shows the revolution count', document.getElementById('inspectRevolutions').textContent === '12,345');
+  check('the home offset is shown with its buttons', document.getElementById('inspectOffset').textContent === '2832');
   const timing = document.getElementById('inspectTiming');
-  check('inspector shows the timing the module reported',
-    timing.textContent.startsWith('From last sync: step delay 1000 µs · homing step delay 1800 µs · debounce 100 ms · ' +
+  check('a single timing setting that differs is named in the status line',
+    timing.textContent === '⚠ Stagger is 120 ms here, 150 ms shared' && timing.classList.contains('status-warn'));
+  const timingTip = document.getElementById('timingTip');
+  check('the timing ⓘ lists every value the module reported',
+    timingTip.textContent.startsWith('From last sync: step delay 1000 µs · homing step delay 1800 µs · debounce 100 ms · ' +
       'ramp start delay 3000 µs · ramp length 0 steps · settle 0 ms · stagger 120 ms'));
-  const flagged = [...timing.querySelectorAll('.mismatch')].map(s => s.dataset.key);
+  const flagged = [...timingTip.querySelectorAll('.mismatch')].map(s => s.dataset.key);
   check('only values that differ from the shared settings are highlighted',
     flagged.length === 1 && flagged[0] === 'staggerMs');
+  const settingsBefore = globalVar('currentSettings');
+  settingsBefore.modules['0'].staggerMs = 150;
+  globalVar('refreshModuleTiming')();
+  check('timing that matches says so', timing.textContent === '✓ Matches the shared settings' &&
+    timing.classList.contains('status-good'));
+  settingsBefore.modules['0'].staggerMs = 120;
+  settingsBefore.modules['0'].settleMs = 5;
+  globalVar('refreshModuleTiming')();
+  check('several that differ are counted', timing.textContent === '⚠ 2 timing settings differ from the shared settings');
+  settingsBefore.modules['0'].settleMs = 0;
   click(document.querySelector('#modMatrix .mod-cell[data-id="1"]'));
   await sleep(20);
-  check('unprovisioned module shows no drift', document.getElementById('inspectDrift').textContent === '---');
-  check('unprovisioned module shows no timing', document.getElementById('inspectTiming').textContent === '');
+  check('unprovisioned module shows no drift', document.getElementById('inspectDrift').textContent === '---' &&
+    document.getElementById('inspectDrift').className === '');
+  check('unprovisioned module shows no timing', document.getElementById('inspectTiming').textContent === '' &&
+    document.querySelector('[aria-controls="timingTip"]').hidden);
   click(document.querySelector('#modMatrix .mod-cell[data-id="2"]'));
   await sleep(20);
   check('module synced from older firmware asks for a sync',
@@ -274,12 +296,13 @@ async function main() {
   const realFetch = window.fetch;
 
   console.log('\n--- Optimistic-UI revert on failure (calibration timeout, HTTP 500 body) ---');
-  const inspectCalib = document.getElementById('inspectCalib');
-  const before = inspectCalib.textContent;
+  const statusTiming = document.getElementById('inspectTiming');
+  const before = statusTiming.textContent;
   window.confirm = () => true; // jsdom has no real confirm() dialog
   click(document.querySelector('[data-onclick="calibrateSelected"]'));
+  check('the status line says the reel is being measured', statusTiming.textContent === 'Measuring the reel…');
   await sleep(20);
-  check('calibration display reverted after simulated 500/Timeout response', inspectCalib.textContent === before);
+  check('calibration status reverted after simulated 500/Timeout response', statusTiming.textContent === before);
 
   console.log('\n--- Offset adjust buttons carry delta via dataset, not string-interpolated onclick ---');
   const plusOne = document.querySelector('[data-onclick="adjustOffset"][data-delta="1"]');

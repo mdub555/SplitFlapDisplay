@@ -231,6 +231,19 @@
             <button class="btn btn-secondary btn-sm" data-onclick="syncOneFromHardware">Sync EEPROM</button>
           </div>
         </div>
+        <!-- How the module is doing, from its last sync (modules.js). -->
+        <div class="module-status has-info" id="moduleStatus">
+          <span class="status-item">Revolutions <strong id="inspectRevolutions">---</strong></span>
+          <span class="status-item label-line">Drift <strong id="inspectDrift">---</strong>
+            {{ info('statusTip', 'the module status', "From the module's last sync. Revolutions: lifetime reel revolutions, saved every 16, so up to 15 can be lost at power-off. Drift: how many steps the module's position was off by at the last pass over the home sensor; positive means missed steps, so try a longer step delay or a ramp (green under 8, orange under 16, red from 16). Next to them: whether its timing settings match the shared settings below (that ⓘ lists them).") }}
+          </span>
+          <span class="status-item label-line">
+            <span id="inspectTiming"></span>
+            {{ info('timingTip', 'the timing settings', '') }}
+          </span>
+          <span class="status-item status-bad" id="inspectSyncFailed" hidden
+                title="This module didn't answer the last sync, so these values may be out of date. Check its power and bus connection, then press Sync EEPROM to try again.">⚠ Sync failed</span>
+        </div>
         <!-- Things to do with the module. -->
         <div class="inset-box" id="manualControls">
           {{ manual_row('showCharInput', 'Show character', [('SHOW', 'showChar')], type='select') }}
@@ -240,25 +253,13 @@
                         attrs={'min': 1, 'max': 255, 'step': 1, 'value': 1},
                         tip='Steps through every flap one at a time, round the reel this many times. STOP, or any other move, ends it.') }}
         </div>
-        <div class="sync-failed-note" id="inspectSyncFailed" hidden>
-          <strong>Sync failed</strong>
-          <span>This module didn't answer the last sync, so the values below may be out of date. Check its power and bus connection, then press Sync EEPROM to try again.</span>
-        </div>
-        <div class="inspector-stats has-info">
-          <div class="stat-box"><span class="stat-label">Home Offset</span><span class="stat-val" id="inspectOffset">---</span></div>
-          <div class="stat-box"><span class="stat-label">Total Steps</span><span class="stat-val stat-val-alt" id="inspectCalib">---</span></div>
-          <div class="stat-box"><span class="stat-label label-line">Revolutions
-            {{ info('revolutionsTip', 'revolutions', 'Lifetime reel revolutions, from the last sync. Saved every 16 revolutions, so up to 15 can be lost at power-off.') }}</span><span class="stat-val" id="inspectRevolutions">---</span></div>
-          <div class="stat-box"><span class="stat-label label-line">Drift
-            {{ info('driftTip', 'drift', "Steps the module's position was off by at the last pass over the home sensor, from the last sync. Positive means missed steps: try a longer step delay or a ramp.") }}</span><span class="stat-val" id="inspectDrift">---</span></div>
-        </div>
-        <div class="module-timing" id="inspectTiming"></div>
         <!-- The module's own settings, saved in its EEPROM. -->
         <div class="inset-box" id="moduleConfig">
           <div class="manual-row has-info">
             <div class="manual-label label-line">
               <span>Home offset</span>
-              {{ info('adjTip', 'the home offset', 'Moves flap 0 (the blank flap) this many steps from the home sensor. Saves to the module straight away; press Home Motor to check it.') }}
+              {{ info('adjTip', 'the home offset', 'How many steps past the home sensor flap 0 (the blank flap) is. The buttons move it; each change saves to the module straight away, so press Home Motor to check it.') }}
+              <strong class="setting-val" id="inspectOffset">---</strong>
             </div>
             <div class="adj-buttons">
               {% for delta in [-16, -4, -1] %}

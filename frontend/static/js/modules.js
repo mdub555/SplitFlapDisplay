@@ -153,11 +153,12 @@ function selectModule(id) {
   byId('inspectorPanel').hidden = false;
   byId('inspectTitle').textContent = `MODULE ${formatModuleId(id)}`;
   const mod = moduleSettings();
-  // Offset and steps are plain numbers to tune by; no thousands separator.
+  // A plain number to tune by; no thousands separator.
   byId('inspectOffset').textContent = mod && mod.homeOffset !== undefined ? mod.homeOffset : '---';
-  byId('inspectCalib').textContent = mod && mod.totalSteps !== undefined ? mod.totalSteps : '---';
   byId('inspectRevolutions').textContent = statText(mod, 'revolutions');
-  byId('inspectDrift').textContent = statText(mod, 'drift');
+  const drift = byId('inspectDrift');
+  drift.textContent = statText(mod, 'drift');
+  drift.className = mod && Number.isInteger(mod.drift) ? driftClass(mod.drift) : '';
   refreshModuleTiming();
   refreshModuleToggles();
   refreshManualControls();
@@ -172,24 +173,38 @@ function selectModuleAction(cell) {
   byId('modMatrix').querySelector(`.mod-cell[data-id="${id}"]`).focus();
 }
 
-// The shared firmware settings as the selected module reported them in its
-// last sync (the dump), so you can check that what was sent actually took.
-// Values that differ from the saved shared settings are highlighted.
+// How worrying a drift is, as the class that colours it: under 8 steps
+// either way is fine, under 16 is worth a look, more is missing steps.
+function driftClass(drift) {
+  const size = Math.abs(drift);
+  return size < 8 ? 'drift-ok' : size < 16 ? 'drift-warn' : 'drift-bad';
+}
+
+// Whether the shared firmware settings, as the selected module reported
+// them in its last sync (the dump), match the saved shared settings, so
+// you can check that what was sent actually took. The status line says
+// whether they match; its ⓘ lists them, highlighting any that differ.
 function refreshModuleTiming() {
-  const box = byId('inspectTiming');
+  const summary = byId('inspectTiming');
+  const tip = byId('timingTip');
+  const tipButton = tip.previousElementSibling;
   const mod = moduleSettings();
-  if (!mod) { box.replaceChildren(); return; }
+  summary.className = '';
+  tip.replaceChildren();
   // A module last synced by older firmware is missing some of the fields.
-  if (CONFIG.timing_fields.some(f => mod[f.key] === undefined)) {
-    box.textContent = 'Sync this module to read its timing settings.';
+  const known = mod && !CONFIG.timing_fields.some(f => mod[f.key] === undefined);
+  tipButton.hidden = !known;
+  if (!known) {
+    summary.textContent = mod ? 'Sync this module to read its timing settings.' : '';
     return;
   }
   const shared = currentSettings.firmware || {};
   const parts = [];
-  let mismatches = 0;
-  CONFIG.timing_fields.forEach(({key, name, unit}, i) => {
+  const differing = [];
+  CONFIG.timing_fields.forEach((field, i) => {
+    const {key, name, unit} = field;
     const differs = shared[key] !== undefined && shared[key] !== mod[key];
-    if (differs) mismatches++;
+    if (differs) differing.push(field);
     if (i) parts.push(' · ');
     parts.push(el('span', {
       dataset: {key},
@@ -197,8 +212,19 @@ function refreshModuleTiming() {
       title: differs ? `Shared setting is ${shared[key]} ${unit}` : '',
     }, `${name} ${mod[key]} ${unit}`));
   });
-  box.replaceChildren('From last sync: ', ...parts,
-    mismatches ? ' — highlighted values differ from the shared settings; Apply to All Modules resends them.' : '');
+  tip.replaceChildren('From last sync: ', ...parts,
+    differing.length ? ' — highlighted values differ from the shared settings; Apply to All Modules resends them.' : '');
+
+  summary.className = differing.length ? 'status-warn' : 'status-good';
+  if (!differing.length) {
+    summary.textContent = '✓ Matches the shared settings';
+  } else if (differing.length === 1) {
+    const {key, name, unit} = differing[0];
+    summary.textContent = `⚠ ${name[0].toUpperCase()}${name.slice(1)} is ${mod[key]} ${unit} here, ` +
+                          `${shared[key]} ${unit} shared`;
+  } else {
+    summary.textContent = `⚠ ${differing.length} timing settings differ from the shared settings`;
+  }
 }
 
 // The per-module on/off settings, one checkbox per setting (data-setting).
@@ -293,7 +319,6 @@ function setTotalSteps() {
     id => `${moduleName(id)}: total steps set to ${steps}`,
     id => {
       storeModuleValue(id, 'totalSteps', steps);
-      if (id === selectedModule) byId('inspectCalib').textContent = steps;
     });
 }
 
@@ -371,8 +396,8 @@ function homeAll() {
   });
 }
 
-// Shows `busyText` in the stat `statId` until `request` settles, then puts
-// back what was there if it failed.
+// Shows `busyText` in the status line in place of `statId` until `request`
+// settles, then puts back what was there if it failed.
 function withBusyStat(statId, busyText, request) {
   const stat = byId(statId);
   const before = stat.textContent;
@@ -385,19 +410,19 @@ function withBusyStat(statId, busyText, request) {
 
 function calibrateSelected() {
   if (!confirm(`Calibrate Module ${formatModuleId(selectedModule)}? It will spin 360° to measure steps.`)) return;
-  moduleCommand(id => withBusyStat('inspectCalib', 'Measuring…', api.calibrateModule(id)),
+  moduleCommand(id => withBusyStat('inspectTiming', 'Measuring the reel…', api.calibrateModule(id)),
     (id, d) => `${moduleName(id)}: ${d.steps} steps`,
     (id, d) => {
       storeModuleValue(id, 'totalSteps', d.steps);
       if (id === selectedModule) {
-        byId('inspectCalib').textContent = d.steps;
+        refreshModuleTiming();
         refreshManualControls();
       }
     });
 }
 
 function syncOneFromHardware() {
-  moduleCommand(id => withBusyStat('inspectOffset', 'Syncing…', api.syncModule(id)), () => 'Synced', useSettings);
+  moduleCommand(id => withBusyStat('inspectTiming', 'Syncing…', api.syncModule(id)), () => 'Synced', useSettings);
 }
 
 function syncAllFromHardware() {
