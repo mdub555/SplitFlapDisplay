@@ -549,7 +549,7 @@ async function main() {
   await sleep(20);
   const picker = document.getElementById('flapPicker');
   const pickerApi = globalVar('flapPicker');
-  pickerApi.delayMs = 60;   // rather than 3 s
+  pickerApi.delayMs = 60;   // rather than 2 s
   const pickerName = () => document.getElementById('pickerName').textContent;
   const wheel = deltaY => picker.dispatchEvent(new window.WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true }));
   const pickerKey = k => picker.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
