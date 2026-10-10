@@ -568,12 +568,51 @@ async function main() {
   wheel(-100);
   check('a mouse wheel\'s notch turns it one flap', pickerName() === 'E · flap 5');
   wheel(-100);
-  check('scrolling up turns it back', pickerName() === 'D · flap 4' &&
-    document.getElementById('pickerStatus').textContent === 'Sending…');
+  check('scrolling up turns it back', pickerName() === 'D · flap 4' && pickerApi.timer !== null);
   check('nothing is sent while it\'s still turning', flapCalls().length === 0);
   await sleep(120);
-  check('once it stands still, the module shows it', flapCalls().join() === '/modules/2/show_flap {"flap":4}' &&
-    document.getElementById('pickerStatus').textContent === '');
+  check('once it stands still, the module shows it', flapCalls().join() === '/modules/2/show_flap {"flap":4}');
+  check('no status text is left under the bar', !document.getElementById('pickerStatus'));
+  calls.length = 0;
+  // A drag: the flap is 120px tall, so 120px is one flap.
+  picker.getBoundingClientRect = () => ({ top: 0, height: 120 });
+  const drag = (type, clientY) => picker.dispatchEvent(new window.MouseEvent(type, { clientY, bubbles: true }));
+  const heldAngle = () => picker.querySelector('.ff-held')?.style.transform || '';
+  drag('pointerdown', 10);
+  drag('pointermove', 40);
+  check('a quarter of a flap\'s drag has the top half part way down', pickerName() === 'D · flap 4' &&
+    picker.querySelector('.ff-held.ffd') && heldAngle() === 'rotateX(-45deg)' &&
+    picker.querySelector('.ft .fc').textContent === 'E' && picker.querySelector('.fb .fc').textContent === 'D');
+  drag('pointermove', 100);
+  check('three quarters has the next flap\'s bottom half coming down', pickerName() === 'E · flap 5' &&
+    picker.querySelector('.ff-held.ffu') && heldAngle() === 'rotateX(45deg)');
+  await sleep(120);
+  check('nothing is sent while the flap is held', flapCalls().length === 0 && pickerApi.timer === null);
+  drag('pointermove', 280);
+  check('dragging further turns it on', pickerName() === 'F · flap 6');
+  drag('pointerup', 280);
+  check('letting go settles it on the nearest flap', pickerName() === 'F · flap 6' && pickerApi.timer !== null);
+  await sleep(150);
+  check('the wait starts when it\'s let go', flapCalls().join() === '/modules/2/show_flap {"flap":6}' &&
+    !picker.querySelector('.ff-held') && picker.querySelector('.fb .fc').textContent === 'F');
+  calls.length = 0;
+  drag('pointerdown', 200);
+  drag('pointermove', 150);
+  check('dragging up turns it back', picker.querySelector('.ff-held.ffu') && heldAngle() === 'rotateX(75deg)' &&
+    pickerName() === 'F · flap 6');
+  drag('pointerup', 150);
+  await sleep(150);
+  check('let go less than half a flap on, it turns back and sends nothing', pickerName() === 'F · flap 6' &&
+    !picker.querySelector('.ff-held') && flapCalls().length === 0);
+  wheel(40);
+  drag('pointerdown', 100);
+  await sleep(120);
+  check('holding the flap holds the wait', flapCalls().length === 0);
+  drag('pointerup', 102);
+  check('a tap turns it and restarts the wait', pickerName() === 'H · flap 8');
+  await sleep(120);
+  check('which then sends', flapCalls().join() === '/modules/2/show_flap {"flap":8}');
+  pickerApi.show(4);   // back on D for what follows
   calls.length = 0;
   pickerKey('ArrowUp');
   pickerKey('ArrowUp');
