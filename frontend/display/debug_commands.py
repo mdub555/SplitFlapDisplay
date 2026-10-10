@@ -22,7 +22,8 @@ Each command is a dict the page reads from CONFIG.debug_commands:
 
 from display.charset import NUM_FLAPS
 from display.module_protocol import (
-    FLAP_OFFSET_ZERO, FRAME_MAX_MODULES, GLOBAL_SETTINGS, MODULE_TOGGLES, UNPROVISIONED_ID, Cmd)
+    FLAP_OFFSET_MAX, FLAP_OFFSET_MIN, FLAP_OFFSET_ZERO, FRAME_MAX_MODULES, GLOBAL_SETTINGS,
+    MODULE_TOGGLES, UNPROVISIONED_ID, Cmd)
 
 
 def _int(name, label, lo, hi, default=None, unit='', bias=0):
@@ -132,7 +133,7 @@ DEBUG_COMMANDS = [
     _global_setting('settleMs'),
     _global_setting('staggerMs'),
     _command('flap_offset', SETTINGS, 'Set flap offset (flap showing)', Cmd.SET_FLAP_OFFSET,
-             [_int('offset', 'Offset', -FLAP_OFFSET_ZERO, 255 - FLAP_OFFSET_ZERO, 0, 'steps',
+             [_int('offset', 'Offset', FLAP_OFFSET_MIN, FLAP_OFFSET_MAX, 0, 'steps',
                    bias=FLAP_OFFSET_ZERO)],
              'Shifts the flap showing (show it first) this many steps from its even position, '
              'and turns to it; lowering an offset takes nearly a full revolution. Ignored for '

@@ -101,23 +101,6 @@
   }
 }
 
-/* In the inspector, for a module whose last sync failed. */
-.sync-failed-note {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--orange);
-  border-radius: 6px;
-  background: var(--warn-bg);
-  font-size: .85rem;
-  color: var(--text-soft);
-}
-
-.sync-failed-note strong {
-  display: block;
-  color: var(--orange);
-  margin-bottom: 2px;
-}
-
 /* ── INSPECTOR ── */
 .inspector-panel {
   background: var(--surface-dark);
@@ -138,52 +121,50 @@
   color: var(--text-bright);
 }
 
-.inspector-stats {
+/* The status line under the title: revolutions, drift, and whether the
+   timing settings match the shared ones. */
+.module-status {
   display: flex;
-  justify-content: space-around;
-  background: var(--inset);
-  padding: 14px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-}
-
-.stat-box {
-  text-align: center;
-}
-
-.stat-label {
-  font-size: .75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  font-size: .85rem;
   color: var(--text-muted);
-  text-transform: uppercase;
 }
 
-.stat-val {
+.module-status strong,
+.setting-val {
   font-family: monospace;
-  font-size: 1.5rem;
-  color: var(--display-green);
-  display: block;
+  font-size: .95rem;
+  color: var(--text-bright);
 }
 
-.stat-val-alt {
+.module-status .drift-ok,
+.status-good {
+  color: var(--display-green);
+}
+
+.module-status .drift-warn,
+.status-warn {
   color: var(--orange);
 }
 
-.module-timing {
-  font-size: .8rem;
-  color: var(--text-dim);
-  line-height: 1.5;
+.module-status .drift-bad,
+.status-bad {
+  color: var(--red);
+  font-weight: bold;
 }
 
-.module-timing .mismatch {
+/* In the timing settings' ⓘ: a value that differs from the shared one. */
+.info-tip .mismatch {
   color: var(--orange);
   font-weight: bold;
 }
 
-/* Home offset buttons. */
-.adj-controls {
+/* Home offset buttons, at the end of their row. */
+.adj-buttons {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 4px;
 }
 
@@ -212,22 +193,7 @@
   border: 1px solid var(--adj-pos-border);
 }
 
-.adj-label {
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  padding: 0 8px;
-  font-size: .85rem;
-}
-
-.adj-hint {
-  text-align: center;
-  color: var(--text-faint);
-  font-size: .75rem;
-  margin-top: -6px;
-}
-
-/* The toggles and the manual controls, each a black box of rows. */
+/* The inspector's actions and the module's settings, each a box of rows. */
 .inset-box {
   display: flex;
   flex-direction: column;
@@ -262,6 +228,151 @@
   border-radius: 4px;
 }
 
+/* ── ACTIONS ──
+   The flap picker on the left, with the other actions beside it and the
+   buttons under them. */
+.inset-box.actions-box {
+  display: grid;
+  /* minmax(0, ...) so the actions column shrinks to fit rather than
+     pushing past the box on a phone. */
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "picker rows"
+    "picker buttons";
+  gap: 12px 20px;
+  align-items: start;
+}
+
+.picker {
+  grid-area: picker;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 112px;
+}
+
+.actions-rows {
+  grid-area: rows;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.actions-buttons {
+  grid-area: buttons;
+  align-self: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.actions-buttons .btn {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+/* The flap itself: a split-flap like the live display's (control.css). Its
+   text is sized from its width, as the compose grid's is: a letter is 1.3 x
+   the width (about half the flap's height), and a colour tile, an emoji
+   much wider than a letter, smaller to fit. */
+.flap-picker.live-flap {
+  --flap-w: 84px;
+  width: var(--flap-w);
+  font-size: calc(var(--flap-w) * 1.3);
+  cursor: ns-resize;
+  touch-action: none;   /* a drag turns the flap rather than scrolling the page */
+  border-radius: 4px;
+}
+
+.flap-picker.live-flap.tile {
+  font-size: calc(var(--flap-w) * .75);
+}
+
+.flap-picker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.actions-box.disabled .flap-picker {
+  cursor: default;
+}
+
+/* Turning back: the bottom half lifts away, then the top half comes down. */
+.flap-picker .ffu-back {
+  bottom: 0;
+  border-top: none;
+  border-radius: 0 0 2px 2px;
+  transform-origin: top center;
+  animation: lfBackUp 40ms ease-in forwards;
+}
+
+.flap-picker .ffd-back {
+  top: 0;
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
+  transform-origin: bottom center;
+  transform: rotateX(-90deg);
+  animation: lfBackDown 40ms ease-out forwards;
+  animation-delay: 40ms;
+}
+
+.flap-picker .ffu-back .fc {
+  bottom: 0;
+}
+
+.flap-picker .ffd-back .fc {
+  top: 0;
+}
+
+@keyframes lfBackUp {
+  from { transform: rotateX(0); }
+  to { transform: rotateX(90deg); }
+}
+
+@keyframes lfBackDown {
+  from { transform: rotateX(-90deg); }
+  to { transform: rotateX(0); }
+}
+
+.picker-caption {
+  font-size: .8rem;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+/* Runs down while the picker waits to send. */
+.picker-progress {
+  width: 84px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.picker-progress div {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+}
+
+.picker-status {
+  text-align: center;
+}
+
+.picker-status:empty {
+  display: none;
+}
+
+/* ── FLAP OFFSET ROW ── */
+#flapTuner .input {
+  width: 70px;
+}
+
+.tuner-status:empty {
+  display: none;
+}
+
 @media (max-width: 600px) {
   /* A full row of 16 is too narrow to tap on a phone, so a wide display's
      grid wraps (see phoneColumns() in modules.js). */
@@ -269,12 +380,7 @@
     grid-template-columns: repeat(var(--phone-cols), minmax(0, 72px));
   }
 
-  /* The inspector's buttons wrap rather than run off the edge. */
-  .inspector-panel .button-row {
-    flex-wrap: wrap;
-  }
-
-  .adj-controls {
+  .adj-buttons {
     gap: 3px;
   }
 
@@ -283,15 +389,58 @@
     font-size: .8rem;
   }
 
-  /* The four stats go 2x2, so labels and values each fit on one line. */
-  .inspector-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px 8px;
+  /* The buttons go under both the picker and the other actions. */
+  .inset-box.actions-box {
+    grid-template-areas:
+      "picker rows"
+      "buttons buttons";
+    gap: 12px 10px;
   }
 
-  .stat-val {
-    white-space: nowrap;
+  .picker {
+    width: 84px;
+  }
+
+  .flap-picker.live-flap {
+    --flap-w: 72px;
+  }
+
+  .picker-progress {
+    width: 72px;
+  }
+
+  /* Beside the picker: the label on its own line, then the input and
+     buttons on one that doesn't wrap, with slimmer buttons. */
+  .actions-rows .manual-row {
+    display: grid;
+    grid-template-columns: minmax(46px, 1fr) auto auto;
+    gap: 6px;
+  }
+
+  .actions-rows .manual-label {
+    grid-column: 1 / -1;
+  }
+
+  .actions-rows .btn-sm {
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+
+  /* A manual control's label gets its own line, the input and buttons
+     share the next. */
+  .manual-row {
+    flex-wrap: wrap;
+  }
+
+  .manual-label {
+    flex: 1 0 100%;
+  }
+
+  .manual-row .input,
+  #flapTuner .input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
   }
 
   .settings-grid {

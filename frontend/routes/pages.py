@@ -8,7 +8,7 @@ from display.charset import COLOR_TILES, DISPLAY_CHARS, FLAP_CHARS, SECONDS_PER_
 from display.debug_commands import DEBUG_COMMANDS
 from display.layout import STYLES
 from display.module_protocol import (
-    BROADCAST, DUMP_FIELDS, FLAP_OFFSET_ZERO, GLOBAL_SETTINGS, MODULE_TOGGLES, UNPROVISIONED_ID, Cmd,
+    BROADCAST, DUMP_FIELDS, FLAP_OFFSET_MAX, FLAP_OFFSET_MIN, FLAP_OFFSET_ZERO, GLOBAL_SETTINGS, MODULE_TOGGLES, UNPROVISIONED_ID, Cmd,
     dump_format, message)
 
 bp = Blueprint('pages', __name__)
@@ -41,7 +41,8 @@ def client_config():
         ],
         'dump_format': dump_format(),
         # The flap offset dump, which the Debug page shows as signed steps.
-        'flap_offsets': {'marker': Cmd.DUMP_FLAP_OFFSETS, 'zero': FLAP_OFFSET_ZERO},
+        'flap_offsets': {'marker': Cmd.DUMP_FLAP_OFFSETS, 'zero': FLAP_OFFSET_ZERO,
+                         'min': FLAP_OFFSET_MIN, 'max': FLAP_OFFSET_MAX},
         # Everything the Debug page can send (see display/debug_commands.py).
         'debug_commands': DEBUG_COMMANDS,
         'broadcast': BROADCAST,

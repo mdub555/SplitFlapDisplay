@@ -96,4 +96,10 @@ const api = {
   restoreSettings:    (data) => apiPost('/restore_settings', data, 'Restore failed'),
 
   serialSend:         (cmd) => apiPost('/serial/send', {cmd}, 'Could not send serial command'),
+
+  flapOffsets:        (modId) => apiGet(`/modules/${modId}/flap_offsets`, 'Could not read the flap offsets'),
+  // No toast: the flap offset row says when the module didn't report back.
+  showFlap:           (modId, flap) => apiPost(`/modules/${modId}/show_flap`, {flap}, null),
+  setFlapOffset:      (modId, flap, offset) => apiPost(`/modules/${modId}/flap_offset`, {flap, offset},
+                                                      'Could not set the flap offset'),
 };

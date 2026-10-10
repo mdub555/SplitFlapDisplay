@@ -7,7 +7,8 @@ import serial
 
 from config import SERIAL_PORT, BAUD_RATE
 from display.module_protocol import (
-    BROADCAST, DUMP_SLOT_S, Cmd, dump_reply_pattern, message, parse_dump_fields)
+    BROADCAST, DUMP_SLOT_S, Cmd, dump_reply_pattern, flap_offsets_reply_pattern, message,
+    parse_dump_fields, parse_flap_offsets)
 from display.state import state
 
 serial_lock = threading.Lock()
@@ -107,38 +108,57 @@ def send_raw(cmd: str):
             time.sleep(0.02)
 
 
-def read_dump(mod_id: int, timeout: float = 5.0):
-    """m<ID>? — request and parse a module's dump (its settings, revolution
-    count and drift; see DUMP_FIELDS in module_protocol). Returns a dict or
-    None on timeout/parse failure, or if the port is missing or goes."""
+def _ask(requests, parse, timeout: float):
+    """Sends each message in `requests`, then reads until `parse(received)`
+    returns something other than None, and returns that. Returns None on
+    timeout, or if the port is missing or goes (the messages are still
+    logged, as simulated or not sent)."""
     with serial_lock:
-        if ser is None:
-            return None
         try:
-            ser.reset_input_buffer()
-            request = message(mod_id, Cmd.DUMP_STATE)
-            ser.write(f"{request}\n".encode())
-            ser.flush()
-            state.log_serial(f"SENT: {request}")
+            if ser is not None:
+                ser.reset_input_buffer()
+            for request in requests:
+                if not write_serial(f"{request}\n"):   # which logs it
+                    return None
             start = time.time()
             buffer = ""
             while time.time() - start < timeout:
                 if ser.in_waiting > 0:
-                    chunk = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
-                    buffer += chunk
+                    buffer += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
                     try:
-                        dump = parse_buffer(buffer, mod_id)
+                        result = parse(buffer)
                     except Exception as e:
                         state.log_serial(f"MONITOR ERROR: {e}")
-                        logging.error(f"Parse error reading module {mod_id} dump: {e}")
-                        dump = None
-                    if dump is not None:
+                        logging.error(f"Parse error reading the reply to {requests[-1]}: {e}")
+                        result = None
+                    if result is not None:
                         state.log_serial(f"RECV: {buffer}")
-                        return dump
+                        return result
                 time.sleep(0.05)
         except PORT_ERRORS as e:
             _lost(e)
     return None
+
+
+def read_dump(mod_id: int, timeout: float = 5.0):
+    """m<ID>? — request and parse a module's dump (its settings, revolution
+    count and drift; see DUMP_FIELDS in module_protocol). Returns a dict or
+    None on timeout/parse failure, or if the port is missing or goes."""
+    return _ask([message(mod_id, Cmd.DUMP_STATE)], lambda buffer: parse_buffer(buffer, mod_id), timeout)
+
+
+def read_flap_offsets(mod_id: int, before=(), timeout: float = 5.0):
+    """m<ID>% — request a module's flap offsets: a list of each flap's offset
+    in steps. The messages in `before` are sent first. A busy module answers
+    once it stops moving, so this also waits for any move they start. Returns
+    None on timeout, or if the port is missing or goes."""
+    pattern = flap_offsets_reply_pattern(f'{mod_id:02d}')
+
+    def parse(buffer):
+        match = re.search(pattern, buffer)
+        return parse_flap_offsets(match.group(2)) if match else None
+
+    return _ask([*before, message(mod_id, Cmd.DUMP_FLAP_OFFSETS)], parse, timeout)
 
 
 def read_all_dumps(max_id: int, margin: float = 0.5, on_reply=None):

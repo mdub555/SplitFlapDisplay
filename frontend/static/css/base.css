@@ -2,6 +2,27 @@
    Page-specific styles are in control.css, apps.css, modules.css, modals.css
    and debug.css. */
 
+/* Kosugi Maru, the font on the physical flaps (static/fonts/README.md): the
+   two subsets of it the flaps need, served from here so no internet
+   connection is needed. */
+@font-face {
+  font-family: 'Kosugi Maru';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/kosugi-maru-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF;
+}
+
+@font-face {
+  font-family: 'Kosugi Maru';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/kosugi-maru-heart.woff2') format('woff2');
+  unicode-range: U+2665;
+}
+
 :root {
   /* Native controls (selects, date pickers, scrollbars) follow the theme. */
   color-scheme: dark;
@@ -79,6 +100,9 @@
   --focus: #6ea8fe;          /* the keyboard focus ring */
 
   --mono: 'Courier New', monospace;
+  /* Anything drawn as a flap: the live display, the compose grid and the
+     previews, the flap picker, the ° and ♥ buttons, the flap table. */
+  --flap-font: 'Kosugi Maru', var(--mono);
 }
 
 /* Light mode, when the system asks for it. Only the theme's colours change;
@@ -744,4 +768,66 @@ input:checked + .slider:before {
   .mod-cell.sync-flash {
     animation-duration: 1.2s !important;
   }
+}
+
+/* ── INFO TIPS (the info() macro, info.js) ── */
+/* An explanation behind an ⓘ, shown beneath it across the nearest .has-info. */
+.has-info {
+  position: relative;
+}
+
+/* A label with its ⓘ just after it. */
+.label-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.info-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border: 1px solid var(--border-input);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font: italic bold 11px/1 Georgia, serif;
+  cursor: pointer;
+}
+
+.info-btn:hover,
+.info-btn[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.info-tip {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: var(--surface-dark);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
+  color: var(--text-soft);
+  font-size: .8rem;
+  font-weight: normal;
+  line-height: 1.4;
+  text-align: left;
+  text-transform: none;
+}
+
+.info-btn:hover + .info-tip,
+.info-btn:focus-visible + .info-tip,
+.info-btn[aria-expanded="true"] + .info-tip {
+  display: block;
 }

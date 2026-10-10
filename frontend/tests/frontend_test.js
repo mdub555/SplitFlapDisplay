@@ -1,4 +1,4 @@
-const { dom, window, calls, MockEventSource, savedPlaylists } = require('./harness');
+const { dom, window, calls, MockEventSource, savedPlaylists, tunedModule } = require('./harness');
 
 const document = window.document;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -201,19 +201,41 @@ async function main() {
   const phoneColumns = globalVar('phoneColumns');
   check('on a phone the module grid wraps at a whole fraction of the display width',
     [[16, 8], [15, 5], [12, 6], [10, 5], [9, 9], [8, 8], [13, 8], [1, 1]].every(([cols, n]) => phoneColumns(cols) === n));
-  check('inspector shows the selected module\'s drift', document.getElementById('inspectDrift').textContent === '3');
+  check('inspector shows the selected module\'s drift, coloured as fine',
+    document.getElementById('inspectDrift').textContent === '3' &&
+    document.getElementById('inspectDrift').classList.contains('drift-ok'));
+  const driftClass = globalVar('driftClass');
+  check('drift is fine under 8 steps either way, worth a look under 16, and bad from 16',
+    [[0, 'ok'], [7, 'ok'], [-7, 'ok'], [8, 'warn'], [-15, 'warn'], [16, 'bad'], [-40, 'bad']]
+      .every(([drift, level]) => driftClass(drift) === `drift-${level}`));
   check('inspector shows the revolution count', document.getElementById('inspectRevolutions').textContent === '12,345');
+  check('the home offset is shown with its buttons', document.getElementById('inspectOffset').textContent === '2832');
   const timing = document.getElementById('inspectTiming');
-  check('inspector shows the timing the module reported',
-    timing.textContent.startsWith('From last sync: step delay 1000 µs · homing step delay 1800 µs · debounce 100 ms · ' +
+  check('a single timing setting that differs is named in the status line',
+    timing.textContent === '⚠ Stagger is 120 ms here, 150 ms shared' && timing.classList.contains('status-warn'));
+  const timingTip = document.getElementById('timingTip');
+  check('the timing ⓘ lists every value the module reported',
+    timingTip.textContent.startsWith('From last sync: step delay 1000 µs · homing step delay 1800 µs · debounce 100 ms · ' +
       'ramp start delay 3000 µs · ramp length 0 steps · settle 0 ms · stagger 120 ms'));
-  const flagged = [...timing.querySelectorAll('.mismatch')].map(s => s.dataset.key);
+  const flagged = [...timingTip.querySelectorAll('.mismatch')].map(s => s.dataset.key);
   check('only values that differ from the shared settings are highlighted',
     flagged.length === 1 && flagged[0] === 'staggerMs');
+  const settingsBefore = globalVar('currentSettings');
+  settingsBefore.modules['0'].staggerMs = 150;
+  globalVar('refreshModuleTiming')();
+  check('timing that matches says so', timing.textContent === '✓ Matches the shared settings' &&
+    timing.classList.contains('status-good'));
+  settingsBefore.modules['0'].staggerMs = 120;
+  settingsBefore.modules['0'].settleMs = 5;
+  globalVar('refreshModuleTiming')();
+  check('several that differ are counted', timing.textContent === '⚠ 2 timing settings differ from the shared settings');
+  settingsBefore.modules['0'].settleMs = 0;
   click(document.querySelector('#modMatrix .mod-cell[data-id="1"]'));
   await sleep(20);
-  check('unprovisioned module shows no drift', document.getElementById('inspectDrift').textContent === '---');
-  check('unprovisioned module shows no timing', document.getElementById('inspectTiming').textContent === '');
+  check('unprovisioned module shows no drift', document.getElementById('inspectDrift').textContent === '---' &&
+    document.getElementById('inspectDrift').className === '');
+  check('unprovisioned module shows no timing', document.getElementById('inspectTiming').textContent === '' &&
+    document.querySelector('[aria-controls="timingTip"]').hidden);
   click(document.querySelector('#modMatrix .mod-cell[data-id="2"]'));
   await sleep(20);
   check('module synced from older firmware asks for a sync',
@@ -274,12 +296,13 @@ async function main() {
   const realFetch = window.fetch;
 
   console.log('\n--- Optimistic-UI revert on failure (calibration timeout, HTTP 500 body) ---');
-  const inspectCalib = document.getElementById('inspectCalib');
-  const before = inspectCalib.textContent;
+  const statusTiming = document.getElementById('inspectTiming');
+  const before = statusTiming.textContent;
   window.confirm = () => true; // jsdom has no real confirm() dialog
   click(document.querySelector('[data-onclick="calibrateSelected"]'));
+  check('the status line says the reel is being measured', statusTiming.textContent === 'Measuring the reel…');
   await sleep(20);
-  check('calibration display reverted after simulated 500/Timeout response', inspectCalib.textContent === before);
+  check('calibration status reverted after simulated 500/Timeout response', statusTiming.textContent === before);
 
   console.log('\n--- Offset adjust buttons carry delta via dataset, not string-interpolated onclick ---');
   const plusOne = document.querySelector('[data-onclick="adjustOffset"][data-delta="1"]');
@@ -327,6 +350,11 @@ async function main() {
   check('toggles are disabled and cleared for an unprovisioned module',
     MODULE_TOGGLES_ALL().every(k => modToggle(k).disabled && !modToggle(k).checked) &&
     document.getElementById('moduleToggles').classList.contains('disabled'));
+  check('an unprovisioned module\'s settings and actions are disabled, but their ⓘ still open',
+    ['moduleConfig', 'manualControls'].every(id => document.getElementById(id).classList.contains('disabled')) &&
+    document.querySelector('#moduleConfig [data-onclick="adjustOffset"]').disabled &&
+    document.getElementById('flapPicker').getAttribute('aria-disabled') === 'true' &&
+    [...document.querySelectorAll('#moduleConfig .info-btn, #manualControls .info-btn')].every(b => !b.disabled));
   click(document.querySelector('#modMatrix .mod-cell[data-id="0"]'));
   await sleep(20);
   check('selecting a provisioned module again re-enables its toggles', !modToggle('motorClockwise').disabled);
@@ -514,6 +542,112 @@ async function main() {
     debugSelect.value === 'show_char' && preview() === 'm10-C');
   click(document.querySelector('[data-onclick="clearDebugLog"]'));
   check('the log can be cleared', logLines().length === 0);
+
+  console.log('\n--- The flap picker turns, then shows its character ---');
+  const pickModule = id => click(document.querySelector(`#modMatrix .mod-cell[data-id="${id}"]`));
+  click(document.getElementById('tab-modules'));
+  await sleep(20);
+  const picker = document.getElementById('flapPicker');
+  const pickerApi = globalVar('flapPicker');
+  pickerApi.delayMs = 60;   // rather than 3 s
+  const pickerName = () => document.getElementById('pickerName').textContent;
+  const wheel = deltaY => picker.dispatchEvent(new window.WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true }));
+  const pickerKey = k => picker.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+  const flapCalls = () => calls.filter(c => /show_flap|flap_offset/.test(c.url)).map(c => `${c.url} ${c.body}`);
+  globalVar('liveState').state = '  D';
+  pickModule(0);
+  pickModule(2);
+  check('the picker starts at the character the module is showing', pickerName() === 'D · flap 4' &&
+    picker.getAttribute('aria-valuetext') === 'D' && picker.getAttribute('aria-disabled') === 'false');
+  calls.length = 0;
+  wheel(40);
+  check('scrolling down turns it forward a flap', pickerName() === 'E · flap 5' && !picker.classList.contains('tile'));
+  wheel(30);
+  wheel(30);
+  check('small scrolls add up to a flap', pickerName() === 'F · flap 6');
+  wheel(-100);
+  check('a mouse wheel\'s notch turns it one flap', pickerName() === 'E · flap 5');
+  wheel(-100);
+  check('scrolling up turns it back', pickerName() === 'D · flap 4' &&
+    document.getElementById('pickerStatus').textContent === 'Sending…');
+  check('nothing is sent while it\'s still turning', flapCalls().length === 0);
+  await sleep(120);
+  check('once it stands still, the module shows it', flapCalls().join() === '/modules/2/show_flap {"flap":4}' &&
+    document.getElementById('pickerStatus').textContent === '');
+  calls.length = 0;
+  pickerKey('ArrowUp');
+  pickerKey('ArrowUp');
+  pickerKey('Escape');
+  await sleep(120);
+  check('Escape cancels it', pickerName() === 'B · flap 2' && flapCalls().length === 0);
+  pickerKey('ArrowUp');
+  pickerKey('ArrowUp');
+  pickerKey('ArrowUp');
+  check('it wraps from blank to the last flap', picker.getAttribute('aria-valuenow') === '63');
+  check('a colour tile is marked, to draw it smaller', picker.classList.contains('tile'));
+  pickerKey('Enter');
+  await sleep(20);
+  check('Enter sends it straight away', flapCalls().join() === '/modules/2/show_flap {"flap":63}');
+
+  console.log('\n--- The flap offset row works on the flap the module is showing ---');
+  const tuner = id => document.getElementById(id);
+  const tunerButton = action => tuner('flapTuner').querySelector(`[data-onclick="${action}"]`);
+  const nudge = delta => tuner('flapTuner').querySelector(`[data-onclick="tunerNudge"][data-delta="${delta}"]`);
+  check('it names the flap the picker moved the module to, and shows its offset',
+    tuner('tunerFlapName').textContent === '🟪 (p)' && tuner('tunerOffset').value === '0' &&
+    !tuner('tunerOffset').disabled && tuner('tunerSummary').textContent === 'No flap has an offset.');
+  pickerKey('Home');
+  pickerKey('ArrowDown');
+  pickerKey('ArrowDown');
+  pickerKey('Enter');
+  await sleep(20);
+  calls.length = 0;
+  click(nudge(4));
+  check('while the module moves, the row is disabled and says what is happening',
+    nudge(4).disabled && tuner('tunerStatus').textContent === 'Moving B to +4…');
+  await sleep(20);
+  check('+4 sets the showing flap four steps further on',
+    flapCalls().join() === '/modules/2/flap_offset {"flap":2,"offset":4}' && tuner('tunerOffset').value === '4' &&
+    tuner('tunerSummary').textContent === 'Flaps with an offset: B +4' && tuner('tunerStatus').textContent === '');
+  calls.length = 0;
+  tuner('tunerOffset').value = '-3';
+  click(tunerButton('tunerApply'));
+  check('lowering an offset warns it takes nearly a revolution',
+    tuner('tunerStatus').textContent === 'Moving B to -3 (nearly a full revolution)…');
+  await sleep(20);
+  check('SET sends the offset typed', flapCalls().join() === '/modules/2/flap_offset {"flap":2,"offset":-3}' &&
+    tunedModule.offsets[2] === -3);
+  calls.length = 0;
+  tuner('tunerOffset').value = '200';
+  click(tunerButton('tunerApply'));
+  await sleep(20);
+  check('an offset out of range is refused', flapCalls().length === 0 && lastToastText().includes('from -128 to 127'));
+  pickerKey('Home');
+  pickerKey('Enter');
+  await sleep(20);
+  check('flap 0 is left to the home offset', tuner('tunerFlapName').textContent === 'blank' &&
+    tuner('tunerOffset').disabled && tuner('tunerOffset').placeholder === 'home offset' && nudge(4).disabled &&
+    !tuner('flapTuner').querySelector('.info-btn').disabled);
+  pickModule(2);
+  check('picking the same module keeps its flap', tuner('tunerFlapName').textContent === 'blank');
+  pickModule(0);
+  check('another module starts again', tuner('tunerFlapName').textContent === '—' &&
+    tuner('tunerSummary').textContent === '' && tuner('tunerOffset').disabled);
+  calls.length = 0;
+  pickerKey('ArrowDown');
+  pickerKey('Enter');
+  pickModule(2);   // while module 0 is still moving
+  await sleep(20);
+  check('a reply for a module no longer selected is not shown as this one\'s',
+    flapCalls().join() === '/modules/0/show_flap {"flap":1}' && tuner('tunerFlapName').textContent === '—');
+  calls.length = 0;
+  pickModule(1);   // not provisioned
+  wheel(40);
+  pickerKey('ArrowDown');
+  await sleep(120);
+  check('an unprovisioned module can\'t be picked or tuned', picker.getAttribute('aria-disabled') === 'true' &&
+    pickerName() === 'blank · flap 0' && flapCalls().length === 0 && tuner('tunerOffset').disabled);
+  click(document.getElementById('tab-debug'));
 
   console.log('\n--- Typing straight into the compose grid ---');
   click(document.getElementById('tab-control'));

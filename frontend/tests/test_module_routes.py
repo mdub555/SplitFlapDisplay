@@ -48,7 +48,8 @@ class ModuleRoutesTest(unittest.TestCase):
             'settings.store': _module('settings.store', settings=self.settings,
                                       save_settings=save_settings),
             'display.serial_link': _module('display.serial_link', send_raw=self.sent.append,
-                                           read_dump=None, read_all_dumps=None, calibrate_module=None),
+                                           read_dump=None, read_all_dumps=None, read_flap_offsets=None,
+                                           calibrate_module=None),
             'display.state': _module('display.state', state=self.state),
         }
         patcher = mock.patch.dict(sys.modules, fakes)

@@ -5,4 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initControlPage();
   buildAppsGrid();   // fills appsByKey, so the live display can name a running app straight away
   debugPage.init();
+  flapTuner.init();
+  flapPicker.init();
 });
