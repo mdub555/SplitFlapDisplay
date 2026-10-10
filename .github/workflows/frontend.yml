@@ -1,0 +1,54 @@
+# Checks the web frontend: runs the backend's Python tests and the jsdom
+# tests of the page.
+name: Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - frontend/**
+      - .github/workflows/frontend.yml
+  pull_request:
+    paths:
+      - frontend/**
+      - .github/workflows/frontend.yml
+  workflow_dispatch:
+
+jobs:
+  python-tests:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The Python the Docker image runs.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: frontend/requirements.txt
+      - run: pip install -r frontend/requirements.txt
+      - name: Run the tests
+        working-directory: frontend
+        run: python -m unittest discover -s tests
+
+  js-tests:
+    name: JS tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The harness renders the page with Flask, as the browser would get it.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: frontend/requirements.txt
+      - run: pip install -r frontend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install jsdom
+        working-directory: frontend/tests
+        run: npm install
+      - name: Run the tests
+        working-directory: frontend/tests
+        run: npm test

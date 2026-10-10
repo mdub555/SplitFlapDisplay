@@ -352,3 +352,5 @@ npm test
   animation orders, the SSE subscriber queues and the app base classes. The
   route tests load each route file with the settings store and serial link
   faked, so nothing touches a serial port or settings.json.
+- CI (`.github/workflows/frontend.yml`) runs both suites on every pull
+  request and push to `main` that touches `frontend/`.
