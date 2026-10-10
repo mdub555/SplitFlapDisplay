@@ -317,6 +317,10 @@
   animation-delay: 40ms;
 }
 
+.flap-picker .ff.ff-held {
+  animation: none;   /* a drag sets its angle (flapPicker.drawTurn()) */
+}
+
 .flap-picker .ffu-back .fc {
   bottom: 0;
 }
@@ -354,14 +358,6 @@
   width: 0;
   height: 100%;
   background: var(--accent);
-}
-
-.picker-status {
-  text-align: center;
-}
-
-.picker-status:empty {
-  display: none;
 }
 
 /* ── FLAP OFFSET ROW ── */
