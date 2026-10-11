@@ -7,7 +7,7 @@
 
 const flapPicker = {
   index: 0,               // the flap showing, as an index into CHAR_MAP
-  delayMs: 3000,          // how long it has to stand still before it's sent
+  delayMs: 2000,          // how long it has to stand still before it's sent
   timer: null,
   wheelDelta: 0,          // scrolling not yet turned into a step
   drag: null,             // while a pointer is down on it: see onPointerDown()
