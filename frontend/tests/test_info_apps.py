@@ -97,7 +97,36 @@ class CalendarTest(unittest.TestCase):
         self.assertIn('FETCH ERROR', frames[0].text)
 
 
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fixtures')
+
+
 class WordOfTheDayTest(unittest.TestCase):
+    # The start of Merriam-Webster's feed on 11 Oct 2026, as a browser showed
+    # it: prefixes with no xmlns, and the description's HTML left raw.
+    with open(os.path.join(FIXTURES, 'mw_wotd_as_pasted.xml'), encoding='utf-8') as f:
+        REAL = f.read()
+
+    def test_the_real_feed(self):
+        self.assertEqual(word_of_the_day.parse_feed(self.REAL),
+                         {'word': 'galore', 'part': 'adjective', 'meaning': 'in large numbers or amounts'})
+
+    def test_the_real_feed_well_formed(self):
+        # The same item with its namespaces declared and the HTML escaped, as
+        # the raw feed is likely to be.
+        desc = self.REAL.split('<description>')[1].split('</description>')[0]
+        feed = self.REAL.replace('<rss version="2.0">', '<rss version="2.0" '
+                                 'xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" '
+                                 'xmlns:merriam="https://www.merriam-webster.com">')
+        feed = feed.replace(desc, f'<![CDATA[{desc}]]>')
+        self.assertEqual(word_of_the_day.parse_feed(feed.encode()),
+                         {'word': 'galore', 'part': 'adjective', 'meaning': 'in large numbers or amounts'})
+
+    def test_the_real_description_without_a_short_definition(self):
+        feed = self.REAL.replace('<merriam:shortdef>in large numbers or amounts</merriam:shortdef>', '')
+        wotd = word_of_the_day.parse_feed(feed)
+        self.assertEqual(wotd['part'], 'adjective')
+        self.assertTrue(wotd['meaning'].startswith('Galore is an informal adjective'))
+
     def parse(self, description, extra=''):
         return word_of_the_day.parse_feed(
             f'<rss xmlns:mw="https://www.merriam-webster.com"><channel><item><title>ebullient</title>{extra}'
