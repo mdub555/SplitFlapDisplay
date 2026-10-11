@@ -176,13 +176,19 @@ class OnThisDayTest(unittest.TestCase):
     def test_bc_years(self):
         self.assertEqual(on_this_day.year_label(-44), '44 BC')
 
+    def test_the_heading_says_on_this_day_when_it_fits(self):
+        self.assertEqual(on_this_day.year_heading(Grid(4, 16), 1962), 'ON THIS DAY 1962')
+        self.assertEqual(on_this_day.year_heading(Grid(4, 16), 980), 'ON THIS DAY 980')
+        self.assertEqual(on_this_day.year_heading(Grid(3, 15), 1962), '=== IN 1962 ===')
+        self.assertEqual(on_this_day.year_heading(Grid(4, 16), -44), '=== IN 44 BC ===')
+
     def test_pages_from_the_feed(self):
         grid = Grid(3, 15)
         data = {'events': [{'year': 1962, 'text': 'The council opens.'}, {'year': 2020, 'text': 'Too new'}]}
         with mock.patch.object(requests, 'get', return_value=_response(data=data)) as get:
             frames = on_this_day.OnThisDayApp().get_pages({}, {}, grid)
         self.assertIn('/onthisday/events/', get.call_args[0][0])
-        self.assertEqual(_lines(grid, frames[1].text), ['      1962     ', '  THE COUNCIL  ', '     OPENS.    '])
+        self.assertEqual(_lines(grid, frames[1].text), ['=== IN 1962 ===', '  THE COUNCIL  ', '     OPENS.    '])
         self.assertEqual(len(frames), 2)
 
     def test_the_real_feed(self):

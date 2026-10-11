@@ -38,6 +38,14 @@ def year_label(year):
     return f'{-year} BC' if year < 0 else str(year)
 
 
+def year_heading(grid, year):
+    """The row above an event: ON THIS DAY 1962 when that fits across the
+    display, otherwise === IN 1962 ===."""
+    label = year_label(year)
+    heading = f'ON THIS DAY {label}'
+    return heading if len(heading) <= grid.cols else grid.banner(f'IN {label}')
+
+
 class OnThisDayApp(App):
     key = 'on_this_day'
     name = 'On This Day'
@@ -69,5 +77,5 @@ class OnThisDayApp(App):
         # as many pages as it takes.
         frames = row_frames(grid, [('ON THIS DAY', today.strftime('%B %d').upper().replace(' 0', ' '))], delay=4)
         for year, text in picked:
-            frames += text_frames(grid, plain_text(text), delay=5, heading=year_label(year))
+            frames += text_frames(grid, plain_text(text), delay=5, heading=year_heading(grid, year))
         return frames
