@@ -73,8 +73,15 @@ class WordOfTheDayApp(App):
         if not wotd or not wotd['word']:
             return row_frames(grid, [('WORD OF THE DAY', 'FETCH ERROR')], delay=5)
         word = plain_text(wotd['word'])
-        # The word on its own, then its meaning under it, as many pages as
-        # the meaning takes.
+        meaning = plain_text(wotd['meaning'])
+        # The word, its part of speech and its meaning on one page when they
+        # fit there.
+        lines = [*grid.wrap(word), plain_text(wotd['part']), *grid.wrap(meaning, max_lines=len(meaning) + 1)]
+        lines = [line for line in lines if line]
+        if len(lines) <= grid.rows:
+            return row_frames(grid, [lines], delay=8)
+        # When they don't: the word on its own, then its meaning under it, as
+        # many pages as the meaning takes.
         intro = [line for line in ('WORD OF THE DAY', *grid.wrap(word), plain_text(wotd['part'])) if line]
         frames = row_frames(grid, [intro], delay=6)
         if wotd['meaning']:

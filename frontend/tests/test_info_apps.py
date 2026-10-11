@@ -139,14 +139,22 @@ class WordOfTheDayTest(unittest.TestCase):
         wotd = self.parse('<p>anything</p>', extra='<mw:shortdef>lively</mw:shortdef>')
         self.assertEqual(wotd['meaning'], 'lively')
 
-    def test_pages(self):
-        grid = Grid(4, 16)
-        wotd = {'word': 'ebullient', 'part': 'adjective', 'meaning': 'full of lively enthusiasm'}
+    def pages(self, grid, meaning):
+        wotd = {'word': 'galore', 'part': 'adjective', 'meaning': meaning}
         with mock.patch.object(word_of_the_day, '_fetch', return_value=wotd):
             frames = word_of_the_day.WordOfTheDayApp().get_pages({}, {}, grid)
-        self.assertEqual([_lines(grid, f.text) for f in frames], [
-            ['WORD OF THE DAY ', '   EBULLIENT    ', '   ADJECTIVE    ', ' ' * 16],
-            ['   EBULLIENT    ', ' FULL OF LIVELY ', '   ENTHUSIASM   ', ' ' * 16],
+        return [_lines(grid, f.text) for f in frames]
+
+    def test_one_page_when_it_all_fits(self):
+        self.assertEqual(self.pages(Grid(4, 16), 'in large numbers or amounts'), [
+            ['     GALORE     ', '   ADJECTIVE    ', 'IN LARGE NUMBERS', '   OR AMOUNTS   '],
+        ])
+
+    def test_the_meaning_on_its_own_pages_when_it_does_not(self):
+        self.assertEqual(self.pages(Grid(3, 15), 'in large numbers or amounts'), [
+            ['WORD OF THE DAY', '     GALORE    ', '   ADJECTIVE   '],
+            ['     GALORE    ', '    IN LARGE   ', '   NUMBERS OR  '],
+            ['     GALORE    ', '    AMOUNTS    ', '               '],
         ])
 
 
