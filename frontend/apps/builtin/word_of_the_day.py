@@ -21,43 +21,14 @@ def _paragraphs(markup):
     return [p.strip() for p in text.split('\n') if p.strip()]
 
 
-def _first_item(xml_text):
-    """(title, description markup, short definition) of the feed's newest
-    item. A feed the XML parser refuses (say, a namespace prefix like
-    merriam: used without being declared, or HTML entities like &nbsp; left
-    in the description) is read with plain pattern matching instead."""
-    if isinstance(xml_text, bytes):
-        xml_text = xml_text.decode('utf-8', errors='replace')
-    try:
-        item = ET.fromstring(xml_text).find('./channel/item')
-        desc = item.find('description')
-        # The description's HTML may be escaped text or (if it was left raw)
-        # child elements.
-        markup = '' if desc is None else (desc.text or '') + ''.join(
-            ET.tostring(child, encoding='unicode') for child in desc)
-        # Any tag whose name ends in "shortdef", whatever its namespace.
-        shortdef = next((el.text for el in item if el.tag.lower().endswith('shortdef') and el.text), '')
-        return item.findtext('title') or '', markup, shortdef
-    except ET.ParseError:
-        item = re.search(r'<item\b.*?</item>', xml_text, re.S)
-        item = item.group(0) if item else ''
-
-        def tag(name):
-            found = re.search(rf'<(?:[\w-]+:)?{name}\b[^>]*>(.*?)</(?:[\w-]+:)?{name}>', item, re.S)
-            text = found.group(1) if found else ''
-            return re.sub(r'^\s*<!\[CDATA\[(.*)\]\]>\s*$', r'\1', text, flags=re.S)
-
-        return html.unescape(tag('title')), tag('description'), html.unescape(tag('shortdef'))
-
-
 def parse_feed(xml_text):
     """{'word', 'part', 'meaning'} for the newest item in the feed. The
     meaning is the feed's short definition if it has one, else the
     paragraph after a WHAT IT MEANS heading, else the first definition-like
     paragraph. The part of speech is '' if the description doesn't give it."""
-    word, markup, shortdef = _first_item(xml_text)
-    word = word.strip()
-    paragraphs = _paragraphs(markup)
+    item = ET.fromstring(xml_text).find('./channel/item')
+    word = (item.findtext('title') or '').strip()
+    paragraphs = _paragraphs(item.findtext('description') or '')
 
     def is_heading(p):
         return p.upper() == p or p.lower().startswith("merriam-webster's word of the day")
@@ -70,7 +41,8 @@ def parse_feed(xml_text):
     def part_of(p):
         return next((pos for pos in PARTS_OF_SPEECH if re.search(rf'\b{pos}\b', p.lower())), '')
 
-    meaning = shortdef.strip()
+    # Any tag whose name ends in "shortdef", whatever its namespace.
+    meaning = next((el.text.strip() for el in item if el.tag.lower().endswith('shortdef') and el.text), '')
     if not meaning:
         after_heading = [p for prev, p in zip(paragraphs, paragraphs[1:]) if prev.upper() == 'WHAT IT MEANS']
         body = [p for p in paragraphs if not is_heading(p) and not is_word_line(p)]
