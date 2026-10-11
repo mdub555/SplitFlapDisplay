@@ -33,7 +33,8 @@ class WorldClockApp(App):
         for zone in zones:
             try:
                 label = LABELS.get(zone, zone.split('/')[-1][:4].upper())
-                rows.append(f"{label:<4} {clock(datetime.now(pytz.timezone(zone)), spaced=False)}")
+                # Right-aligned, so 9:30AM lines up under 12:30PM.
+                rows.append(f"{label:<4} {clock(datetime.now(pytz.timezone(zone)), spaced=False):>7}")
             except Exception:
                 rows.append('ERR')
         # One zone per row.
