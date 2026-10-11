@@ -16,7 +16,7 @@ function buildAppCard(app) {
       el('span', {class: 'app-name'}, app.name),
       el('span', {class: 'app-running sr-only'}),
       el('span', {class: 'app-desc'}, app.desc)),
-    app.settings_fields.length || app.global_settings.length ? gear : '');
+    app.settings_fields.length || app.global_settings.length || app.oauth ? gear : '');
 }
 
 // Fills the grid (and appsByKey) once; resolves when that's done. After a

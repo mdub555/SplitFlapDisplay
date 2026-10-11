@@ -47,7 +47,7 @@ async function main() {
   check('the live display sits above the tabs, outside every page',
     !document.getElementById('liveGrid').closest('.page') &&
     !!(document.getElementById('liveGrid').compareDocumentPosition(document.querySelector('.tab-bar')) & window.Node.DOCUMENT_POSITION_FOLLOWING));
-  check('apps grid pre-populated by main.js', Object.keys(window.appsByKey).length === 3);
+  check('apps grid pre-populated by main.js', Object.keys(window.appsByKey).length === 4);
 
   console.log('\n--- Debug page ---');
   click(document.getElementById('tab-debug'));
@@ -61,7 +61,7 @@ async function main() {
   await sleep(20);
   check('apps tab becomes active on click', document.getElementById('page-apps').classList.contains('active'));
   check('control tab becomes inactive', !document.getElementById('page-control').classList.contains('active'));
-  check('apps grid rendered with 3 cards', document.querySelectorAll('#appsGrid .app-card').length === 3);
+  check('apps grid rendered with 4 cards', document.querySelectorAll('#appsGrid .app-card').length === 4);
 
   console.log('\n--- Global settings live on the Apps page ---');
   const globalGrid = document.getElementById('globalSettingsGrid');
@@ -114,6 +114,39 @@ async function main() {
   const ytModal = document.getElementById('appSettingsFields').textContent;
   check('modal names the global settings it uses',
     ytModal.includes('Also uses from Global Settings: YouTube Channel ID.') && !ytModal.includes('No configurable settings'));
+  click(document.querySelector('#appSettingsModal [data-onclick="closeAppSettings"]'));
+  await sleep(20);
+
+  console.log('\n--- Connecting an app that signs in with OAuth (paste the address back) ---');
+  const opened = [];
+  window.open = () => {
+    const tab = { location: null, opener: 'page', closed: false, close() { this.closed = true; } };
+    opened.push(tab);
+    return tab;
+  };
+  click(document.querySelector('#appsGrid .app-card[data-app="spotify"] .app-gear'));
+  await sleep(20);
+  const oauthSection = document.querySelector('#appSettingsFields .oauth-section');
+  check('the modal has an account section', !!oauthSection && oauthSection.textContent.includes('Not connected'));
+  check('it shows the redirect URI to register', oauthSection.textContent.includes('http://127.0.0.1:8888/callback'));
+  check('the paste box is hidden until Connect', document.getElementById('oauthPaste').hidden);
+  document.getElementById('asf_spotify_client_id').value = 'abc123';
+  calls.length = 0;
+  click(oauthSection.querySelector('[data-onclick="oauthConnect"]'));
+  await sleep(30);
+  check('Connect saves the Client ID first', calls.some(c => c.url === '/apps/spotify/settings' && JSON.parse(c.body).spotify_client_id === 'abc123'));
+  check('then starts signing in', calls.findIndex(c => c.url === '/apps/spotify/oauth/start') > calls.findIndex(c => c.url === '/apps/spotify/settings'));
+  check('the sign-in page opens in the tab opened on the click', opened.length === 1 && opened[0].location.startsWith('https://accounts.spotify.com/authorize') && opened[0].opener === null);
+  check('the paste box shows', !document.getElementById('oauthPaste').hidden);
+  document.getElementById('oauthPasteUrl').value = 'http://127.0.0.1:8888/callback?code=xyz&state=abc';
+  click(document.querySelector('[data-onclick="oauthFinish"]'));
+  await sleep(30);
+  check('Finish posts the pasted address', calls.some(c => c.url === '/apps/spotify/oauth/finish' && JSON.parse(c.body).url.includes('code=xyz')));
+  const connectedSection = document.querySelector('#appSettingsFields .oauth-section');
+  check('the section now says connected, with Disconnect', connectedSection.textContent.includes('✓ Connected') && !!connectedSection.querySelector('[data-onclick="oauthDisconnect"]'));
+  click(connectedSection.querySelector('[data-onclick="oauthDisconnect"]'));
+  await sleep(30);
+  check('Disconnect goes back to not connected', document.querySelector('#appSettingsFields .oauth-section').textContent.includes('Not connected'));
   click(document.querySelector('#appSettingsModal [data-onclick="closeAppSettings"]'));
   await sleep(20);
 

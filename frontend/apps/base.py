@@ -154,6 +154,10 @@ class App:
     # filled in for this app to work, like an API key, so its settings modal
     # can say where to set them. (Not the timezone: it always has a value.)
     global_settings: list = []
+    # An apps.oauth.OAuthProvider, for an app that signs in to a service
+    # (Spotify): its settings modal gets a Connect button, and get_pages()
+    # gets a token from self.access_token(settings).
+    oauth = None
 
     def setting(self, settings: dict, key: str):
         """settings[key], falling back to the default of the field for it:
@@ -163,6 +167,12 @@ class App:
             if f.key == key:
                 return settings.get(key, f.default)
         raise KeyError(f"{type(self).__name__} has no setting {key!r}; add a SettingField for it")
+
+    def access_token(self, settings: dict):
+        """A current OAuth access token for the app's service, or None if it
+        isn't connected (see apps/oauth.py)."""
+        from apps import oauth   # deferred: it reads config, which base needn't
+        return oauth.access_token(self, settings)
 
     def get_pages(self, settings: dict, cache: dict, grid: Grid) -> list:
         """Return a list of Frame objects representing everything this app

@@ -32,6 +32,11 @@ class AppRegistry:
         for f in app.settings_fields:
             if f.key in owners:
                 raise ValueError(f'{name}: setting {f.key!r} is already used by {owners[f.key]}')
+        if app.oauth is not None:
+            own = {f.key for f in app.settings_fields}
+            for key in (app.oauth.client_id_key, app.oauth.client_secret_key):
+                if key is not None and key not in own:
+                    raise ValueError(f"{name}: oauth needs a settings field {key!r}")
         unknown = set(app.global_settings) - {f.key for f in GLOBAL_FIELDS}
         if unknown:
             raise ValueError(f'{name}: global_settings names unknown fields {sorted(unknown)}')

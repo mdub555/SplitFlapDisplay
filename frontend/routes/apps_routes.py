@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify
 
+from apps import oauth
 from apps.base import clean_settings
 from apps.registry import registry
 from settings.store import settings, save_settings
@@ -21,9 +22,19 @@ def list_apps():
             'settings_fields': [f.to_json() for f in a.settings_fields],
             # Labels of the Global Settings fields it uses, for its modal.
             'global_settings': [labels[key] for key in a.global_settings],
+            'oauth': _oauth_info(a),
         }
         for a in registry.list_all()
     ])
+
+
+def _oauth_info(app):
+    """What the settings modal needs to show an app's Connect button, or
+    None for an app that doesn't sign in to anything."""
+    if not app.oauth:
+        return None
+    return {'provider': app.oauth.name, 'connected': oauth.is_connected(app.key),
+            'redirect_uri': app.oauth.redirect_uri, 'help': app.oauth.help}
 
 
 @bp.route('/apps/<app_key>/settings', methods=['POST'])

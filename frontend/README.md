@@ -180,6 +180,20 @@ Settings, so prefix them with the app's key. Start-up fails, naming both,
 if a key or setting is already taken. A setting more than one app needs
 (like an API key) belongs in `GLOBAL_FIELDS` in `settings/schema.py`.
 
+An app that signs in to a service (Spotify) sets `oauth` to an
+`OAuthProvider` (`apps/oauth.py`): where to sign in and get tokens, the
+scopes, and which of its settings fields holds the Client ID. Its settings
+modal then gets a Connect button, and `get_pages()` calls
+`self.access_token(settings)` for a token, refreshed when it runs out, or
+None while it isn't connected. Signing in uses PKCE, so most services only
+need a Client ID, no secret. The service sends the browser back to
+`/apps/<key>/oauth/callback` on this server, unless the provider sets a
+fixed `redirect_uri`: Spotify only allows http:// for loopback addresses,
+so it uses `http://127.0.0.1:8888/callback`, and the person pastes the
+address that tab ends up on (a page that won't load) back into the modal.
+Tokens are kept in `oauth_tokens.json` next to settings.json, readable only
+by its owner; they aren't in backups or in what `/settings` returns.
+
 Set `enabled = False` to leave an app out. A dependency only one app uses
 that isn't in `requirements.txt` should be imported inside the function that
 uses it (see `stocks.py`), so the module still imports without it.

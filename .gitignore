@@ -29,6 +29,8 @@ flaps.json
 
 # Frontend configs
 !.dockerignore
+# Sign-in tokens for apps like Spotify (frontend/apps/oauth.py): never commit these
+oauth_tokens.json
 
 # Python bytecode and test dependencies
 __pycache__/
