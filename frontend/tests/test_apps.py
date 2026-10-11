@@ -72,6 +72,17 @@ class GridTest(unittest.TestCase):
         self.assertEqual(grid.page('ABCDEF', 'G', 'H'), 'ABCD G  ')
         self.assertEqual(grid.page(), ' ' * 8)
 
+    def test_a_banner_centres_the_text_as_a_page_does(self):
+        grid = Grid(1, 16)
+        for word in ('ETIQUETTE', 'LUDDITE', 'GALORE'):
+            with self.subTest(word=word):
+                banner = grid.banner(word)
+                self.assertEqual(len(banner), 16)
+                self.assertEqual(banner.index(word), grid.page(word).index(word))
+                self.assertEqual(banner.replace(f' {word} ', '').strip('='), '')
+        self.assertEqual(grid.banner('ETIQUETTE'), '== ETIQUETTE ===')
+        self.assertEqual(grid.banner('ADVENTITIOUSNESS'), 'ADVENTITIOUSNESS')   # no room
+
     def test_cells(self):
         self.assertEqual(Grid(2, 3).cells(lambda r, c: str(r * 3 + c)), '012345')
 

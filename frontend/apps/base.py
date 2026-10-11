@@ -94,6 +94,18 @@ class Grid:
         rows = [''] * top + rows + [''] * (self.rows - len(rows) - top)
         return ''.join(str(r).center(self.cols)[:self.cols] for r in rows)
 
+    def banner(self, text, fill='='):
+        """`text` centred across a row as page() centres it, with `fill`
+        running out to both edges (a space either side of the text), to
+        mark it as a heading: '== ETIQUETTE ==='. Text too wide for that
+        is left as it is."""
+        text = str(text)
+        if len(text) + 4 > self.cols:
+            return text
+        left = len(text.center(self.cols)) - len(text.center(self.cols).lstrip())
+        right = self.cols - left - len(text)
+        return f"{fill * (left - 1)} {text} {fill * (right - 1)}"
+
     def cells(self, char_at):
         """A page with `char_at(row, col)` in each module, for patterns."""
         return ''.join(char_at(r, c) for r in range(self.rows) for c in range(self.cols))

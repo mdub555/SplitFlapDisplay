@@ -72,11 +72,12 @@ def row_frames(grid, pages, delay):
 
 def text_frames(grid, text, delay, heading=None):
     """`text` wrapped across as many pages as it takes. With a `heading`,
-    it's on the first row of every page and the text fills the rest."""
+    it's on the top row of every page (even a last page with less text) and
+    the text fills the rest."""
     body_rows = grid.rows - 1 if heading is not None and grid.rows > 1 else grid.rows
     lines = grid.wrap(text, max_lines=len(text) + 1)
-    pages = [[heading, *chunk] if heading is not None and grid.rows > 1 else chunk
-             for chunk in grid.chunks(lines, body_rows)]
+    pages = [[heading, *chunk, *[''] * (body_rows - len(chunk))] if heading is not None and grid.rows > 1
+             else chunk for chunk in grid.chunks(lines, body_rows)]
     return row_frames(grid, pages, delay)
 
 

@@ -84,6 +84,8 @@ class WordOfTheDayApp(App):
         # many pages as the meaning takes.
         intro = [line for line in ('WORD OF THE DAY', *grid.wrap(word), plain_text(wotd['part'])) if line]
         frames = row_frames(grid, [intro], delay=6)
-        if wotd['meaning']:
-            frames += text_frames(grid, plain_text(wotd['meaning']), delay=6, heading=word)
+        if meaning:
+            # The word heads each page of its meaning, set off with = filling
+            # the rest of the row so it doesn't read as part of the meaning.
+            frames += text_frames(grid, meaning, delay=6, heading=grid.banner(word))
         return frames

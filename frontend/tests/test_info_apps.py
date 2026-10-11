@@ -153,8 +153,8 @@ class WordOfTheDayTest(unittest.TestCase):
     def test_the_meaning_on_its_own_pages_when_it_does_not(self):
         self.assertEqual(self.pages(Grid(3, 15), 'in large numbers or amounts'), [
             ['WORD OF THE DAY', '     GALORE    ', '   ADJECTIVE   '],
-            ['     GALORE    ', '    IN LARGE   ', '   NUMBERS OR  '],
-            ['     GALORE    ', '    AMOUNTS    ', '               '],
+            ['==== GALORE ===', '    IN LARGE   ', '   NUMBERS OR  '],
+            ['==== GALORE ===', '    AMOUNTS    ', '               '],
         ])
 
 
