@@ -9,6 +9,7 @@ class DateApp(App):
     name = 'Date'
     icon = '📅'
     desc = 'Full date view'
+    order = 50
 
     def get_pages(self, settings, cache):
         dt = datetime.now(get_tz(settings))

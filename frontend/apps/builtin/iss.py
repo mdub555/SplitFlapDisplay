@@ -31,6 +31,7 @@ class IssApp(App):
     name = 'ISS Tracker'
     icon = '🛸'
     desc = 'Space station'
+    order = 140
 
     def get_pages(self, settings, cache):
         return row_frames([cache_get_or_fetch(cache, 'iss', 5, lambda: _fetch(settings))], delay=5)

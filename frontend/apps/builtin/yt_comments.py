@@ -33,8 +33,8 @@ class YoutubeCommentsApp(App):
     name = 'Comments'
     icon = '💬'
     desc = 'YT comments'
-    # yt_api_key / yt_video_id live in Global Settings — shared with YouTube & Livestream.
-    settings_fields = []
+    order = 100
+    global_settings = ['yt_api_key', 'yt_video_id']
 
     def get_pages(self, settings, cache):
         return row_frames(cache_get_or_fetch(cache, 'yt_comments', 60, lambda: _fetch(settings)), delay=5)

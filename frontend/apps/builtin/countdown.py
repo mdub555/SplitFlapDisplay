@@ -12,6 +12,7 @@ class CountdownApp(App):
     name = 'Countdown'
     icon = '⏳'
     desc = 'Timer to event'
+    order = 110
     settings_fields = [
         SettingField('countdown_event', 'Event Name', default='NEW YEAR', placeholder='NEW YEAR'),
         SettingField('countdown_target', 'Target Date & Time', type='datetime-local',

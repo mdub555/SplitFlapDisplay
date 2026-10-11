@@ -86,24 +86,43 @@ class App:
     """Every app — data-driven (weather, stocks) or self-driven (demo,
     matrix cascade) — implements this same interface. The playlist loop
     doesn't know or care which kind it's running; it just asks for the next
-    batch of frames."""
+    batch of frames.
+
+    A subclass with a `key` anywhere under apps/builtin/ is found and
+    registered on its own (see apps/registry.py); one without a key (like
+    AnimationApp) is a base for other apps and isn't."""
 
     key: str = ''
     name: str = ''
     icon: str = ''
     desc: str = ''
+    order: int = 1000            # place in the Apps grid, lowest first; ties go by name
+    enabled: bool = True         # False leaves it out of the registry
     settings_fields: list = []   # list[SettingField], app-scoped fields only
+    # Keys of the Global Settings fields (settings/schema.py) that must be
+    # filled in for this app to work, like an API key, so its settings modal
+    # can say where to set them. (Not the timezone: it always has a value.)
+    global_settings: list = []
 
     def setting(self, settings: dict, key: str):
-        """settings[key], falling back to the default of this app's field
-        for it."""
-        default = next(f.default for f in self.settings_fields if f.key == key)
-        return settings.get(key, default)
+        """settings[key], falling back to the default of the field for it:
+        one of this app's fields, or one of the global fields it uses."""
+        from settings.schema import GLOBAL_FIELDS   # deferred: it imports this module
+        for f in [*self.settings_fields, *GLOBAL_FIELDS]:
+            if f.key == key:
+                return settings.get(key, f.default)
+        raise KeyError(f"{type(self).__name__} has no setting {key!r}; add a SettingField for it")
 
     def get_pages(self, settings: dict, cache: dict) -> list:
         """Return a list of Frame objects representing everything this app
         wants displayed right now. Called repeatedly by the playlist loop;
         apps that fetch from the network should time-box their fetches using
-        `cache` (a plain dict that persists across calls for as long as this
-        app stays active) rather than hitting the network every call."""
+        `cache` (a plain dict that persists across calls; it's this app's
+        own, and emptied when settings are saved) rather than hitting
+        the network every call.
+
+        If it raises, the player logs the error and shows an error page for
+        a while before trying again, so an app needn't catch everything
+        itself; catching an error is only worth it to say something more
+        useful on the display."""
         raise NotImplementedError

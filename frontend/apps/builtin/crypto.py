@@ -42,6 +42,7 @@ class CryptoApp(App):
     name = 'Crypto'
     icon = '₿'
     desc = 'Coin prices'
+    order = 130
     settings_fields = [
         SettingField('crypto_list', 'CoinGecko IDs (comma-separated)',
                       default='bitcoin,ethereum,solana', placeholder='bitcoin,ethereum,solana'),

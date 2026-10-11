@@ -18,6 +18,7 @@ class CheckerApp(AnimationApp):
     name = 'Checker'
     icon = '🎭'
     desc = 'Checkerboard'
+    order = 180
     default_speed = '0.6'
 
     def frames(self):

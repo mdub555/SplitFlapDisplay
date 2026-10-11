@@ -20,6 +20,7 @@ class WorldClockApp(App):
     name = 'World Clock'
     icon = '🌍'
     desc = '3 time zones'
+    order = 120
     settings_fields = [
         SettingField('world_clock_zones', 'Timezones (comma-separated)',
                       default='US/Eastern,US/Pacific,Europe/London',

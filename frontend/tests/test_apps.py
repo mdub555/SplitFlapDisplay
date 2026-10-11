@@ -5,10 +5,12 @@ Run from frontend/:   python -m unittest tests.test_apps
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from apps.base import App, SettingField, clean_settings  # noqa: E402
+from apps.base import App, Frame, SettingField, clean_settings  # noqa: E402
+from apps.registry import AppRegistry, discover, registry  # noqa: E402
 from apps.builtin.animations.base import AnimationApp  # noqa: E402
 from display.layout import STYLES  # noqa: E402
 
@@ -97,6 +99,98 @@ class SettingTest(unittest.TestCase):
     def test_falls_back_to_the_field_default(self):
         self.assertEqual(self.Example().setting({}, 'example_city'), 'BOSTON')
         self.assertEqual(self.Example().setting({'example_city': 'NYC'}, 'example_city'), 'NYC')
+
+    def test_global_fields_fall_back_too(self):
+        self.assertEqual(self.Example().setting({}, 'timezone'), 'US/Eastern')
+
+    def test_an_unknown_setting_says_so(self):
+        with self.assertRaisesRegex(KeyError, "Example has no setting 'nope'"):
+            self.Example().setting({}, 'nope')
+
+
+def _app(key, fields=(), uses=()):
+    return type(f'App_{key}', (App,), {'key': key, 'name': key, 'settings_fields': list(fields),
+                                       'global_settings': list(uses)})()
+
+
+class RegistryTest(unittest.TestCase):
+    """AppRegistry.register() refuses an app that would clash with another."""
+
+    def test_a_duplicate_key(self):
+        reg = AppRegistry()
+        reg.register(_app('one'))
+        with self.assertRaisesRegex(ValueError, "app key 'one' is already used"):
+            reg.register(_app('one'))
+
+    def test_a_missing_key(self):
+        with self.assertRaisesRegex(ValueError, 'has no key'):
+            AppRegistry().register(_app(''))
+
+    def test_a_setting_another_app_uses(self):
+        reg = AppRegistry()
+        reg.register(_app('one', [SettingField('city', 'City')]))
+        with self.assertRaisesRegex(ValueError, "setting 'city' is already used by App_one"):
+            reg.register(_app('two', [SettingField('city', 'City')]))
+
+    def test_a_global_or_reserved_setting(self):
+        for key in ('timezone', 'modules'):
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, f"setting '{key}' is already used"):
+                AppRegistry().register(_app('one', [SettingField(key, 'X')]))
+
+    def test_an_unknown_global_setting(self):
+        with self.assertRaisesRegex(ValueError, r"unknown fields \['yt_nope'\]"):
+            AppRegistry().register(_app('one', uses=['yt_nope']))
+
+    def test_the_order_then_the_name(self):
+        reg = AppRegistry()
+        for key, order in (('b', 5), ('a', 5), ('c', 1)):
+            app = _app(key)
+            app.order = order
+            reg.register(app)
+        self.assertEqual([a.key for a in reg.list_all()], ['c', 'a', 'b'])
+
+    def test_clearing_the_caches(self):
+        reg = AppRegistry()
+        reg.cache_for('one')['x'] = 1
+        self.assertEqual(reg.cache_for('one'), {'x': 1})
+        reg.clear_caches()
+        self.assertEqual(reg.cache_for('one'), {})
+
+
+class BuiltinAppsTest(unittest.TestCase):
+    """Every app under apps/builtin/: found, and well-formed. A new app gets
+    these checks just by being there."""
+
+    def test_discovery_finds_the_apps_but_not_bases_or_disabled_ones(self):
+        keys = {cls.key for cls in discover()}
+        self.assertIn('weather', keys)
+        self.assertIn('anim_rainbow', keys)   # in a sub-package
+        self.assertNotIn('stocks', keys)      # enabled = False
+        self.assertNotIn(AnimationApp, discover())
+
+    def test_every_app_is_described(self):
+        for app in registry.list_all():
+            with self.subTest(app=app.key):
+                self.assertTrue(app.name and app.icon and app.desc)
+
+    def test_every_app_returns_frames_offline(self):
+        # No network: every request fails, as it would with the Pi offline.
+        # An app may catch that or not (the player shows an error page), but
+        # anything else going wrong is a bug.
+        import requests
+        from settings.store import build_defaults
+        settings = build_defaults()
+        with mock.patch.object(requests, 'get', side_effect=requests.ConnectionError('offline')):
+            for app in registry.list_all():
+                with self.subTest(app=app.key):
+                    try:
+                        frames = app.get_pages(settings, {})
+                    except requests.ConnectionError:
+                        continue
+                    self.assertIsInstance(frames, list)
+                    for frame in frames:
+                        self.assertIsInstance(frame, Frame)
+                        self.assertIsInstance(frame.text, str)
 
 
 if __name__ == '__main__':

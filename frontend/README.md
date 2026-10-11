@@ -7,7 +7,7 @@ pieces:
 ```
 config.py              Grid size (GRID_ROWS/GRID_COLS), serial port, settings path
 display/                Serial transport, layout math, shared DisplayState, playlist loop
-apps/                   One file per app, all implementing the same App interface
+apps/                   One file per app, all implementing the same App interface (found automatically)
 settings/               Global settings schema, load/save, backup/restore
 routes/                 Flask blueprints, one per concern (routes/pages.py serves the page)
 templates/index.html    Markup, with Jinja macros for the repeated blocks
@@ -121,41 +121,70 @@ frontend never keeps its own copy of those tables.
 
 ## Adding a new app
 
-1. Create `apps/builtin/your_app.py`:
+Create `apps/builtin/your_app.py` (or a file in a package under it):
 
 ```python
 from apps.base import App, Frame, SettingField
+from apps.builtin._shared import cache_get_or_fetch, center_page
 
 class YourApp(App):
     key = 'your_app'
     name = 'Your App'
     icon = '🔥'
     desc = 'One-line description'
+    order = 145                      # place in the Apps grid (built-ins are 10, 20, ... 190)
+    global_settings = ['yt_api_key'] # Global Settings it needs filled in, if any
     settings_fields = [
         SettingField('your_app_thing', 'Some Setting', default='foo'),
     ]
 
     def get_pages(self, settings, cache):
-        return [Frame(text='HELLO', delay=5)]
+        thing = self.setting(settings, 'your_app_thing')
+        data = cache_get_or_fetch(cache, 'data', 60, lambda: fetch(thing))
+        return [Frame(text=center_page('HELLO', data), delay=5)]
 ```
 
-2. Register it in `apps/registry.py` (import the class, add it to the list).
+That's all. There's nothing to register: `apps/registry.py` imports every
+module under `apps/builtin/` and registers each `App` subclass that has a
+`key`. The app appears in the Apps tab, its `settings_fields` render in its
+⚙️ settings modal (which also names the `global_settings` it uses), its
+settings are saved, backed up and restored with the rest, the schedule can
+run it, and the playlist loop plays it through the same Frame-based path as
+every other app.
 
-That's it — it'll appear in the Apps tab, its settings_fields render
-automatically in its ⚙️ settings modal, and the playlist loop runs it
-through the exact same Frame-based path as every other app. No changes
-needed anywhere else.
+What the app gets and gives:
 
-`get_pages()` is called repeatedly by the playlist loop each time it needs
-more content; apps that hit the network should use the `cache` dict (persists
-for as long as the app stays active) with `apps.builtin._shared.cache_get_or_fetch`
-to avoid re-fetching every call.
+- **`settings`** is the whole settings dict. Read a value with
+  `self.setting(settings, key)`, which falls back to the field's default; it
+  works for the app's own fields and the Global Settings fields
+  (`settings/schema.py`), and raises for anything else.
+- **`cache`** is the app's own dict, kept between calls and emptied whenever
+  settings are saved (so a new zip code or API key shows straight away). Use
+  it with `cache_get_or_fetch` so the network isn't hit on every call.
+- **It returns** a list of `Frame`s (`apps/base.py`): the text, how long to
+  hold it, the animation order and speed. `get_pages()` is called again each
+  time they've all been shown; an empty list waits a second and asks again.
+- **If it raises**, the error is logged and the display shows the app's name
+  and APP ERROR for 10 s before it's asked again. Catch errors yourself only
+  when there's something more useful to show (like CHECK API KEY).
 
-Read a setting with `self.setting(settings, key)`, which falls back to the
-field's default. `apps/builtin/_shared.py` has helpers for the common parts
-(`center_page`, `row_frames`, `clock`, `split_list`). A colour animation can
+Setting keys share one flat namespace with every other app and the Global
+Settings, so prefix them with the app's key. Start-up fails, naming both,
+if a key or setting is already taken. A setting more than one app needs
+(like an API key) belongs in `GLOBAL_FIELDS` in `settings/schema.py`.
+
+Set `enabled = False` to leave an app out. A dependency only one app uses
+that isn't in `requirements.txt` should be imported inside the function that
+uses it (see `stocks.py`), so the module still imports without it.
+
+`apps/builtin/_shared.py` has helpers for the common parts (`center_page`,
+`row_frames`, `clock`, `get_tz`, `split_list`). A colour animation can
 subclass `AnimationApp` (`apps/builtin/animations/base.py`) and only
 implement `frames()`; the update-order and speed settings are built for it.
+
+`tests/test_apps.py` checks every registered app: that it's described, and
+that `get_pages()` returns Frames with the default settings and no network.
+Run it after adding one (`python -m unittest tests.test_apps`).
 
 ## Playlists, the schedule and the draft
 

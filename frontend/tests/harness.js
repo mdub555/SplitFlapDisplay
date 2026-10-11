@@ -93,8 +93,11 @@ window.fetch = async (url, options = {}) => {
   if (url === '/apps') {
     return ok([
       { key: 'weather', name: 'Weather', icon: '🌤️', desc: 'Current conditions',
-        settings_fields: [{ key: 'zip_code', label: 'Zip Code', type: 'text', opts: [], placeholder: '02118' }] },
-      { key: 'time', name: 'Time', icon: '⏱️', desc: 'Live clock', settings_fields: [] },
+        settings_fields: [{ key: 'zip_code', label: 'Zip Code', type: 'text', opts: [], placeholder: '02118' }],
+        global_settings: [] },
+      { key: 'time', name: 'Time', icon: '⏱️', desc: 'Live clock', settings_fields: [], global_settings: [] },
+      { key: 'youtube', name: 'YouTube', icon: '▶️', desc: 'Sub counter', settings_fields: [],
+        global_settings: ['YouTube Channel ID'] },
     ]);
   }
   if (url === '/run_app') {

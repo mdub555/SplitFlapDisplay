@@ -8,6 +8,7 @@ from display.layout import get_animation_order
 from display.module_protocol import BROADCAST, FRAME_MAX_MODULES, Cmd, message
 from display.serial_link import serial_lock, write_serial
 from apps.base import Frame
+from apps.builtin._shared import center_page
 from apps.registry import registry
 from settings.store import settings
 
@@ -118,24 +119,32 @@ def playlist_loop():
     """Plays whatever's active, for ever. Nothing that goes wrong while
     playing may end it (it would silently freeze the display until a
     restart), so an error is logged and the loop carries on."""
-    cache = {}
     while True:
         try:
-            _play_once(cache)
+            _play_once()
         except Exception:
             logging.exception('Playlist loop error; carrying on')
             time.sleep(1)
 
 
-def _play_once(cache):
+# How long an app's error page stays up before it's asked for pages again.
+APP_ERROR_DELAY = 10
+
+
+def _app_frames(app):
+    """The app's pages, or, if it fails, a page saying so (held a while, so a
+    failing app isn't retried every second)."""
+    try:
+        return app.get_pages(settings, registry.cache_for(app.key))
+    except Exception:
+        logging.exception(f"App '{app.key}' get_pages() failed")
+        return [Frame(text=center_page(app.name.upper(), 'APP ERROR'), delay=APP_ERROR_DELAY)]
+
+
+def _play_once():
     """One pass through the active app's or playlist's pages."""
     app = registry.get(state.active_app) if state.active_app else None
-
-    try:
-        frames = app.get_pages(settings, cache) if app else _manual_frames()
-    except Exception as e:
-        logging.error(f"App '{state.active_app}' get_pages() failed: {e}")
-        frames = []
+    frames = _app_frames(app) if app else _manual_frames()
 
     if not frames:
         time.sleep(1)

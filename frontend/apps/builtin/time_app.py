@@ -9,6 +9,7 @@ class TimeApp(App):
     name = 'Time'
     icon = '⏱️'
     desc = 'Live clock'
+    order = 40
 
     def get_pages(self, settings, cache):
         return [Frame(text=center_page(clock(datetime.now(get_tz(settings)))), delay=1)]

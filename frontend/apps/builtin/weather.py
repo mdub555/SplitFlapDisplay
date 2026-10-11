@@ -48,6 +48,7 @@ class WeatherApp(App):
     name = 'Weather'
     icon = '🌤️'
     desc = 'Current conditions'
+    order = 60
     settings_fields = [
         SettingField('zip_code', 'Zip Code', default='02118', placeholder='02118'),
         SettingField('weather_api_key', 'OpenWeatherMap API Key', type='password'),

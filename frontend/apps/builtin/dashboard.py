@@ -10,6 +10,7 @@ class DashboardApp(App):
     name = 'Dashboard'
     icon = '🏠'
     desc = 'Time + weather'
+    order = 30
 
     def get_pages(self, settings, cache):
         dt = datetime.now(get_tz(settings))

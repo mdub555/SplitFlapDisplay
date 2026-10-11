@@ -46,6 +46,8 @@ class LivestreamApp(App):
     name = 'Livestream'
     icon = '🔴'
     desc = 'Launch day rotate'
+    order = 20
+    global_settings = ['yt_channel_id', 'yt_api_key', 'yt_video_id']
     settings_fields = [
         SettingField('livestream_interval', 'Rotation Interval (seconds)', type='number',
                       default='25', placeholder='25', min='5', max='180', step='1'),
@@ -54,8 +56,6 @@ class LivestreamApp(App):
                       type='textarea',
                       placeholder='JOHNDOE\nGreat video!\nSubscribed\n\nUSER_123\nLove the build'),
     ]
-    # yt_channel_id / yt_api_key / yt_video_id live in Global Settings — the
-    # same channel/video config used by the YouTube and Comments apps.
 
     def get_pages(self, settings, cache):
         from apps.builtin.youtube import fetch_youtube

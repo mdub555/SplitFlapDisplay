@@ -15,6 +15,7 @@ class TwinkleApp(AnimationApp):
     name = 'Twinkle'
     icon = '✨'
     desc = 'Sparkle effect'
+    order = 170
     fixed_style = 'random'
 
     def frames(self):

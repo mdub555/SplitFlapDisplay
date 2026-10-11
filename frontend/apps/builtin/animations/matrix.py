@@ -8,6 +8,7 @@ class MatrixApp(App):
     name = 'Matrix'
     icon = '💻'
     desc = 'Cascade reveal'
+    order = 190
     settings_fields = [
         SettingField('anim_matrix_text', 'Reveal Text', default='SPLIT  FLAP  DISPLAY',
                      placeholder='SPLIT  FLAP  DISPLAY'),

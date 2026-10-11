@@ -29,8 +29,8 @@ class YoutubeApp(App):
     name = 'YouTube'
     icon = '▶️'
     desc = 'Sub counter'
-    # yt_channel_id lives in Global Settings — shared with Comments & Livestream.
-    settings_fields = []
+    order = 90
+    global_settings = ['yt_channel_id']
 
     def get_pages(self, settings, cache):
         yt = cache_get_or_fetch(cache, 'youtube', 30, lambda: fetch_youtube(settings))

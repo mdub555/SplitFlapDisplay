@@ -18,6 +18,7 @@ class SweepApp(AnimationApp):
     name = 'Sweep'
     icon = '〰️'
     desc = 'Colour sweep'
+    order = 160
     default_speed = '0.25'
     min_speed = 0.05
     max_speed = '2'

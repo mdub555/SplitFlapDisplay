@@ -41,6 +41,7 @@ class MetroApp(App):
     name = 'Metro'
     icon = '🚇'
     desc = 'MBTA arrivals'
+    order = 70
     settings_fields = [
         SettingField('mbta_stop', 'Stop ID (e.g. place-NSTAT)', default='place-bbsta', placeholder='place-NSTAT'),
         SettingField('mbta_route', 'Route (e.g. Orange)', default='Orange', placeholder='Orange'),

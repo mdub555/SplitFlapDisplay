@@ -12,8 +12,13 @@ async function openAppSettings(appKey) {
   if (!settings) return; // error toast already shown by the api layer
 
   byId('appSettingsTitle').textContent = `${appInfo.icon} ${appInfo.name} Settings`;
-  byId('appSettingsFields').replaceChildren(...(appInfo.settings_fields.length
-    ? appInfo.settings_fields.map(f => buildField(f, settings[f.key], 'asf_', 'modal-field'))
+  const fields = appInfo.settings_fields.map(f => buildField(f, settings[f.key], 'asf_', 'modal-field'));
+  // The shared settings it needs are edited in one place, Global Settings.
+  const globals = appInfo.global_settings.length
+    ? [el('p', {class: 'note centered'}, `Also uses from Global Settings: ${appInfo.global_settings.join(', ')}.`)]
+    : [];
+  byId('appSettingsFields').replaceChildren(...(fields.length || globals.length
+    ? [...fields, ...globals]
     : [el('p', {class: 'note centered'}, 'No configurable settings for this app.')]));
   modalOpener = document.activeElement;
   byId('appSettingsModal').style.display = 'flex';

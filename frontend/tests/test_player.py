@@ -150,7 +150,7 @@ class SendToDisplayTest(unittest.TestCase):
             pass
         passes = []
 
-        def play_once(cache):
+        def play_once():
             passes.append(1)
             raise RuntimeError('serial write failed')
 
@@ -162,6 +162,37 @@ class SendToDisplayTest(unittest.TestCase):
             with self.assertRaises(Stop):
                 self.player.playlist_loop()
         self.assertEqual(len(passes), 2)
+
+    def test_a_failing_app_shows_an_error_page_and_waits(self):
+        class Broken:
+            key, name = 'broken', 'Broken'
+
+            def get_pages(self, settings, cache):
+                raise KeyError('price')
+
+        self.player.registry = types.SimpleNamespace(cache_for=lambda key: {})
+        with mock.patch.object(self.player.logging, 'exception') as logged:
+            frames = self.player._app_frames(Broken())
+        logged.assert_called_once()
+        self.assertEqual(len(frames), 1)
+        self.assertIn('APP ERROR', frames[0].text)
+        self.assertEqual(frames[0].delay, self.player.APP_ERROR_DELAY)
+
+    def test_each_app_gets_its_own_cache(self):
+        caches = {}
+
+        class Counter:
+            def __init__(self, key):
+                self.key = key
+
+            def get_pages(self, settings, cache):
+                cache['calls'] = cache.get('calls', 0) + 1
+                return []
+
+        self.player.registry = types.SimpleNamespace(cache_for=lambda key: caches.setdefault(key, {}))
+        for key in ('a', 'a', 'b'):
+            self.player._app_frames(Counter(key))
+        self.assertEqual(caches, {'a': {'calls': 2}, 'b': {'calls': 1}})
 
 if __name__ == '__main__':
     unittest.main()

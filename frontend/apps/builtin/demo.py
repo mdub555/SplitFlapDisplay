@@ -11,6 +11,7 @@ class DemoApp(App):
     name = 'Demo'
     icon = '🎬'
     desc = 'YouTube showcase'
+    order = 10
 
     def get_pages(self, settings, cache):
         # NOTE: every call rebuilds and re-runs the full sequence, including

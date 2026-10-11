@@ -47,7 +47,7 @@ async function main() {
   check('the live display sits above the tabs, outside every page',
     !document.getElementById('liveGrid').closest('.page') &&
     !!(document.getElementById('liveGrid').compareDocumentPosition(document.querySelector('.tab-bar')) & window.Node.DOCUMENT_POSITION_FOLLOWING));
-  check('apps grid pre-populated by main.js', Object.keys(window.appsByKey).length === 2);
+  check('apps grid pre-populated by main.js', Object.keys(window.appsByKey).length === 3);
 
   console.log('\n--- Debug page ---');
   click(document.getElementById('tab-debug'));
@@ -61,7 +61,7 @@ async function main() {
   await sleep(20);
   check('apps tab becomes active on click', document.getElementById('page-apps').classList.contains('active'));
   check('control tab becomes inactive', !document.getElementById('page-control').classList.contains('active'));
-  check('apps grid rendered with 2 cards', document.querySelectorAll('#appsGrid .app-card').length === 2);
+  check('apps grid rendered with 3 cards', document.querySelectorAll('#appsGrid .app-card').length === 3);
 
   console.log('\n--- Global settings live on the Apps page ---');
   const globalGrid = document.getElementById('globalSettingsGrid');
@@ -105,6 +105,17 @@ async function main() {
   check('save posted to the per-app settings endpoint', calls.some(c => c.url === '/apps/weather/settings'));
   check('save body carries the edited value', calls.some(c => c.url === '/apps/weather/settings' && JSON.parse(c.body).zip_code === '94103'));
   check('modal closes after save', document.getElementById('appSettingsModal').style.display === 'none');
+
+  console.log('\n--- An app with only Global Settings: a gear, and a note naming them ---');
+  const youtubeCard = document.querySelector('#appsGrid .app-card[data-app="youtube"]');
+  check('youtube card has a gear icon (uses global settings)', !!youtubeCard.querySelector('.app-gear'));
+  click(youtubeCard.querySelector('.app-gear'));
+  await sleep(20);
+  const ytModal = document.getElementById('appSettingsFields').textContent;
+  check('modal names the global settings it uses',
+    ytModal.includes('Also uses from Global Settings: YouTube Channel ID.') && !ytModal.includes('No configurable settings'));
+  click(document.querySelector('#appSettingsModal [data-onclick="closeAppSettings"]'));
+  await sleep(20);
 
   console.log('\n--- Back to control tab: playlist row rendering (no innerHTML injection of user data) ---');
   click(document.getElementById('tab-control'));

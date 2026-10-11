@@ -31,6 +31,7 @@ class SportsApp(App):
     name = 'Sports'
     icon = '🏒'
     desc = 'NHL scores'
+    order = 80
     settings_fields = [
         SettingField('nhl_teams', 'NHL Teams (comma-separated)', default='BOS,DAL', placeholder='BOS,DAL'),
     ]

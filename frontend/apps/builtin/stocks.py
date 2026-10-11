@@ -1,10 +1,10 @@
-import yfinance as yf
-
 from apps.base import App, SettingField
 from apps.builtin._shared import cache_get_or_fetch, row_frames, split_list
 
 
 def _fetch(tickers):
+    import yfinance as yf   # here, so the app's module imports without it
+
     pages = []
     for chunk in [tickers[i:i + 3] for i in range(0, len(tickers), 3)]:
         prices = [''] * 3
@@ -29,6 +29,8 @@ class StocksApp(App):
     name = 'Stocks'
     icon = '📈'
     desc = 'Live prices'
+    # Needs yfinance, which isn't in requirements.txt.
+    enabled = False
     settings_fields = [
         SettingField('stocks_list', 'Tickers (comma-separated)', default='MSFT,GOOG,NVDA',
                       placeholder='MSFT,GOOG,NVDA'),

@@ -14,6 +14,7 @@ class RainbowApp(AnimationApp):
     name = 'Rainbow'
     icon = '🌈'
     desc = 'Colour wave'
+    order = 150
     default_speed = '0.4'
 
     def frames(self):
