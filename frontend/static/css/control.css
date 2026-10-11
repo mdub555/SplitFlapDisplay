@@ -478,3 +478,19 @@
   flex: 1;
   min-width: 0;
 }
+
+/* Adding an app as a playlist step, and its row in the list. */
+.add-app-row {
+  margin-top: 8px;
+}
+
+.playlist-item-app {
+  border-left-color: var(--accent);
+}
+
+.playlist-app-note {
+  color: var(--text-muted);
+  font-size: .85rem;
+  margin: 6px 0;
+}
+

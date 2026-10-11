@@ -81,14 +81,13 @@ def text_frames(grid, text, delay, heading=None):
     return row_frames(grid, pages, delay)
 
 
-def paired_frames(grid, pairs, delay):
+def paired_items(grid, pairs, delay):
     """For (first line, second line) pairs, such as a price and its change:
     a page of first lines, then the same items' second lines, an item a row,
-    as many items to a page as the display has rows."""
-    pages = []
-    for chunk in grid.chunks(pairs):
-        pages += [[first for first, _ in chunk], [second for _, second in chunk]]
-    return row_frames(grid, pages, delay)
+    as many items to a page as the display has rows. Each pair of pages is
+    one of the app's items (see App.get_items)."""
+    return [row_frames(grid, [[first for first, _ in chunk], [second for _, second in chunk]], delay)
+            for chunk in grid.chunks(pairs)]
 
 
 NOISE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$&?%*-+'

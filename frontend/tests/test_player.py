@@ -194,5 +194,89 @@ class SendToDisplayTest(unittest.TestCase):
             self.player._app_frames(Counter(key))
         self.assertEqual(caches, {'a': {'calls': 2}, 'b': {'calls': 1}})
 
+class PlaylistStepsTest(unittest.TestCase):
+    """_play_once() with apps as playlist steps: each time round, an app
+    step shows the app's next item, for at least the step's delay."""
+
+    def setUp(self):
+        self.shown = []
+        self.clock = [0.0]
+        self.state = types.SimpleNamespace(
+            active_app=None, current_playlist=[], loop_delay=5, last_sent_page=None, stop_event=threading.Event(),
+            pages=[], set_playlist_page=lambda i: self.state.pages.append(i), clear_stop=lambda: None)
+        self.apps = {}
+        registry = types.SimpleNamespace(get=self.apps.get, cache_for=lambda key: {})
+        fakes = {
+            'display.serial_link': _module('display.serial_link', serial_lock=threading.Lock(),
+                                           write_serial=lambda data: True),
+            'display.state': _module('display.state', state=self.state),
+            'apps.registry': _module('apps.registry', registry=registry),
+            'settings.store': _module('settings.store', settings={}),
+        }
+        patcher = mock.patch.dict(sys.modules, fakes)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        spec = importlib.util.spec_from_file_location(
+            'player_steps_under_test', os.path.join(FRONTEND, 'display', 'player.py'))
+        self.player = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.player)
+
+        def send(text, order, raw=False, step_delay_ms=15):
+            self.shown.append(text)
+            return 0
+
+        def wait(seconds, stop_event, poll=0.1):
+            self.clock[0] += seconds
+            return True
+
+        self.player.send_to_display = send
+        self.player.wait = wait
+        self.player.time = types.SimpleNamespace(sleep=lambda s: None, time=lambda: self.clock[0])
+
+    def add_app(self, key, items):
+        from apps.base import App, Frame
+
+        class Fake(App):
+            def get_items(self, settings, cache, grid):
+                return [[Frame(text=text, delay=delay) for text in item] for item, delay in items()]
+        Fake.key, Fake.name = key, key.upper()
+        self.apps[key] = Fake()
+
+    def test_each_time_round_shows_the_next_item(self):
+        self.add_app('history', lambda: [(['1962 A', '1962 B'], 3), (['2001 A'], 3), (['2013 A'], 3)])
+        self.state.current_playlist = [{'text': 'HELLO', 'delay': 2}, {'app': 'history', 'delay': 1}]
+        for _ in range(4):
+            self.player._play_once()
+        self.assertEqual(self.shown, ['HELLO', '1962 A', '1962 B', 'HELLO', '2001 A', 'HELLO', '2013 A',
+                                      'HELLO', '1962 A', '1962 B'])
+        self.assertEqual(self.state.pages[:2], [0, 1])
+
+    def test_a_short_item_is_asked_for_again_until_the_step_is_up(self):
+        ticks = iter(range(100))
+        self.add_app('clock', lambda: [([f'TICK {next(ticks)}'], 1)])
+        self.state.current_playlist = [{'app': 'clock', 'delay': 3}]
+        self.player._play_once()
+        self.assertEqual(self.shown, ['TICK 0', 'TICK 1', 'TICK 2'])
+
+    def test_a_missing_app_is_skipped(self):
+        self.state.current_playlist = [{'app': 'gone'}, {'text': 'STILL HERE'}]
+        self.player._play_once()
+        self.assertEqual(self.shown, ['STILL HERE'])
+
+    def test_a_failing_app_shows_an_error_page(self):
+        from apps.base import App
+
+        class Broken(App):
+            key, name = 'broken', 'Broken'
+
+            def get_items(self, settings, cache, grid):
+                raise RuntimeError('no')
+        self.apps['broken'] = Broken()
+        self.state.current_playlist = [{'app': 'broken', 'delay': 1}]
+        with mock.patch.object(self.player.logging, 'exception'):
+            self.player._play_once()
+        self.assertIn('APP ERROR', self.shown[0])
+
+
 if __name__ == '__main__':
     unittest.main()

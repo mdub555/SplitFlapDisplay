@@ -3,7 +3,7 @@ import logging
 import requests
 
 from apps.base import App, SettingField
-from apps.builtin._shared import cache_get_or_fetch, paired_frames, row_frames, split_list
+from apps.builtin._shared import cache_get_or_fetch, paired_items, row_frames, split_list
 
 
 def _fetch(coins):
@@ -46,11 +46,11 @@ class CryptoApp(App):
                       default='bitcoin,ethereum,solana', placeholder='bitcoin,ethereum,solana'),
     ]
 
-    def get_pages(self, settings, cache, grid):
+    def get_items(self, settings, cache, grid):
         coins = split_list(self.setting(settings, 'crypto_list').lower(), limit=6)
         lines = cache_get_or_fetch(cache, 'crypto', 60, lambda: _fetch(coins))
         if lines is None:
-            return row_frames(grid, [('CRYPTO ERR', 'CHECK CONN')], delay=8)
+            return [row_frames(grid, [('CRYPTO ERR', 'CHECK CONN')], delay=8)]
         if not lines:
-            return row_frames(grid, [('CRYPTO', 'NO DATA')], delay=8)
-        return paired_frames(grid, lines, delay=8)
+            return [row_frames(grid, [('CRYPTO', 'NO DATA')], delay=8)]
+        return paired_items(grid, lines, delay=8)

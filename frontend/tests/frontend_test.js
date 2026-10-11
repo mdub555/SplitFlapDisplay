@@ -1011,6 +1011,34 @@ async function main() {
   check('saved playlists sum up their pages', summary({ pages: [{ delay: 2 }, { delay: 8 }, {}], delay: 5 }) === '3 pages · 2–8 s' &&
     summary({ pages: [{}, 'X'], delay: '5' }) === '2 pages · 5 s each' && summary({ pages: [{}], delay: 5 }) === '1 page · 5 s' &&
     summary({ pages: [], delay: 5 }) === '0 pages');
+  check('and count the apps in them', summary({ pages: [{ delay: 5 }, { app: 'time', delay: 5 }], delay: 5 }) === '1 page, 1 app · 5 s each' &&
+    summary({ pages: [{ app: 'time', delay: 8 }], delay: 5 }) === '1 app · 8 s');
+
+  console.log('\n--- An app as a playlist step ---');
+  const appPicker = document.getElementById('addAppSelect');
+  check('the app picker lists the apps', Array.from(appPicker.options).map(o => o.value).join() === 'weather,time,youtube,spotify');
+  const stepsBefore = globalVar('playlist').length;
+  appPicker.value = 'youtube';
+  document.getElementById('delayInput').value = '7';
+  click(document.querySelector('[data-onclick="addAppToPlaylist"]'));
+  const steps = globalVar('playlist');
+  check('Add App adds a step for it, held for the default delay', steps.length === stepsBefore + 1 &&
+    steps[stepsBefore].app === 'youtube' && steps[stepsBefore].delay === 7);
+  const appRow = document.querySelector(`#playlistList .playlist-item[data-idx="${stepsBefore}"]`);
+  check('its row names the app, with no grid preview or EDIT', appRow.classList.contains('playlist-item-app') &&
+    appRow.textContent.includes('▶️ YouTube') && !appRow.querySelector('.playlist-preview') &&
+    !appRow.querySelector('[data-onclick="editPlaylist"]'));
+  calls.length = 0;
+  click(appRow.querySelector('[data-onclick="pushPlaylistPage"]'));
+  await sleep(20);
+  check('its ▶ runs the app', calls.some(c => c.url === '/run_app' && JSON.parse(c.body).app === 'youtube'));
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="sync"]'));
+  await sleep(20);
+  const pushedSteps = JSON.parse(calls.find(c => c.url === '/update_playlist').body).pages;
+  check('PUSH sends the app step as {app, delay}', JSON.stringify(pushedSteps[stepsBefore]) === '{"app":"youtube","delay":7}');
+  click(appRow.querySelector('[data-onclick="removeFromPlaylist"]'));
+  check('and it can be removed like a page', globalVar('playlist').length === stepsBefore);
 
   console.log('\n--- Home All is a POST ---');
   click(document.getElementById('tab-modules'));

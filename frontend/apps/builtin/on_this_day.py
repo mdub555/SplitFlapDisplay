@@ -61,21 +61,36 @@ class OnThisDayApp(App):
                      min='1', max='20', step='1'),
     ]
 
-    def get_pages(self, settings, cache, grid):
+    def _picked(self, settings, cache):
+        """(today, the events to show), or (today, None) if they couldn't be
+        fetched."""
         today = datetime.now(get_tz(settings)).date()
         events = cache_get_or_fetch(cache, f'events_{today:%m%d}', 6 * 3600,
                                     lambda: _fetch(today.month, today.day))
         if events is None:
-            return row_frames(grid, [('ON THIS DAY', 'FETCH ERROR')], delay=5)
+            return today, None
         after = int(float(self.setting(settings, 'on_this_day_after')))
         before = int(float(self.setting(settings, 'on_this_day_before')))
         count = int(float(self.setting(settings, 'on_this_day_count')))
-        picked = pick_events(events, after, before, count, seed=today.isoformat())
+        return today, pick_events(events, after, before, count, seed=today.isoformat())
+
+    def get_items(self, settings, cache, grid):
+        """An event each: its pages, under its year."""
+        _, picked = self._picked(settings, cache)
+        if picked is None:
+            return [row_frames(grid, [('ON THIS DAY', 'FETCH ERROR')], delay=5)]
         if not picked:
-            return row_frames(grid, [('ON THIS DAY', 'NO EVENTS', f'{after}-{before}')], delay=5)
-        # A title page with the date, then each event under its year, over
-        # as many pages as it takes.
-        frames = row_frames(grid, [('ON THIS DAY', today.strftime('%B %d').upper().replace(' 0', ' '))], delay=4)
-        for year, text in picked:
-            frames += text_frames(grid, plain_text(text), delay=5, heading=year_heading(grid, year))
-        return frames
+            after = int(float(self.setting(settings, 'on_this_day_after')))
+            before = int(float(self.setting(settings, 'on_this_day_before')))
+            return [row_frames(grid, [('ON THIS DAY', 'NO EVENTS', f'{after}-{before}')], delay=5)]
+        return [text_frames(grid, plain_text(text), delay=5, heading=year_heading(grid, year))
+                for year, text in picked]
+
+    def get_pages(self, settings, cache, grid):
+        """On its own: a title page with the date, then every event."""
+        today, picked = self._picked(settings, cache)
+        items = self.get_items(settings, cache, grid)
+        if not picked:
+            return items[0]
+        title = row_frames(grid, [('ON THIS DAY', today.strftime('%B %d').upper().replace(' 0', ' '))], delay=4)
+        return title + [frame for item in items for frame in item]

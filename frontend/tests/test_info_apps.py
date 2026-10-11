@@ -203,6 +203,18 @@ class OnThisDayTest(unittest.TestCase):
         picked = on_this_day.pick_events(events, 1800, 2015, 5, seed='2026-10-11')
         self.assertEqual([year for year, _ in picked], [2001, 2002, 2013])
 
+    def test_an_event_is_an_item(self):
+        grid = Grid(4, 16)
+        data = {'events': [{'year': 1962, 'text': 'The council opens.'}, {'year': 2001, 'text': 'Polaroid fails.'}]}
+        with mock.patch.object(requests, 'get', return_value=_response(data=data)):
+            app = on_this_day.OnThisDayApp()
+            items = app.get_items({}, {}, grid)
+            pages = app.get_pages({}, {}, grid)
+        self.assertEqual([_lines(grid, item[0].text)[0] for item in items], ['ON THIS DAY 1962', 'ON THIS DAY 2001'])
+        # On its own: the date page first, then every event.
+        self.assertEqual(_lines(grid, pages[0].text)[1].strip(), 'ON THIS DAY')
+        self.assertEqual(len(pages), 1 + sum(len(item) for item in items))
+
     def test_nothing_in_range_says_so(self):
         with mock.patch.object(requests, 'get', return_value=_response(data={'events': []})):
             frames = on_this_day.OnThisDayApp().get_pages({}, {}, Grid(3, 15))

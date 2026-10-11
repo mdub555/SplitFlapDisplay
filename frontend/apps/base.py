@@ -174,6 +174,14 @@ class App:
         from apps import oauth   # deferred: it reads config, which base needn't
         return oauth.access_token(self, settings)
 
+    def get_items(self, settings: dict, cache: dict, grid: Grid) -> list:
+        """The app's content as separate items, each a list of Frames: one
+        historical event, one game's score. In a playlist, each time round
+        the app shows its next item rather than everything. An app whose
+        content doesn't split up (a clock) leaves this as it is: all of
+        get_pages() as one item. An app implements one or the other."""
+        return [self.get_pages(settings, cache, grid)]
+
     def get_pages(self, settings: dict, cache: dict, grid: Grid) -> list:
         """Return a list of Frame objects representing everything this app
         wants displayed right now, each page fitting `grid` (the display's
@@ -186,5 +194,10 @@ class App:
         If it raises, the player logs the error and shows an error page for
         a while before trying again, so an app needn't catch everything
         itself; catching an error is only worth it to say something more
-        useful on the display."""
-        raise NotImplementedError
+        useful on the display.
+
+        An app that implements get_items() instead gets this for free: all
+        its items, one after another."""
+        if type(self).get_items is App.get_items:
+            raise NotImplementedError(f'{type(self).__name__} implements neither get_pages() nor get_items()')
+        return [frame for item in self.get_items(settings, cache, grid) for frame in item]

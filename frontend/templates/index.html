@@ -136,6 +136,11 @@
 
     <div id="multiControls" class="panel" hidden>
       <button class="btn btn-success btn-block" id="saveMsgBtn" data-onclick="saveMessage">+ Add to Playlist</button>
+      <!-- An app as a step: each time round it shows the app's next item. -->
+      <div class="row add-app-row">
+        <select class="input grow" id="addAppSelect" aria-label="App to add to the playlist"></select>
+        <button class="btn btn-secondary" data-onclick="addAppToPlaylist">+ Add App</button>
+      </div>
       <div id="playlistList" class="playlist-list"></div>
       <div class="playlist-defaults">
         <label class="inline-field">

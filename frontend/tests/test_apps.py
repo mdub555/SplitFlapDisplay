@@ -55,6 +55,27 @@ class AnimationAppTest(unittest.TestCase):
         self.assertEqual(Fixed().get_pages({}, {}, GRID)[0].style, 'random')
 
 
+class ItemsTest(unittest.TestCase):
+    """get_items() and get_pages(): an app implements one, and gets the
+    other."""
+
+    def test_pages_from_items(self):
+        class Items(App):
+            def get_items(self, settings, cache, grid):
+                return [[Frame('A'), Frame('B')], [Frame('C')]]
+        self.assertEqual([f.text for f in Items().get_pages({}, {}, GRID)], ['A', 'B', 'C'])
+
+    def test_items_from_pages(self):
+        class Pages(App):
+            def get_pages(self, settings, cache, grid):
+                return [Frame('A'), Frame('B')]
+        self.assertEqual([[f.text for f in item] for item in Pages().get_items({}, {}, GRID)], [['A', 'B']])
+
+    def test_neither(self):
+        with self.assertRaisesRegex(NotImplementedError, 'neither'):
+            App().get_pages({}, {}, GRID)
+
+
 class GridTest(unittest.TestCase):
     """Grid: pages built to fit the display, whatever its size."""
 

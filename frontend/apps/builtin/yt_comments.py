@@ -37,8 +37,9 @@ class YoutubeCommentsApp(App):
     order = 100
     global_settings = ['yt_api_key', 'yt_video_id']
 
-    def get_pages(self, settings, cache, grid):
+    def get_items(self, settings, cache, grid):
         comments = cache_get_or_fetch(cache, 'yt_comments', 60, lambda: _fetch(settings))
-        # The heading on the first row, the text wrapped over the rest.
-        return row_frames(grid, [(heading, *grid.wrap(text, grid.rows - 1)) for heading, text in comments],
-                          delay=5)
+        # A comment each: the heading on the first row, the text wrapped over
+        # the rest.
+        return [row_frames(grid, [(heading, *grid.wrap(text, grid.rows - 1))], delay=5)
+                for heading, text in comments]

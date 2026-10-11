@@ -171,6 +171,12 @@ What the app gets and gives:
 - **It returns** a list of `Frame`s (`apps/base.py`): the text, how long to
   hold it, the animation order and speed. `get_pages()` is called again each
   time they've all been shown; an empty list waits a second and asks again.
+- **Items, for playlists:** an app whose content splits into separate
+  pieces (historical events, games, comments) implements `get_items()`
+  instead, returning a list of items, each a list of `Frame`s; its
+  `get_pages()` is then every item in turn. In a playlist, each time round
+  the app shows just its next item. An app that implements only
+  `get_pages()` is one item, shown whole.
 - **If it raises**, the error is logged and the display shows the app's name
   and APP ERROR for 10 s before it's asked again. Catch errors yourself only
   when there's something more useful to show (like CHECK API KEY).
@@ -210,6 +216,13 @@ Run it after adding one (`python -m unittest tests.test_apps`).
 
 ## Playlists, the schedule and the draft
 
+- **Apps in a playlist:** a step can be an app, `{app, delay}`, as well as
+  a page of text ("+ Add App" under the playlist). Each time round the
+  playlist, the step shows the app's next item (see `get_items()` above):
+  On This Day shows one event, then the next app, and the next event the
+  time after. The step stays up for at least its delay; a short item (a
+  clock's one page) is refreshed until it has. Which item comes next is
+  remembered per app while the server runs.
 - **What's playing** is in every live-state snapshot: `active_app`, or
   `playlist` (`{name, page, pages}`, `name` being null for one that was
   pushed rather than saved), plus `scheduled` when the schedule started it.

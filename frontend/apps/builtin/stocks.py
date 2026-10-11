@@ -1,5 +1,5 @@
 from apps.base import App, SettingField
-from apps.builtin._shared import cache_get_or_fetch, paired_frames, row_frames, split_list
+from apps.builtin._shared import cache_get_or_fetch, paired_items, row_frames, split_list
 
 
 def _fetch(tickers):
@@ -32,9 +32,9 @@ class StocksApp(App):
                       placeholder='MSFT,GOOG,NVDA'),
     ]
 
-    def get_pages(self, settings, cache, grid):
+    def get_items(self, settings, cache, grid):
         tickers = split_list(self.setting(settings, 'stocks_list'))
         lines = cache_get_or_fetch(cache, 'stocks', 60, lambda: _fetch(tickers))
         if not lines:
-            return row_frames(grid, [('NO STOCKS', 'CONFIGURED')], delay=10)
-        return paired_frames(grid, lines, delay=10)
+            return [row_frames(grid, [('NO STOCKS', 'CONFIGURED')], delay=10)]
+        return paired_items(grid, lines, delay=10)
