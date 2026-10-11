@@ -4,6 +4,7 @@ shapes, and picking the day's history events.
 
 Run from frontend/:   python -m unittest tests.test_info_apps
 """
+import json
 import os
 import sys
 import unittest
@@ -183,6 +184,18 @@ class OnThisDayTest(unittest.TestCase):
         self.assertIn('/onthisday/events/', get.call_args[0][0])
         self.assertEqual(_lines(grid, frames[1].text), ['      1962     ', '  THE COUNCIL  ', '     OPENS.    '])
         self.assertEqual(len(frames), 2)
+
+    def test_the_real_feed(self):
+        # The start of Wikimedia's feed for 11 Oct, its "pages" cut down.
+        with open(os.path.join(FIXTURES, 'wikipedia_onthisday_10_11.json'), encoding='utf-8') as f:
+            data = json.load(f)
+        with mock.patch.object(requests, 'get', return_value=_response(data=data)):
+            events = on_this_day._fetch(10, 11)
+        self.assertEqual(events[0], (2018, 'Soyuz MS-10, launching an intended crew for the ISS, suffers an '
+                                           'in-flight abort. The crew lands safely.'))
+        # Between 1800 and 2015, oldest first: 2018 is too new.
+        picked = on_this_day.pick_events(events, 1800, 2015, 5, seed='2026-10-11')
+        self.assertEqual([year for year, _ in picked], [2001, 2002, 2013])
 
     def test_nothing_in_range_says_so(self):
         with mock.patch.object(requests, 'get', return_value=_response(data={'events': []})):

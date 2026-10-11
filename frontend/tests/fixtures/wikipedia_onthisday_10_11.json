@@ -1,0 +1,44 @@
+{
+ "events": [
+  {
+   "text": "Soyuz MS-10, launching an intended crew for the ISS, suffers an in-flight abort. The crew lands safely.",
+   "pages": [
+    {
+     "type": "standard",
+     "title": "Soyuz_MS-10"
+    }
+   ],
+   "year": 2018
+  },
+  {
+   "text": "A migrant boat sinks in the Channel of Sicily, with at least 359 people drowning.",
+   "pages": [
+    {
+     "type": "standard",
+     "title": "2013_Lampedusa_migrant_shipwreck"
+    }
+   ],
+   "year": 2013
+  },
+  {
+   "text": "A bomb attack in a Myyrmanni shopping mall in Vantaa, Finland kills seven.",
+   "pages": [
+    {
+     "type": "standard",
+     "title": "Myyrmanni_bombing"
+    }
+   ],
+   "year": 2002
+  },
+  {
+   "text": "The Polaroid Corporation files for federal bankruptcy protection.",
+   "pages": [
+    {
+     "type": "standard",
+     "title": "Polaroid_Corporation"
+    }
+   ],
+   "year": 2001
+  }
+ ]
+}
