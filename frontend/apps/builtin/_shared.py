@@ -1,6 +1,8 @@
 import logging
 import random
+import re
 import time
+import unicodedata
 
 import pytz
 
@@ -33,6 +35,25 @@ def split_list(text, limit=None):
     return items[:limit]
 
 
+# Punctuation the flaps don't have -> the nearest they do ('' drops it).
+_PLAIN = str.maketrans({
+    '\u2018': '', '\u2019': '', "'": '', '`': '',   # apostrophes: DONT reads better than DON T
+    '\u201c': '"', '\u201d': '"',
+    '\u2013': '-', '\u2014': '-', '\u2212': '-',
+    ';': ',', '\u2026': '...',
+})
+
+
+def plain_text(text):
+    """Free text (from a feed or an API) the way the flaps can show it:
+    uppercase, accents dropped (É -> E), curly quotes and dashes swapped for
+    ones the reels have, apostrophes dropped, and whitespace collapsed.
+    Anything else with no flap still comes out blank."""
+    text = unicodedata.normalize('NFKD', str(text))
+    text = ''.join(c for c in text if not unicodedata.combining(c)).translate(_PLAIN)
+    return re.sub(r'\s+', ' ', text).strip().upper()
+
+
 def cache_get_or_fetch(cache, key, interval, fetch_fn):
     """Simple time-boxed cache: re-run fetch_fn only if `interval` seconds
     have passed since the last successful call for this key."""
@@ -47,6 +68,16 @@ def cache_get_or_fetch(cache, key, interval, fetch_fn):
 def row_frames(grid, pages, delay):
     """A centred frame for each page, where a page is a tuple of rows."""
     return [Frame(text=grid.page(*rows), delay=delay) for rows in pages]
+
+
+def text_frames(grid, text, delay, heading=None):
+    """`text` wrapped across as many pages as it takes. With a `heading`,
+    it's on the first row of every page and the text fills the rest."""
+    body_rows = grid.rows - 1 if heading is not None and grid.rows > 1 else grid.rows
+    lines = grid.wrap(text, max_lines=len(text) + 1)
+    pages = [[heading, *chunk] if heading is not None and grid.rows > 1 else chunk
+             for chunk in grid.chunks(lines, body_rows)]
+    return row_frames(grid, pages, delay)
 
 
 def paired_frames(grid, pairs, delay):

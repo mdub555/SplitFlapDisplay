@@ -3,3 +3,5 @@ pyserial
 pytz
 requests
 gunicorn
+icalendar
+recurring-ical-events
