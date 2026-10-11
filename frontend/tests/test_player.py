@@ -167,7 +167,7 @@ class SendToDisplayTest(unittest.TestCase):
         class Broken:
             key, name = 'broken', 'Broken'
 
-            def get_pages(self, settings, cache):
+            def get_pages(self, settings, cache, grid):
                 raise KeyError('price')
 
         self.player.registry = types.SimpleNamespace(cache_for=lambda key: {})
@@ -185,7 +185,7 @@ class SendToDisplayTest(unittest.TestCase):
             def __init__(self, key):
                 self.key = key
 
-            def get_pages(self, settings, cache):
+            def get_pages(self, settings, cache, grid):
                 cache['calls'] = cache.get('calls', 0) + 1
                 return []
 

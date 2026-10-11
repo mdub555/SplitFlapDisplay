@@ -4,14 +4,6 @@ from collections import namedtuple
 from config import GRID_ROWS, GRID_COLS, NUM_MODULES
 
 
-def format_lines(*lines) -> str:
-    """Center-pad any number of text rows into one NUM_MODULES-length page
-    string. Extra rows beyond GRID_ROWS are dropped; missing rows are blank."""
-    rows = list(lines)[:GRID_ROWS]
-    rows += [''] * (GRID_ROWS - len(rows))
-    return ''.join(r.center(GRID_COLS)[:GRID_COLS] for r in rows)
-
-
 # --- Animation orders --------------------------------------------------------
 # Each returns every module index once, in the order the modules should start
 # moving.

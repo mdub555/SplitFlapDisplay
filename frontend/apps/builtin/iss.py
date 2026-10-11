@@ -33,5 +33,5 @@ class IssApp(App):
     desc = 'Space station'
     order = 140
 
-    def get_pages(self, settings, cache):
-        return row_frames([cache_get_or_fetch(cache, 'iss', 5, lambda: _fetch(settings))], delay=5)
+    def get_pages(self, settings, cache, grid):
+        return row_frames(grid, [cache_get_or_fetch(cache, 'iss', 5, lambda: _fetch(settings))], delay=5)

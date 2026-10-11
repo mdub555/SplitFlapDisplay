@@ -1,3 +1,4 @@
+import textwrap
 from dataclasses import asdict, dataclass, field
 from typing import Optional
 
@@ -72,6 +73,44 @@ def clean_settings(fields, data):
     return {f.key: f.clean(data[f.key]) for f in fields if f.key in data}
 
 
+@dataclass(frozen=True)
+class Grid:
+    """The display's size, which every app is given rather than assuming
+    one: 4x16 and 3x15 displays both exist. Builds pages to fit it."""
+    rows: int
+    cols: int
+
+    @property
+    def size(self):
+        """The number of modules: the length of every page."""
+        return self.rows * self.cols
+
+    def page(self, *rows):
+        """A page of up to `rows` lines of text, each centred across the
+        display, the lines centred top to bottom. Lines past the last row are
+        dropped and text past the last column is cut off."""
+        rows = list(rows)[:self.rows]
+        top = (self.rows - len(rows)) // 2
+        rows = [''] * top + rows + [''] * (self.rows - len(rows) - top)
+        return ''.join(str(r).center(self.cols)[:self.cols] for r in rows)
+
+    def cells(self, char_at):
+        """A page with `char_at(row, col)` in each module, for patterns."""
+        return ''.join(char_at(r, c) for r in range(self.rows) for c in range(self.cols))
+
+    def wrap(self, text, max_lines=None):
+        """`text` split into lines that fit across the display, breaking
+        between words where it can, at most `max_lines` of them (all the
+        display's rows by default)."""
+        lines = textwrap.wrap(str(text), self.cols) or ['']
+        return lines[:self.rows if max_lines is None else max_lines]
+
+    def chunks(self, items, per_page=None):
+        """`items` split into groups of `per_page`, by default one per row."""
+        n = max(1, per_page or self.rows)
+        return [items[i:i + n] for i in range(0, len(items), n)]
+
+
 @dataclass
 class Frame:
     """One page of content to show on the display."""
@@ -113,9 +152,10 @@ class App:
                 return settings.get(key, f.default)
         raise KeyError(f"{type(self).__name__} has no setting {key!r}; add a SettingField for it")
 
-    def get_pages(self, settings: dict, cache: dict) -> list:
+    def get_pages(self, settings: dict, cache: dict, grid: Grid) -> list:
         """Return a list of Frame objects representing everything this app
-        wants displayed right now. Called repeatedly by the playlist loop;
+        wants displayed right now, each page fitting `grid` (the display's
+        size: build pages with grid.page() rather than assuming one). Called repeatedly by the playlist loop;
         apps that fetch from the network should time-box their fetches using
         `cache` (a plain dict that persists across calls; it's this app's
         own, and emptied when settings are saved) rather than hitting

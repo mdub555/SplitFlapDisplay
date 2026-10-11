@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from apps.base import App, Frame
-from apps.builtin._shared import clock, get_tz, center_page
+from apps.builtin._shared import clock, get_tz
 
 
 class TimeApp(App):
@@ -11,5 +11,5 @@ class TimeApp(App):
     desc = 'Live clock'
     order = 40
 
-    def get_pages(self, settings, cache):
-        return [Frame(text=center_page(clock(datetime.now(get_tz(settings)))), delay=1)]
+    def get_pages(self, settings, cache, grid):
+        return [Frame(text=grid.page(clock(datetime.now(get_tz(settings)))), delay=1)]

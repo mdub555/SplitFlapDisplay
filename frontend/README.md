@@ -125,7 +125,7 @@ Create `apps/builtin/your_app.py` (or a file in a package under it):
 
 ```python
 from apps.base import App, Frame, SettingField
-from apps.builtin._shared import cache_get_or_fetch, center_page
+from apps.builtin._shared import cache_get_or_fetch
 
 class YourApp(App):
     key = 'your_app'
@@ -138,10 +138,10 @@ class YourApp(App):
         SettingField('your_app_thing', 'Some Setting', default='foo'),
     ]
 
-    def get_pages(self, settings, cache):
+    def get_pages(self, settings, cache, grid):
         thing = self.setting(settings, 'your_app_thing')
         data = cache_get_or_fetch(cache, 'data', 60, lambda: fetch(thing))
-        return [Frame(text=center_page('HELLO', data), delay=5)]
+        return [Frame(text=grid.page('HELLO', data), delay=5)]
 ```
 
 That's all. There's nothing to register: `apps/registry.py` imports every
@@ -161,6 +161,13 @@ What the app gets and gives:
 - **`cache`** is the app's own dict, kept between calls and emptied whenever
   settings are saved (so a new zip code or API key shows straight away). Use
   it with `cache_get_or_fetch` so the network isn't hit on every call.
+- **`grid`** is the display's size (`grid.rows`, `grid.cols`, `grid.size`).
+  Displays differ (4x16, 3x15, ...), so an app never assumes one: build each
+  page with `grid.page(*lines)`, which centres the lines and cuts off what
+  doesn't fit, and size content from the grid rather than a number.
+  `grid.wrap(text)` splits text into lines that fit, `grid.chunks(items)`
+  splits a list into a page's worth (a row each), and `grid.cells(fn)`
+  builds a pattern a module at a time.
 - **It returns** a list of `Frame`s (`apps/base.py`): the text, how long to
   hold it, the animation order and speed. `get_pages()` is called again each
   time they've all been shown; an empty list waits a second and asks again.
@@ -177,13 +184,14 @@ Set `enabled = False` to leave an app out. A dependency only one app uses
 that isn't in `requirements.txt` should be imported inside the function that
 uses it (see `stocks.py`), so the module still imports without it.
 
-`apps/builtin/_shared.py` has helpers for the common parts (`center_page`,
-`row_frames`, `clock`, `get_tz`, `split_list`). A colour animation can
+`apps/builtin/_shared.py` has helpers for the common parts (`row_frames`,
+`paired_frames`, `clock`, `get_tz`, `split_list`). A colour animation can
 subclass `AnimationApp` (`apps/builtin/animations/base.py`) and only
-implement `frames()`; the update-order and speed settings are built for it.
+implement `frames(grid)`; the update-order and speed settings are built for it.
 
 `tests/test_apps.py` checks every registered app: that it's described, and
-that `get_pages()` returns Frames with the default settings and no network.
+that `get_pages()` returns Frames exactly the size of the display, with the
+default settings and no network, at 4x16, 3x15 and 2x10.
 Run it after adding one (`python -m unittest tests.test_apps`).
 
 ## Playlists, the schedule and the draft

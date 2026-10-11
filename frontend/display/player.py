@@ -1,14 +1,13 @@
 import logging
 import time
 
-from config import NUM_MODULES, BAUD_RATE, FRAME_BROADCAST
+from config import GRID_COLS, GRID_ROWS, NUM_MODULES, BAUD_RATE, FRAME_BROADCAST
 from display.state import state
 from display.charset import FLAP_CHARS, NUM_FLAPS, SECONDS_PER_FLAP, normalize_text
 from display.layout import get_animation_order
 from display.module_protocol import BROADCAST, FRAME_MAX_MODULES, Cmd, message
 from display.serial_link import serial_lock, write_serial
-from apps.base import Frame
-from apps.builtin._shared import center_page
+from apps.base import Frame, Grid
 from apps.registry import registry
 from settings.store import settings
 
@@ -127,6 +126,9 @@ def playlist_loop():
             time.sleep(1)
 
 
+# The display's size, which every app is given.
+GRID = Grid(GRID_ROWS, GRID_COLS)
+
 # How long an app's error page stays up before it's asked for pages again.
 APP_ERROR_DELAY = 10
 
@@ -135,10 +137,10 @@ def _app_frames(app):
     """The app's pages, or, if it fails, a page saying so (held a while, so a
     failing app isn't retried every second)."""
     try:
-        return app.get_pages(settings, registry.cache_for(app.key))
+        return app.get_pages(settings, registry.cache_for(app.key), GRID)
     except Exception:
         logging.exception(f"App '{app.key}' get_pages() failed")
-        return [Frame(text=center_page(app.name.upper(), 'APP ERROR'), delay=APP_ERROR_DELAY)]
+        return [Frame(text=GRID.page(app.name.upper(), 'APP ERROR'), delay=APP_ERROR_DELAY)]
 
 
 def _play_once():

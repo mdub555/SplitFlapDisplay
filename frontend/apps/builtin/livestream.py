@@ -4,7 +4,7 @@ from datetime import datetime
 import requests
 
 from apps.base import App, Frame, SettingField
-from apps.builtin._shared import cache_get_or_fetch, center_page, clock, get_tz
+from apps.builtin._shared import cache_get_or_fetch, clock, get_tz
 
 
 def _fetch_viewers(settings):
@@ -26,7 +26,9 @@ def _fetch_viewers(settings):
         return None
 
 
-def _parse_comments(settings):
+def _parse_comments(settings, grid):
+    """The comments setting as slides: blocks separated by a blank line, the
+    lines of each (as many as the display has rows) a row."""
     raw = settings.get('livestream_comments', '').strip()
     if not raw:
         return []
@@ -35,9 +37,7 @@ def _parse_comments(settings):
     pages = []
     for block in blocks:
         lines = [l.strip() for l in block.split('\n') if l.strip()]
-        while len(lines) < 3:
-            lines.append('')
-        pages.append(tuple(lines[:3]))
+        pages.append(tuple(lines[:grid.rows]))
     return pages
 
 
@@ -52,12 +52,12 @@ class LivestreamApp(App):
         SettingField('livestream_interval', 'Rotation Interval (seconds)', type='number',
                       default='25', placeholder='25', min='5', max='180', step='1'),
         SettingField('livestream_comments',
-                      'Comments (blank line separates slides, up to 3 lines each)',
+                      'Comments (blank line separates slides; a line per display row)',
                       type='textarea',
                       placeholder='JOHNDOE\nGreat video!\nSubscribed\n\nUSER_123\nLove the build'),
     ]
 
-    def get_pages(self, settings, cache):
+    def get_pages(self, settings, cache, grid):
         from apps.builtin.youtube import fetch_youtube
 
         frames = []
@@ -65,15 +65,15 @@ class LivestreamApp(App):
 
         yt = cache_get_or_fetch(cache, 'youtube', 60, lambda: fetch_youtube(settings))
         if yt:
-            frames.append(Frame(text=center_page(time_str, yt['name'][:16], f"{yt['subs']} SUBS"), style='ltr'))
+            frames.append(Frame(text=grid.page(time_str, yt['name'], f"{yt['subs']} SUBS"), style='ltr'))
 
         viewers = cache_get_or_fetch(cache, 'livestream_viewers', 30, lambda: _fetch_viewers(settings))
         if viewers is not None:
-            frames.append(Frame(text=center_page('WATCHING NOW', f"{viewers:,}", 'LIVE VIEWERS'), style='diagonal'))
+            frames.append(Frame(text=grid.page('WATCHING NOW', f"{viewers:,}", 'LIVE VIEWERS'), style='diagonal'))
 
         varied_styles = ['outside_in', 'spiral', 'anti_diagonal', 'rtl', 'rain', 'center_out']
-        for i, rows in enumerate(_parse_comments(settings)):
-            frames.append(Frame(text=center_page(*rows), style=varied_styles[i % len(varied_styles)]))
+        for i, rows in enumerate(_parse_comments(settings, grid)):
+            frames.append(Frame(text=grid.page(*rows), style=varied_styles[i % len(varied_styles)]))
 
         interval = max(5.0, float(self.setting(settings, 'livestream_interval') or 25))
         for f in frames:

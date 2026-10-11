@@ -1,12 +1,10 @@
 from apps.builtin.animations.base import AnimationApp
-from config import GRID_ROWS, GRID_COLS
 
 
-def generate_pages():
+def generate_pages(grid):
     """7 pages cycling the colour tiles across the board."""
     colors = 'roygbpw'
-    return [''.join(colors[(c + off) % 7] for r in range(GRID_ROWS) for c in range(GRID_COLS))
-            for off in range(7)]
+    return [grid.cells(lambda r, c: colors[(c + off) % 7]) for off in range(7)]
 
 
 class RainbowApp(AnimationApp):
@@ -17,5 +15,5 @@ class RainbowApp(AnimationApp):
     order = 150
     default_speed = '0.4'
 
-    def frames(self):
-        return generate_pages()
+    def frames(self, grid):
+        return generate_pages(grid)

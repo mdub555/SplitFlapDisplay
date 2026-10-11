@@ -27,11 +27,11 @@ class AnimationApp(App):
             cls.settings_fields.insert(0, SettingField(
                 f'{cls.key}_style', 'Update Order', type='select', default='ltr', opts=list(STYLES)))
 
-    def frames(self):
-        """The page strings to show, one per frame."""
+    def frames(self, grid):
+        """The page strings to show, one per frame, each grid.size long."""
         raise NotImplementedError
 
-    def get_pages(self, settings, cache):
+    def get_pages(self, settings, cache, grid):
         style = self.fixed_style or self.setting(settings, f'{self.key}_style')
         speed = max(self.min_speed, float(self.setting(settings, f'{self.key}_speed')))
-        return [Frame(text=page, delay=speed, style=style, raw=True) for page in self.frames()]
+        return [Frame(text=page, delay=speed, style=style, raw=True) for page in self.frames(grid)]

@@ -36,6 +36,6 @@ class SportsApp(App):
         SettingField('nhl_teams', 'NHL Teams (comma-separated)', default='BOS,DAL', placeholder='BOS,DAL'),
     ]
 
-    def get_pages(self, settings, cache):
+    def get_pages(self, settings, cache, grid):
         teams = split_list(self.setting(settings, 'nhl_teams'))
-        return row_frames(cache_get_or_fetch(cache, 'sports', 60, lambda: _fetch(teams)), delay=5)
+        return row_frames(grid, cache_get_or_fetch(cache, 'sports', 60, lambda: _fetch(teams)), delay=5)

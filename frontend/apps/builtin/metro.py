@@ -47,7 +47,7 @@ class MetroApp(App):
         SettingField('mbta_route', 'Route (e.g. Orange)', default='Orange', placeholder='Orange'),
     ]
 
-    def get_pages(self, settings, cache):
+    def get_pages(self, settings, cache, grid):
         stop = self.setting(settings, 'mbta_stop')
         route = self.setting(settings, 'mbta_route')
-        return row_frames([cache_get_or_fetch(cache, 'metro', 30, lambda: _fetch(stop, route))], delay=5)
+        return row_frames(grid, [cache_get_or_fetch(cache, 'metro', 30, lambda: _fetch(stop, route))], delay=5)
