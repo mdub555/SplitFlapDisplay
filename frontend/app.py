@@ -11,8 +11,8 @@ from flask import Flask
 
 from config import PORT
 from routes import (
-    apps_routes, backup_routes, control, firmware_routes, module_routes, pages, playlist_routes,
-    schedule_routes, settings_routes,
+    apps_routes, backup_routes, control, firmware_routes, module_routes, oauth_routes, pages,
+    playlist_routes, schedule_routes, settings_routes,
 )
 from display.player import playlist_loop
 from display.scheduler import get_scheduler
@@ -21,7 +21,7 @@ from display.serial_link import keep_connected
 
 app = Flask(__name__)
 for routes in (pages, control, settings_routes, apps_routes, module_routes, backup_routes,
-               playlist_routes, firmware_routes, schedule_routes):
+               playlist_routes, firmware_routes, schedule_routes, oauth_routes):
     app.register_blueprint(routes.bp)
 
 

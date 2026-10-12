@@ -5,7 +5,8 @@ window.appsByKey = {};
 let appsRequest = null;   // the /apps request, once it's made (and hasn't failed)
 
 // A card: a button filling it that runs the app, and (beside it, not inside
-// it) a ⚙️ button for the app's settings.
+// it) a ⚙️ button for the app's settings, if it has any of its own or uses
+// any of the Global Settings.
 function buildAppCard(app) {
   const gear = el('button', {class: 'app-gear', title: `${app.name} settings`, ariaLabel: `${app.name} settings`,
                              dataset: {onclick: 'openAppSettings'}}, '⚙️');
@@ -15,7 +16,7 @@ function buildAppCard(app) {
       el('span', {class: 'app-name'}, app.name),
       el('span', {class: 'app-running sr-only'}),
       el('span', {class: 'app-desc'}, app.desc)),
-    app.settings_fields.length ? gear : '');
+    app.settings_fields.length || app.global_settings.length || app.oauth ? gear : '');
 }
 
 // Fills the grid (and appsByKey) once; resolves when that's done. After a

@@ -3,7 +3,7 @@ from datetime import datetime
 import requests
 
 from apps.base import App, Frame, SettingField
-from apps.builtin._shared import cache_get_or_fetch, center_page, clock, get_tz
+from apps.builtin._shared import cache_get_or_fetch, clock, get_tz
 
 
 def fetch_weather(settings):
@@ -28,19 +28,20 @@ def fetch_weather(settings):
         return None
 
 
-def weather_page(settings, cache):
-    """The weather page: city and time, temperature, and the day's range.
+def weather_page(settings, cache, grid):
+    """The weather page: city and time, temperature, and the day's range,
+    the city and description cut to leave a column spare on each line.
     Shared with DashboardApp."""
     w = cache_get_or_fetch(cache, 'weather', 300, lambda: fetch_weather(settings))
     now_t = clock(datetime.now(get_tz(settings)), spaced=False)
     if not w:
-        return center_page('NO WEATHER DATA', now_t, 'CHECK API KEY')
-    mcl = max(1, 14 - len(now_t))
+        return grid.page('NO WEATHER DATA', now_t, 'CHECK API KEY')
+    mcl = max(1, grid.cols - 2 - len(now_t))
     l1 = f"{w['city'][:mcl]} {now_t}"
     pfx = f"{w['temp']}F ({w['feels']}F) "
-    l2 = pfx + w['desc'][:max(0, 15 - len(pfx))]
+    l2 = pfx + w['desc'][:max(0, grid.cols - 1 - len(pfx))]
     l3 = f"H:{w['high']}F L:{w['low']}F"
-    return center_page(l1, l2, l3)
+    return grid.page(l1, l2, l3)
 
 
 class WeatherApp(App):
@@ -48,10 +49,11 @@ class WeatherApp(App):
     name = 'Weather'
     icon = '🌤️'
     desc = 'Current conditions'
+    order = 60
     settings_fields = [
         SettingField('zip_code', 'Zip Code', default='02118', placeholder='02118'),
         SettingField('weather_api_key', 'OpenWeatherMap API Key', type='password'),
     ]
 
-    def get_pages(self, settings, cache):
-        return [Frame(text=weather_page(settings, cache), delay=5)]
+    def get_pages(self, settings, cache, grid):
+        return [Frame(text=weather_page(settings, cache, grid), delay=5)]

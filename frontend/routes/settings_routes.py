@@ -3,6 +3,7 @@ import time
 from flask import Blueprint, jsonify, request
 
 from apps.base import clean_settings
+from apps.registry import registry
 from config import NUM_MODULES
 from settings.store import settings, save_settings
 from settings.schema import GLOBAL_FIELDS
@@ -36,6 +37,7 @@ def handle_settings():
             return error(str(e), 400)
         settings.update(values)
         save_settings(settings)
+        registry.clear_caches()   # an API key or timezone apps use
         return jsonify(status='Saved')
     return jsonify(settings)
 

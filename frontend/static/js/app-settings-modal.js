@@ -12,8 +12,14 @@ async function openAppSettings(appKey) {
   if (!settings) return; // error toast already shown by the api layer
 
   byId('appSettingsTitle').textContent = `${appInfo.icon} ${appInfo.name} Settings`;
-  byId('appSettingsFields').replaceChildren(...(appInfo.settings_fields.length
-    ? appInfo.settings_fields.map(f => buildField(f, settings[f.key], 'asf_', 'modal-field'))
+  const fields = appInfo.settings_fields.map(f => buildField(f, settings[f.key], 'asf_', 'modal-field'));
+  // The shared settings it needs are edited in one place, Global Settings.
+  const globals = appInfo.global_settings.length
+    ? [el('p', {class: 'note centered'}, `Also uses from Global Settings: ${appInfo.global_settings.join(', ')}.`)]
+    : [];
+  const signIn = appInfo.oauth ? [buildOAuthSection(appInfo.oauth)] : [];
+  byId('appSettingsFields').replaceChildren(...(fields.length || globals.length || signIn.length
+    ? [...fields, ...signIn, ...globals]
     : [el('p', {class: 'note centered'}, 'No configurable settings for this app.')]));
   modalOpener = document.activeElement;
   byId('appSettingsModal').style.display = 'flex';
@@ -21,6 +27,89 @@ async function openAppSettings(appKey) {
   document.querySelector('.container').inert = true;
   const first = modalFocusable()[0];
   if (first) first.focus();
+}
+
+// The account section for an app that signs in to a service (its `oauth`
+// from /apps): whether it's connected, how to set it up, and the buttons.
+// For a service that can't send the browser back to this page, a box to
+// paste the address it ended up on, shown once Connect has been pressed.
+function buildOAuthSection(oauth) {
+  const connectLabel = `${oauth.connected ? 'Reconnect' : 'Connect'} ${oauth.provider}`;
+  return el('div', {class: 'modal-field oauth-section'},
+    el('div', {class: 'field-label'}, `${oauth.provider} account`),
+    el('p', {class: 'oauth-status', id: 'oauthStatus'}, oauth.connected ? '✓ Connected' : 'Not connected'),
+    oauth.help ? el('p', {class: 'note'}, oauth.help) : '',
+    oauth.redirect_uri ? el('p', {class: 'note'}, 'Redirect URI: ', el('code', {}, oauth.redirect_uri)) : '',
+    el('div', {class: 'button-row'},
+      el('button', {class: 'btn btn-fit', dataset: {onclick: 'oauthConnect'}}, connectLabel),
+      oauth.connected ? el('button', {class: 'btn btn-ghost btn-fit', dataset: {onclick: 'oauthDisconnect'}}, 'Disconnect') : ''),
+    el('div', {id: 'oauthPaste', hidden: true},
+      el('label', {class: 'field-label', htmlFor: 'oauthPasteUrl'},
+        `After you approve, ${oauth.provider} sends the tab to a page that won't load. Copy that tab's whole address and paste it here:`),
+      el('input', {class: 'input', id: 'oauthPasteUrl', type: 'url', placeholder: `${oauth.redirect_uri || ''}?code=...`}),
+      el('div', {class: 'button-row'},
+        el('button', {class: 'btn btn-success btn-fit', dataset: {onclick: 'oauthFinish'}}, 'Finish connecting'))));
+}
+
+// Saves the settings (the Client ID has to be stored before signing in can
+// start), then opens the service's sign-in page in a new tab.
+async function oauthConnect() {
+  const key = currentAppSettingsKey;
+  const appInfo = window.appsByKey[key];
+  // Opened now, while the click still counts, or the browser blocks it as a
+  // pop-up; it's pointed at the sign-in page once that's known.
+  const tab = window.open('', '_blank');
+  const values = readFieldValues(appInfo.settings_fields, 'asf_');
+  const started = values && await api.saveAppSettings(key, values) && await api.oauthStart(key);
+  if (!started) {
+    if (tab) tab.close();
+    return;
+  }
+  if (tab) {
+    tab.opener = null;
+    tab.location = started.authorize_url;
+  } else {
+    window.open(started.authorize_url, '_blank', 'noopener');
+  }
+  if (started.paste) {
+    byId('oauthPaste').hidden = false;
+    byId('oauthPasteUrl').focus();
+  } else {
+    // It finishes in that tab; look again when they come back to this one.
+    window.addEventListener('focus', () => refreshOAuth(key), {once: true});
+  }
+}
+
+async function oauthFinish() {
+  const key = currentAppSettingsKey;
+  const url = byId('oauthPasteUrl').value.trim();
+  if (!url) {
+    showToast('Paste the address from the sign-in tab first', 'warn');
+    return;
+  }
+  if (await api.oauthFinish(key, url)) {
+    showToast(`${window.appsByKey[key].oauth.provider} connected`);
+    refreshOAuth(key);
+  }
+}
+
+async function oauthDisconnect() {
+  const key = currentAppSettingsKey;
+  if (await api.oauthDisconnect(key)) {
+    showToast(`${window.appsByKey[key].oauth.provider} disconnected`);
+    refreshOAuth(key);
+  }
+}
+
+// Reads the app's sign-in state again and redraws its section, if its
+// settings are still open.
+async function refreshOAuth(key) {
+  const list = await api.apps();
+  const fresh = list && list.find(app => app.key === key);
+  if (!fresh) return;
+  window.appsByKey[key] = fresh;
+  const section = document.querySelector('#appSettingsFields .oauth-section');
+  if (section && currentAppSettingsKey === key && modalOpen()) section.replaceWith(buildOAuthSection(fresh.oauth));
 }
 
 function closeAppSettings() {
@@ -73,4 +162,7 @@ registerActions({
   openAppSettings: gear => openAppSettings(gear.closest('[data-app]').dataset.app),
   saveAppSettings,
   closeAppSettings,
+  oauthConnect,
+  oauthFinish,
+  oauthDisconnect,
 });

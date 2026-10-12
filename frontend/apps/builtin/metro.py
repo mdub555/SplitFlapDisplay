@@ -41,12 +41,13 @@ class MetroApp(App):
     name = 'Metro'
     icon = '🚇'
     desc = 'MBTA arrivals'
+    order = 70
     settings_fields = [
         SettingField('mbta_stop', 'Stop ID (e.g. place-NSTAT)', default='place-bbsta', placeholder='place-NSTAT'),
         SettingField('mbta_route', 'Route (e.g. Orange)', default='Orange', placeholder='Orange'),
     ]
 
-    def get_pages(self, settings, cache):
+    def get_pages(self, settings, cache, grid):
         stop = self.setting(settings, 'mbta_stop')
         route = self.setting(settings, 'mbta_route')
-        return row_frames([cache_get_or_fetch(cache, 'metro', 30, lambda: _fetch(stop, route))], delay=5)
+        return row_frames(grid, [cache_get_or_fetch(cache, 'metro', 30, lambda: _fetch(stop, route))], delay=5)

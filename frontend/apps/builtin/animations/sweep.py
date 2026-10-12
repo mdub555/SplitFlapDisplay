@@ -1,16 +1,15 @@
 from apps.builtin.animations.base import AnimationApp
-from config import GRID_ROWS, GRID_COLS
 
 
-def generate_pages():
+def generate_pages(grid):
     """Colour band sweeping across the board, then back."""
     colors = 'roygbpw'
 
     def band(width, color):
-        return ''.join(color if c < width else ' ' for r in range(GRID_ROWS) for c in range(GRID_COLS))
+        return grid.cells(lambda r, c: color if c < width else ' ')
 
-    return ([band(i, colors[i % 7]) for i in range(1, GRID_COLS + 1)]
-            + [band(i, colors[(i + 3) % 7]) for i in range(GRID_COLS - 1, 0, -1)])
+    return ([band(i, colors[i % 7]) for i in range(1, grid.cols + 1)]
+            + [band(i, colors[(i + 3) % 7]) for i in range(grid.cols - 1, 0, -1)])
 
 
 class SweepApp(AnimationApp):
@@ -18,10 +17,11 @@ class SweepApp(AnimationApp):
     name = 'Sweep'
     icon = '〰️'
     desc = 'Colour sweep'
+    order = 160
     default_speed = '0.25'
     min_speed = 0.05
     max_speed = '2'
     speed_step = '0.05'
 
-    def frames(self):
-        return generate_pages()
+    def frames(self, grid):
+        return generate_pages(grid)

@@ -3,29 +3,30 @@ import requests
 from apps.base import App
 from apps.builtin._shared import cache_get_or_fetch, row_frames
 from display.charset import FLAP_CHARS
-from config import GRID_COLS
 
 
 def _fetch(settings):
+    """(heading, text) for each of the latest comments: the author and what
+    they wrote, or a heading and an error."""
     api_key = settings.get('yt_api_key', '').strip()
     video_id = settings.get('yt_video_id', '').strip()
     if not api_key or not video_id:
-        return [('YT COMMENTS', 'MISSING API KEY', 'OR VIDEO ID')]
+        return [('YT COMMENTS', 'MISSING API KEY OR VIDEO ID')]
     url = (f"https://www.googleapis.com/youtube/v3/commentThreads"
            f"?part=snippet&videoId={video_id}&maxResults=5&order=time&textFormat=plainText&key={api_key}")
     try:
         items = requests.get(url, timeout=5).json().get('items', [])
         if not items:
-            return [('YT COMMENTS', 'NO COMMENTS', 'FOUND')]
+            return [('YT COMMENTS', 'NO COMMENTS FOUND')]
         pages = []
         for item in items:
             sn = item['snippet']['topLevelComment']['snippet']
             author = ''.join(c for c in sn['authorDisplayName'].upper() if c in FLAP_CHARS)
             text = sn['textDisplay'].upper().replace('\n', ' ')
-            pages.append((author[:GRID_COLS], text[:GRID_COLS], text[GRID_COLS:GRID_COLS * 2]))
-        return pages or [('YT COMMENTS', 'FETCH ERROR', '')]
+            pages.append((author, text))
+        return pages or [('YT COMMENTS', 'FETCH ERROR')]
     except Exception:
-        return [('YT COMMENTS', 'API ERROR', '')]
+        return [('YT COMMENTS', 'API ERROR')]
 
 
 class YoutubeCommentsApp(App):
@@ -33,8 +34,12 @@ class YoutubeCommentsApp(App):
     name = 'Comments'
     icon = '💬'
     desc = 'YT comments'
-    # yt_api_key / yt_video_id live in Global Settings — shared with YouTube & Livestream.
-    settings_fields = []
+    order = 100
+    global_settings = ['yt_api_key', 'yt_video_id']
 
-    def get_pages(self, settings, cache):
-        return row_frames(cache_get_or_fetch(cache, 'yt_comments', 60, lambda: _fetch(settings)), delay=5)
+    def get_items(self, settings, cache, grid):
+        comments = cache_get_or_fetch(cache, 'yt_comments', 60, lambda: _fetch(settings))
+        # A comment each: the heading on the first row, the text wrapped over
+        # the rest.
+        return [row_frames(grid, [(heading, *grid.wrap(text, grid.rows - 1))], delay=5)
+                for heading, text in comments]

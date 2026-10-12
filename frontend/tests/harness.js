@@ -81,6 +81,9 @@ let schedule = { enabled: true, default: 'app:time',
 // the offset of the one showing (not flap 0), as the firmware does.
 const tunedModule = { showing: null, offsets: Array(64).fill(0) };
 
+// Whether the Spotify app is signed in, as the OAuth routes leave it.
+let spotifyConnected = false;
+
 window.fetch = async (url, options = {}) => {
   calls.push({ url, method: options.method || 'GET', body: options.body });
 
@@ -93,8 +96,16 @@ window.fetch = async (url, options = {}) => {
   if (url === '/apps') {
     return ok([
       { key: 'weather', name: 'Weather', icon: '🌤️', desc: 'Current conditions',
-        settings_fields: [{ key: 'zip_code', label: 'Zip Code', type: 'text', opts: [], placeholder: '02118' }] },
-      { key: 'time', name: 'Time', icon: '⏱️', desc: 'Live clock', settings_fields: [] },
+        settings_fields: [{ key: 'zip_code', label: 'Zip Code', type: 'text', opts: [], placeholder: '02118' }],
+        global_settings: [] },
+      { key: 'time', name: 'Time', icon: '⏱️', desc: 'Live clock', settings_fields: [], global_settings: [] },
+      { key: 'youtube', name: 'YouTube', icon: '▶️', desc: 'Sub counter', settings_fields: [],
+        global_settings: ['YouTube Channel ID'] },
+      { key: 'spotify', name: 'Spotify', icon: '🎵', desc: 'Now playing',
+        settings_fields: [{ key: 'spotify_client_id', label: 'Spotify Client ID', type: 'text', opts: [], placeholder: '' }],
+        global_settings: [],
+        oauth: { provider: 'Spotify', connected: spotifyConnected, redirect_uri: 'http://127.0.0.1:8888/callback',
+                 help: 'Create an app.' } },
     ]);
   }
   if (url === '/run_app') {
@@ -154,6 +165,19 @@ window.fetch = async (url, options = {}) => {
       schedule = body;
     }
     return ok({ schedule, now: 'Tue 14:05', current: schedule.enabled ? schedule.default : '' });
+  }
+  if (url === '/apps/spotify/oauth/start') {
+    return ok({ authorize_url: 'https://accounts.spotify.com/authorize?state=abc',
+                redirect_uri: 'http://127.0.0.1:8888/callback', paste: true });
+  }
+  if (url === '/apps/spotify/oauth/finish') {
+    if (!JSON.parse(options.body).url.includes('code=')) return ok({ status: 'error', message: 'No code' }, 400);
+    spotifyConnected = true;
+    return ok({ status: 'connected', connected: true });
+  }
+  if (url === '/apps/spotify/oauth/disconnect') {
+    spotifyConnected = false;
+    return ok({ status: 'disconnected', connected: false });
   }
   if (url.startsWith('/apps/') && url.endsWith('/settings')) {
     return ok({ status: 'saved' });

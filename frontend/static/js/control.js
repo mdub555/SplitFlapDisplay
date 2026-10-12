@@ -6,7 +6,7 @@ const PAGE_DEFAULTS = {delay: 5, style: 'ltr', speed: 15};
 const ADD_PAGE_LABEL = '+ Add to Playlist';
 
 let editingIndex = null;   // the playlist page being edited, if any
-let playlist = [];         // [{text, delay, style, speed}]
+let playlist = [];         // [{text, delay, style, speed}], or {app, delay} for an app
 let loadedPlaylist = null; // the saved playlist being edited, if any (its name)
 let savedPlaylists = {};   // GET /playlists, as last shown
 
@@ -276,6 +276,7 @@ function defaultTiming() {
 // saved by an older version can be a plain string.
 function pageForDisplay(page) {
   if (typeof page !== 'object') return {text: page, ...PAGE_DEFAULTS};
+  if (page.app) return {app: page.app, delay: page.delay || PAGE_DEFAULTS.delay};
   return {
     text: page.text,
     delay: page.delay || PAGE_DEFAULTS.delay,
@@ -312,7 +313,22 @@ function pageControl(icon, control, field, unit) {
   return el('label', {class: 'inline-field inline-field-sm'}, `${icon} `, control, unit ? ` ${unit}` : '');
 }
 
+// The apps that can be added to the playlist, in the picker under it.
+function fillAppPicker() {
+  const apps = Object.values(window.appsByKey);
+  byId('addAppSelect').replaceChildren(...apps.map(app => el('option', {value: app.key}, `${app.icon} ${app.name}`)));
+}
+
+// Adds the picked app as a step, held for at least the default delay.
+function addAppToPlaylist() {
+  const key = byId('addAppSelect').value;
+  if (!key) return;
+  playlist.push({app: key, delay: defaultTiming().delay});
+  renderPlaylist();
+}
+
 function buildPlaylistRow(item, idx) {
+  if (item.app) return buildAppRow(item, idx);
   const page = `page ${idx + 1}`;
   // Each button's name says which page it acts on, for screen readers.
   const button = (text, action, label, cls = 'btn btn-secondary btn-sm', dir) => {
@@ -355,6 +371,33 @@ function buildPlaylistRow(item, idx) {
 
   return el('div', {class: 'playlist-item', role: 'group', ariaLabelledby: `playlistPage${idx}`, dataset: {idx}},
     header, preview, controls);
+}
+
+// A playlist row for an app step: its name, the same buttons as a page's
+// (▶ runs the app; there's nothing to edit in the grid), and how long it's
+// held.
+function buildAppRow(item, idx) {
+  const app = window.appsByKey[item.app] || {name: item.app, icon: '❔'};
+  const step = `step ${idx + 1}, ${app.name}`;
+  const button = (text, action, label, cls = 'btn btn-secondary btn-sm', dir) =>
+    el('button', {class: cls, title: label, ariaLabel: label.replace('{step}', step),
+                  dataset: {onclick: action, ...(dir !== undefined && {dir})}}, text);
+  const header = el('div', {class: 'playlist-item-header'},
+    el('span', {class: 'drag-handle', title: 'Drag to reorder', ariaHidden: 'true'}, '⠿'),
+    el('span', {class: 'playlist-item-title', id: `playlistPage${idx}`}, `${idx + 1}. ${app.icon} ${app.name}`),
+    el('div', {class: 'row row-tight'},
+      button('▲', 'movePlaylist', 'Move {step} up', undefined, -1),
+      button('▼', 'movePlaylist', 'Move {step} down', undefined, 1),
+      button('▶', 'pushPlaylistPage', 'Run {step} now'),
+      button('⧉', 'duplicatePlaylistPage', 'Duplicate {step}'),
+      button('DEL', 'removeFromPlaylist', 'Remove {step}', 'btn btn-danger btn-sm')));
+  const note = el('div', {class: 'playlist-app-note'},
+    `Each time round: ${app.name}'s next item (an event, a game…), or all of it if it has just one.`);
+  const delay = el('input', {type: 'number', class: 'input input-num input-sm', value: item.delay || PAGE_DEFAULTS.delay,
+                             min: '0.5', max: '60', step: '0.5', ariaLabel: `Step ${idx + 1} minimum time in seconds`});
+  const controls = el('div', {class: 'playlist-item-controls'}, pageControl('⏱ at least', delay, 'delay', 's'));
+  return el('div', {class: 'playlist-item playlist-item-app', role: 'group', ariaLabelledby: `playlistPage${idx}`,
+                    dataset: {idx}}, header, note, controls);
 }
 
 function renderPlaylist() {
@@ -455,9 +498,16 @@ function duplicatePlaylistPage(button) {
   focusPlaylistRow(idx + 1, '[data-onclick="duplicatePlaylistPage"]');
 }
 
-// Shows one page of the playlist on the display now, on its own.
+// Shows one page of the playlist on the display now, on its own; for an
+// app step, runs the app.
 function pushPlaylistPage(button) {
   const page = pageForDisplay(playlist[rowIndex(button)]);
+  if (page.app) {
+    api.runApp(page.app).then(result => {
+      if (result) showToast(`▶ ${appName(page.app)} started`);
+    });
+    return;
+  }
   api.updatePlaylist([page], page.delay).then(result => {
     if (result) showToast(`Showing page ${rowIndex(button) + 1}`);
   });
@@ -544,10 +594,14 @@ function buildSavedPlaylistRow(name, item) {
                   dataset: {onclick: 'deleteSavedPlaylist'}}, '✕'));
 }
 
-// "3 pages · 5 s each", or "3 pages · 2–8 s" when the pages differ.
+// "3 pages · 5 s each", or "3 pages · 2–8 s" when the pages differ;
+// "2 pages, 1 app · 5 s each" with apps in it.
 function playlistSummary(item) {
   const n = item.pages.length;
-  const count = `${n} page${n === 1 ? '' : 's'}`;
+  const apps = item.pages.filter(page => page && page.app).length;
+  const texts = n - apps;
+  const count = [texts || !apps ? `${texts} page${texts === 1 ? '' : 's'}` : '',
+                 apps ? `${apps} app${apps === 1 ? '' : 's'}` : ''].filter(Boolean).join(', ');
   if (!n) return count;
   const delays = item.pages.map(page => Number((page && page.delay) || item.delay) || PAGE_DEFAULTS.delay);
   const low = Math.min(...delays), high = Math.max(...delays);
@@ -766,11 +820,16 @@ function initControlPage() {
   loadSavedPlaylists().then(data => {
     if (data && loadedPlaylist && !(loadedPlaylist in data)) setLoadedPlaylist(null);
   });
+  // The app picker, and the names of app steps in a restored draft.
+  buildAppsGrid().then(() => {
+    fillAppPicker();
+    renderPlaylist();
+  });
 }
 
 registerActions({
   clearDisplay: clearGrid, startRenamePlaylist, saveMessage, sync, saveCurrentPlaylist, stopApp,
   toggleMultiMode, centerLines, updatePlaylistItemFromInput,
-  movePlaylist, editPlaylist, removeFromPlaylist, duplicatePlaylistPage, pushPlaylistPage,
+  movePlaylist, editPlaylist, removeFromPlaylist, duplicatePlaylistPage, pushPlaylistPage, addAppToPlaylist,
   loadSavedPlaylist, runSavedPlaylist, deleteSavedPlaylist,
 });

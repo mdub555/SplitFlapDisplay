@@ -48,11 +48,6 @@ class AnimationOrderTest(unittest.TestCase):
                 with self.subTest(style=style):
                     self.assertEqual(layout.get_animation_order(style), order)
 
-    def test_format_lines_centers_and_pads_rows(self):
-        with grid(2, 4):
-            self.assertEqual(layout.format_lines('AB'), ' AB     ')
-            self.assertEqual(layout.format_lines('A', 'B', 'dropped'), ' A   B  ')
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,11 +1,11 @@
 import logging
 import random
+import re
 import time
+import unicodedata
 
 import pytz
 
-from config import GRID_ROWS, NUM_MODULES
-from display.layout import format_lines
 from apps.base import Frame
 
 
@@ -35,6 +35,25 @@ def split_list(text, limit=None):
     return items[:limit]
 
 
+# Punctuation the flaps don't have -> the nearest they do ('' drops it).
+_PLAIN = str.maketrans({
+    '\u2018': '', '\u2019': '', "'": '', '`': '',   # apostrophes: DONT reads better than DON T
+    '\u201c': '"', '\u201d': '"',
+    '\u2013': '-', '\u2014': '-', '\u2212': '-',
+    ';': ',', '\u2026': '...',
+})
+
+
+def plain_text(text):
+    """Free text (from a feed or an API) the way the flaps can show it:
+    uppercase, accents dropped (É -> E), curly quotes and dashes swapped for
+    ones the reels have, apostrophes dropped, and whitespace collapsed.
+    Anything else with no flap still comes out blank."""
+    text = unicodedata.normalize('NFKD', str(text))
+    text = ''.join(c for c in text if not unicodedata.combining(c)).translate(_PLAIN)
+    return re.sub(r'\s+', ' ', text).strip().upper()
+
+
 def cache_get_or_fetch(cache, key, interval, fetch_fn):
     """Simple time-boxed cache: re-run fetch_fn only if `interval` seconds
     have passed since the last successful call for this key."""
@@ -46,31 +65,40 @@ def cache_get_or_fetch(cache, key, interval, fetch_fn):
     return cache[key]
 
 
-def center_page(*rows):
-    """Vertically centers up to GRID_ROWS text rows (each horizontally
-    centered within GRID_COLS via format_lines). This is what most
-    data apps should use instead of hand-building a fixed 3-row string."""
-    rows = list(rows)[:GRID_ROWS]
-    total_pad = GRID_ROWS - len(rows)
-    top = total_pad // 2
-    bottom = total_pad - top
-    return format_lines(*([''] * top + rows + [''] * bottom))
+def row_frames(grid, pages, delay):
+    """A centred frame for each page, where a page is a tuple of rows."""
+    return [Frame(text=grid.page(*rows), delay=delay) for rows in pages]
 
 
-def row_frames(pages, delay):
-    """A centered frame for each page, where a page is a tuple of rows."""
-    return [Frame(text=center_page(*rows), delay=delay) for rows in pages]
+def text_frames(grid, text, delay, heading=None):
+    """`text` wrapped across as many pages as it takes. With a `heading`,
+    it's on the top row of every page (even a last page with less text) and
+    the text fills the rest."""
+    body_rows = grid.rows - 1 if heading is not None and grid.rows > 1 else grid.rows
+    lines = grid.wrap(text, max_lines=len(text) + 1)
+    pages = [[heading, *chunk, *[''] * (body_rows - len(chunk))] if heading is not None and grid.rows > 1
+             else chunk for chunk in grid.chunks(lines, body_rows)]
+    return row_frames(grid, pages, delay)
+
+
+def paired_items(grid, pairs, delay):
+    """For (first line, second line) pairs, such as a price and its change:
+    a page of first lines, then the same items' second lines, an item a row,
+    as many items to a page as the display has rows. Each pair of pages is
+    one of the app's items (see App.get_items)."""
+    return [row_frames(grid, [[first for first, _ in chunk], [second for _, second in chunk]], delay)
+            for chunk in grid.chunks(pairs)]
 
 
 NOISE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$&?%*-+'
 
 
-def matrix_burst_frames(reveal_page, reveal_style='center_out', noise_delay=0.6, reveal_delay=5):
+def matrix_burst_frames(grid, reveal_page, reveal_style='center_out', noise_delay=0.6, reveal_delay=5):
     """Three frames of random noise (using different animation orders so the
     cascade reads as scrambling from multiple directions) followed by a
     clean reveal frame. Shared by the Matrix animation app and the Demo app."""
     def noise():
-        return ''.join(random.choice(NOISE_CHARS) for _ in range(NUM_MODULES))
+        return ''.join(random.choice(NOISE_CHARS) for _ in range(grid.size))
     return [
         Frame(text=noise(), delay=noise_delay, style='random', raw=True),
         Frame(text=noise(), delay=noise_delay, style='rain', raw=True),

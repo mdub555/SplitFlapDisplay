@@ -51,6 +51,9 @@ const api = {
   // live-flap.js) rather than through a call here.
   apps:               () => apiGet('/apps', 'Could not load app list'),
   saveAppSettings:    (key, data) => apiPost(`/apps/${key}/settings`, data, 'Could not save app settings'),
+  oauthStart:         (key) => apiPost(`/apps/${key}/oauth/start`, undefined, 'Could not start connecting'),
+  oauthFinish:        (key, url) => apiPost(`/apps/${key}/oauth/finish`, {url}, 'Could not connect'),
+  oauthDisconnect:    (key) => apiPost(`/apps/${key}/oauth/disconnect`, undefined, 'Could not disconnect'),
   runApp:             (key) => apiPost('/run_app', {app: key}, 'Could not start app'),
   stopApp:            () => apiPost('/stop_app', undefined, 'Could not stop'),
 

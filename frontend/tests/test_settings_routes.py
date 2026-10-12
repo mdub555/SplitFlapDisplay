@@ -70,6 +70,16 @@ class SettingsRoutesTest(unittest.TestCase):
         self.assertEqual(self.settings['modules'], {'1': {'autoHome': False}})
         self.assertEqual(self.saves, 1)
 
+    def test_a_playlist_can_have_apps_in_it(self):
+        res = self.client.post('/playlists', json={'name': 'Mix', 'pages': [
+            'HI', {'app': 'on_this_day', 'delay': '8'}, {'app': 'time', 'style': 'ignored'}]})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(self.settings['saved_playlists']['Mix']['pages'],
+                         [{'text': 'HI'}, {'app': 'on_this_day', 'delay': 8}, {'app': 'time'}])
+        res = self.client.post('/update_playlist', json={'pages': [{'app': 'nope'}]})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("Page 1 is an app that doesn't exist: nope", res.get_json()['message'])
+
     def test_provisioning_needs_the_hardware(self):
         self.assertEqual(self.client.post('/provision_module', json={}).status_code, 503)
 

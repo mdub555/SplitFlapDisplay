@@ -1,3 +1,4 @@
+import textwrap
 from dataclasses import asdict, dataclass, field
 from typing import Optional
 
@@ -72,6 +73,56 @@ def clean_settings(fields, data):
     return {f.key: f.clean(data[f.key]) for f in fields if f.key in data}
 
 
+@dataclass(frozen=True)
+class Grid:
+    """The display's size, which every app is given rather than assuming
+    one: 4x16 and 3x15 displays both exist. Builds pages to fit it."""
+    rows: int
+    cols: int
+
+    @property
+    def size(self):
+        """The number of modules: the length of every page."""
+        return self.rows * self.cols
+
+    def page(self, *rows):
+        """A page of up to `rows` lines of text, each centred across the
+        display, the lines centred top to bottom. Lines past the last row are
+        dropped and text past the last column is cut off."""
+        rows = list(rows)[:self.rows]
+        top = (self.rows - len(rows)) // 2
+        rows = [''] * top + rows + [''] * (self.rows - len(rows) - top)
+        return ''.join(str(r).center(self.cols)[:self.cols] for r in rows)
+
+    def banner(self, text, fill='='):
+        """`text` centred across a row as page() centres it, with `fill`
+        running out to both edges (a space either side of the text), to
+        mark it as a heading: '== ETIQUETTE ==='. Text too wide for that
+        is left as it is."""
+        text = str(text)
+        if len(text) + 4 > self.cols:
+            return text
+        left = len(text.center(self.cols)) - len(text.center(self.cols).lstrip())
+        right = self.cols - left - len(text)
+        return f"{fill * (left - 1)} {text} {fill * (right - 1)}"
+
+    def cells(self, char_at):
+        """A page with `char_at(row, col)` in each module, for patterns."""
+        return ''.join(char_at(r, c) for r in range(self.rows) for c in range(self.cols))
+
+    def wrap(self, text, max_lines=None):
+        """`text` split into lines that fit across the display, breaking
+        between words where it can, at most `max_lines` of them (all the
+        display's rows by default)."""
+        lines = textwrap.wrap(str(text), self.cols) or ['']
+        return lines[:self.rows if max_lines is None else max_lines]
+
+    def chunks(self, items, per_page=None):
+        """`items` split into groups of `per_page`, by default one per row."""
+        n = max(1, per_page or self.rows)
+        return [items[i:i + n] for i in range(0, len(items), n)]
+
+
 @dataclass
 class Frame:
     """One page of content to show on the display."""
@@ -86,24 +137,67 @@ class App:
     """Every app — data-driven (weather, stocks) or self-driven (demo,
     matrix cascade) — implements this same interface. The playlist loop
     doesn't know or care which kind it's running; it just asks for the next
-    batch of frames."""
+    batch of frames.
+
+    A subclass with a `key` anywhere under apps/builtin/ is found and
+    registered on its own (see apps/registry.py); one without a key (like
+    AnimationApp) is a base for other apps and isn't."""
 
     key: str = ''
     name: str = ''
     icon: str = ''
     desc: str = ''
+    order: int = 1000            # place in the Apps grid, lowest first; ties go by name
+    enabled: bool = True         # False leaves it out of the registry
     settings_fields: list = []   # list[SettingField], app-scoped fields only
+    # Keys of the Global Settings fields (settings/schema.py) that must be
+    # filled in for this app to work, like an API key, so its settings modal
+    # can say where to set them. (Not the timezone: it always has a value.)
+    global_settings: list = []
+    # An apps.oauth.OAuthProvider, for an app that signs in to a service
+    # (Spotify): its settings modal gets a Connect button, and get_pages()
+    # gets a token from self.access_token(settings).
+    oauth = None
 
     def setting(self, settings: dict, key: str):
-        """settings[key], falling back to the default of this app's field
-        for it."""
-        default = next(f.default for f in self.settings_fields if f.key == key)
-        return settings.get(key, default)
+        """settings[key], falling back to the default of the field for it:
+        one of this app's fields, or one of the global fields it uses."""
+        from settings.schema import GLOBAL_FIELDS   # deferred: it imports this module
+        for f in [*self.settings_fields, *GLOBAL_FIELDS]:
+            if f.key == key:
+                return settings.get(key, f.default)
+        raise KeyError(f"{type(self).__name__} has no setting {key!r}; add a SettingField for it")
 
-    def get_pages(self, settings: dict, cache: dict) -> list:
+    def access_token(self, settings: dict):
+        """A current OAuth access token for the app's service, or None if it
+        isn't connected (see apps/oauth.py)."""
+        from apps import oauth   # deferred: it reads config, which base needn't
+        return oauth.access_token(self, settings)
+
+    def get_items(self, settings: dict, cache: dict, grid: Grid) -> list:
+        """The app's content as separate items, each a list of Frames: one
+        historical event, one game's score. In a playlist, each time round
+        the app shows its next item rather than everything. An app whose
+        content doesn't split up (a clock) leaves this as it is: all of
+        get_pages() as one item. An app implements one or the other."""
+        return [self.get_pages(settings, cache, grid)]
+
+    def get_pages(self, settings: dict, cache: dict, grid: Grid) -> list:
         """Return a list of Frame objects representing everything this app
-        wants displayed right now. Called repeatedly by the playlist loop;
+        wants displayed right now, each page fitting `grid` (the display's
+        size: build pages with grid.page() rather than assuming one). Called repeatedly by the playlist loop;
         apps that fetch from the network should time-box their fetches using
-        `cache` (a plain dict that persists across calls for as long as this
-        app stays active) rather than hitting the network every call."""
-        raise NotImplementedError
+        `cache` (a plain dict that persists across calls; it's this app's
+        own, and emptied when settings are saved) rather than hitting
+        the network every call.
+
+        If it raises, the player logs the error and shows an error page for
+        a while before trying again, so an app needn't catch everything
+        itself; catching an error is only worth it to say something more
+        useful on the display.
+
+        An app that implements get_items() instead gets this for free: all
+        its items, one after another."""
+        if type(self).get_items is App.get_items:
+            raise NotImplementedError(f'{type(self).__name__} implements neither get_pages() nor get_items()')
+        return [frame for item in self.get_items(settings, cache, grid) for frame in item]

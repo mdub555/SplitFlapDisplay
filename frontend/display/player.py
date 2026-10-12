@@ -1,13 +1,13 @@
 import logging
 import time
 
-from config import NUM_MODULES, BAUD_RATE, FRAME_BROADCAST
+from config import GRID_COLS, GRID_ROWS, NUM_MODULES, BAUD_RATE, FRAME_BROADCAST
 from display.state import state
 from display.charset import FLAP_CHARS, NUM_FLAPS, SECONDS_PER_FLAP, normalize_text
 from display.layout import get_animation_order
 from display.module_protocol import BROADCAST, FRAME_MAX_MODULES, Cmd, message
 from display.serial_link import serial_lock, write_serial
-from apps.base import Frame
+from apps.base import Frame, Grid
 from apps.registry import registry
 from settings.store import settings
 
@@ -97,67 +97,129 @@ def wait(seconds, stop_event, poll=0.1):
     return True
 
 
-def _manual_frames():
-    """Wrap the frontend-pushed playlist (list of page dicts/strings) into
-    Frame objects so it goes through the exact same loop as every app."""
-    frames = []
-    for page in state.current_playlist:
-        if isinstance(page, dict):
-            frames.append(Frame(
-                text=page.get('text', ''),
-                delay=float(page.get('delay', state.loop_delay)),
-                style=page.get('style', Frame.style),
-                speed=int(page.get('speed', Frame.speed)),
-            ))
-        else:
-            frames.append(Frame(text=page, delay=state.loop_delay))
-    return frames
+def _page_frame(page):
+    """A frontend-pushed playlist page (a dict, or a plain string from an
+    older saved playlist) as a Frame, so it goes through the same path as
+    every app's."""
+    if isinstance(page, dict):
+        return Frame(
+            text=page.get('text', ''),
+            delay=float(page.get('delay', state.loop_delay)),
+            style=page.get('style', Frame.style),
+            speed=int(page.get('speed', Frame.speed)),
+        )
+    return Frame(text=page, delay=state.loop_delay)
 
 
 def playlist_loop():
     """Plays whatever's active, for ever. Nothing that goes wrong while
     playing may end it (it would silently freeze the display until a
     restart), so an error is logged and the loop carries on."""
-    cache = {}
     while True:
         try:
-            _play_once(cache)
+            _play_once()
         except Exception:
             logging.exception('Playlist loop error; carrying on')
             time.sleep(1)
 
 
-def _play_once(cache):
-    """One pass through the active app's or playlist's pages."""
-    app = registry.get(state.active_app) if state.active_app else None
+# The display's size, which every app is given.
+GRID = Grid(GRID_ROWS, GRID_COLS)
 
+# How long an app's error page stays up before it's asked for pages again.
+APP_ERROR_DELAY = 10
+
+
+def _app_frames(app):
+    """The app's pages, or, if it fails, a page saying so (held a while, so a
+    failing app isn't retried every second)."""
     try:
-        frames = app.get_pages(settings, cache) if app else _manual_frames()
-    except Exception as e:
-        logging.error(f"App '{state.active_app}' get_pages() failed: {e}")
-        frames = []
+        return app.get_pages(settings, registry.cache_for(app.key), GRID)
+    except Exception:
+        logging.exception(f"App '{app.key}' get_pages() failed")
+        return [Frame(text=GRID.page(app.name.upper(), 'APP ERROR'), delay=APP_ERROR_DELAY)]
 
-    if not frames:
-        time.sleep(1)
-        return
 
-    for index, frame in enumerate(frames):
+# Which item each app shows next when a playlist reaches it, so each time
+# round shows a different one (the next historical event, the next game).
+# Kept for as long as the server runs.
+_next_item = {}
+
+
+def _app_items(app):
+    """The app's items (see App.get_items), or, if it fails, an error page
+    as its one item."""
+    try:
+        return [item for item in app.get_items(settings, registry.cache_for(app.key), GRID) if item]
+    except Exception:
+        logging.exception(f"App '{app.key}' get_items() failed")
+        return [[Frame(text=GRID.page(app.name.upper(), 'APP ERROR'), delay=APP_ERROR_DELAY)]]
+
+
+def _play_frames(frames):
+    """Shows each frame and holds it for its delay. False if something else
+    was started part-way (the stop event)."""
+    for frame in frames:
         if state.stop_event.is_set():
-            break
-        if not app:
-            state.set_playlist_page(index)
-
+            return False
         order = get_animation_order(frame.style)
         if frame.raw or frame.text != state.last_sent_page:
             busy_s = send_to_display(frame.text, order, raw=frame.raw, step_delay_ms=frame.speed)
             state.last_sent_page = frame.text
         else:
             busy_s = 0
-
         if not wait(busy_s, state.stop_event, poll=0.1):
-            break
+            return False
         if not wait(frame.delay if frame.delay is not None else 5, state.stop_event):
+            return False
+    return True
+
+
+def _play_app_step(app, min_seconds):
+    """A playlist's app step: the app's next item, for at least
+    `min_seconds`. An item that's over sooner (a clock's one page, held a
+    second) is asked for again, so it stays up to date, until it's been up
+    that long. False if something else was started part-way."""
+    started = time.time()
+    while True:
+        items = _app_items(app)
+        if not items:
+            return wait(1, state.stop_event)
+        n = _next_item.get(app.key, 0) % len(items)
+        if not _play_frames(items[n]):
+            return False
+        if time.time() - started >= min_seconds:
             break
+    _next_item[app.key] = n + 1
+    return True
+
+
+def _play_once():
+    """One pass through the active app's pages, or the playlist's steps."""
+    app = registry.get(state.active_app) if state.active_app else None
+    if app:
+        frames = _app_frames(app)
+        if frames:
+            _play_frames(frames)
+        else:
+            time.sleep(1)
+    else:
+        played = False
+        for index, step in enumerate(list(state.current_playlist)):
+            state.set_playlist_page(index)
+            if isinstance(step, dict) and 'app' in step:
+                step_app = registry.get(step['app'])
+                if not step_app:
+                    logging.warning(f"Playlist: no app {step['app']!r}")
+                    continue
+                ok = _play_app_step(step_app, float(step.get('delay') or state.loop_delay))
+            else:
+                ok = _play_frames([_page_frame(step)])
+            played = True
+            if not ok:
+                break
+        if not played:   # an empty playlist, or only apps that are gone
+            time.sleep(1)
 
     if state.stop_event.is_set():
         state.clear_stop()

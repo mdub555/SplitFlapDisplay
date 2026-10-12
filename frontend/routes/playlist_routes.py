@@ -1,11 +1,17 @@
 from flask import Blueprint, jsonify, request
 
+from apps.registry import registry
 from display.pages import clean_playlist
 from display.state import state
 from settings.store import settings, save_settings
 from routes.common import error, json_body
 
 bp = Blueprint('playlist_routes', __name__)
+
+
+def _app_keys():
+    """The apps a playlist may have as steps."""
+    return {app.key for app in registry.list_all()}
 
 
 @bp.route('/playlists', methods=['GET', 'POST'])
@@ -17,7 +23,7 @@ def playlists():
     if not name:
         return error('Name required', 400)
     try:
-        pages, delay = clean_playlist(data)
+        pages, delay = clean_playlist(data, _app_keys())
     except ValueError as e:
         return error(str(e), 400)
     playlist = {'pages': pages, 'delay': delay}

@@ -36,8 +36,12 @@ function stopPreview() {
 
 function togglePreview() {
   if (previewing()) { stopPreview(); return; }
-  const pages = currentPages();
-  if (!pages.length) { showToast('The playlist is empty', 'warn'); return; }
+  // An app step's pages only exist on the display, so it's left out.
+  const pages = currentPages().filter(page => !page.app);
+  if (!pages.length) {
+    showToast(currentPages().length ? 'Only text pages can be previewed' : 'The playlist is empty', 'warn');
+    return;
+  }
   // From what the display shows now.
   const from = Array.from({length: composeCells()}, (_, i) => Math.max(0, CHAR_MAP.indexOf((liveState.state || '')[i] || ' ')));
   preview = {timer: null, pageTimer: null};

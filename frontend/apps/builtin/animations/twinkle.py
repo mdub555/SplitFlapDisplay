@@ -1,13 +1,12 @@
 import random
 
 from apps.builtin.animations.base import AnimationApp
-from config import NUM_MODULES
 
 
-def generate_pages(n=12):
+def generate_pages(grid, n=12):
     """Sparse random colour dots."""
     colors = 'roygbpw   '  # extra spaces for sparsity
-    return [''.join(random.choice(colors) for _ in range(NUM_MODULES)) for _ in range(n)]
+    return [''.join(random.choice(colors) for _ in range(grid.size)) for _ in range(n)]
 
 
 class TwinkleApp(AnimationApp):
@@ -15,7 +14,8 @@ class TwinkleApp(AnimationApp):
     name = 'Twinkle'
     icon = '✨'
     desc = 'Sparkle effect'
+    order = 170
     fixed_style = 'random'
 
-    def frames(self):
-        return generate_pages()
+    def frames(self, grid):
+        return generate_pages(grid)

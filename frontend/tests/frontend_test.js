@@ -47,7 +47,7 @@ async function main() {
   check('the live display sits above the tabs, outside every page',
     !document.getElementById('liveGrid').closest('.page') &&
     !!(document.getElementById('liveGrid').compareDocumentPosition(document.querySelector('.tab-bar')) & window.Node.DOCUMENT_POSITION_FOLLOWING));
-  check('apps grid pre-populated by main.js', Object.keys(window.appsByKey).length === 2);
+  check('apps grid pre-populated by main.js', Object.keys(window.appsByKey).length === 4);
 
   console.log('\n--- Debug page ---');
   click(document.getElementById('tab-debug'));
@@ -61,7 +61,7 @@ async function main() {
   await sleep(20);
   check('apps tab becomes active on click', document.getElementById('page-apps').classList.contains('active'));
   check('control tab becomes inactive', !document.getElementById('page-control').classList.contains('active'));
-  check('apps grid rendered with 2 cards', document.querySelectorAll('#appsGrid .app-card').length === 2);
+  check('apps grid rendered with 4 cards', document.querySelectorAll('#appsGrid .app-card').length === 4);
 
   console.log('\n--- Global settings live on the Apps page ---');
   const globalGrid = document.getElementById('globalSettingsGrid');
@@ -105,6 +105,50 @@ async function main() {
   check('save posted to the per-app settings endpoint', calls.some(c => c.url === '/apps/weather/settings'));
   check('save body carries the edited value', calls.some(c => c.url === '/apps/weather/settings' && JSON.parse(c.body).zip_code === '94103'));
   check('modal closes after save', document.getElementById('appSettingsModal').style.display === 'none');
+
+  console.log('\n--- An app with only Global Settings: a gear, and a note naming them ---');
+  const youtubeCard = document.querySelector('#appsGrid .app-card[data-app="youtube"]');
+  check('youtube card has a gear icon (uses global settings)', !!youtubeCard.querySelector('.app-gear'));
+  click(youtubeCard.querySelector('.app-gear'));
+  await sleep(20);
+  const ytModal = document.getElementById('appSettingsFields').textContent;
+  check('modal names the global settings it uses',
+    ytModal.includes('Also uses from Global Settings: YouTube Channel ID.') && !ytModal.includes('No configurable settings'));
+  click(document.querySelector('#appSettingsModal [data-onclick="closeAppSettings"]'));
+  await sleep(20);
+
+  console.log('\n--- Connecting an app that signs in with OAuth (paste the address back) ---');
+  const opened = [];
+  window.open = () => {
+    const tab = { location: null, opener: 'page', closed: false, close() { this.closed = true; } };
+    opened.push(tab);
+    return tab;
+  };
+  click(document.querySelector('#appsGrid .app-card[data-app="spotify"] .app-gear'));
+  await sleep(20);
+  const oauthSection = document.querySelector('#appSettingsFields .oauth-section');
+  check('the modal has an account section', !!oauthSection && oauthSection.textContent.includes('Not connected'));
+  check('it shows the redirect URI to register', oauthSection.textContent.includes('http://127.0.0.1:8888/callback'));
+  check('the paste box is hidden until Connect', document.getElementById('oauthPaste').hidden);
+  document.getElementById('asf_spotify_client_id').value = 'abc123';
+  calls.length = 0;
+  click(oauthSection.querySelector('[data-onclick="oauthConnect"]'));
+  await sleep(30);
+  check('Connect saves the Client ID first', calls.some(c => c.url === '/apps/spotify/settings' && JSON.parse(c.body).spotify_client_id === 'abc123'));
+  check('then starts signing in', calls.findIndex(c => c.url === '/apps/spotify/oauth/start') > calls.findIndex(c => c.url === '/apps/spotify/settings'));
+  check('the sign-in page opens in the tab opened on the click', opened.length === 1 && opened[0].location.startsWith('https://accounts.spotify.com/authorize') && opened[0].opener === null);
+  check('the paste box shows', !document.getElementById('oauthPaste').hidden);
+  document.getElementById('oauthPasteUrl').value = 'http://127.0.0.1:8888/callback?code=xyz&state=abc';
+  click(document.querySelector('[data-onclick="oauthFinish"]'));
+  await sleep(30);
+  check('Finish posts the pasted address', calls.some(c => c.url === '/apps/spotify/oauth/finish' && JSON.parse(c.body).url.includes('code=xyz')));
+  const connectedSection = document.querySelector('#appSettingsFields .oauth-section');
+  check('the section now says connected, with Disconnect', connectedSection.textContent.includes('✓ Connected') && !!connectedSection.querySelector('[data-onclick="oauthDisconnect"]'));
+  click(connectedSection.querySelector('[data-onclick="oauthDisconnect"]'));
+  await sleep(30);
+  check('Disconnect goes back to not connected', document.querySelector('#appSettingsFields .oauth-section').textContent.includes('Not connected'));
+  click(document.querySelector('#appSettingsModal [data-onclick="closeAppSettings"]'));
+  await sleep(20);
 
   console.log('\n--- Back to control tab: playlist row rendering (no innerHTML injection of user data) ---');
   click(document.getElementById('tab-control'));
@@ -967,6 +1011,34 @@ async function main() {
   check('saved playlists sum up their pages', summary({ pages: [{ delay: 2 }, { delay: 8 }, {}], delay: 5 }) === '3 pages · 2–8 s' &&
     summary({ pages: [{}, 'X'], delay: '5' }) === '2 pages · 5 s each' && summary({ pages: [{}], delay: 5 }) === '1 page · 5 s' &&
     summary({ pages: [], delay: 5 }) === '0 pages');
+  check('and count the apps in them', summary({ pages: [{ delay: 5 }, { app: 'time', delay: 5 }], delay: 5 }) === '1 page, 1 app · 5 s each' &&
+    summary({ pages: [{ app: 'time', delay: 8 }], delay: 5 }) === '1 app · 8 s');
+
+  console.log('\n--- An app as a playlist step ---');
+  const appPicker = document.getElementById('addAppSelect');
+  check('the app picker lists the apps', Array.from(appPicker.options).map(o => o.value).join() === 'weather,time,youtube,spotify');
+  const stepsBefore = globalVar('playlist').length;
+  appPicker.value = 'youtube';
+  document.getElementById('delayInput').value = '7';
+  click(document.querySelector('[data-onclick="addAppToPlaylist"]'));
+  const steps = globalVar('playlist');
+  check('Add App adds a step for it, held for the default delay', steps.length === stepsBefore + 1 &&
+    steps[stepsBefore].app === 'youtube' && steps[stepsBefore].delay === 7);
+  const appRow = document.querySelector(`#playlistList .playlist-item[data-idx="${stepsBefore}"]`);
+  check('its row names the app, with no grid preview or EDIT', appRow.classList.contains('playlist-item-app') &&
+    appRow.textContent.includes('▶️ YouTube') && !appRow.querySelector('.playlist-preview') &&
+    !appRow.querySelector('[data-onclick="editPlaylist"]'));
+  calls.length = 0;
+  click(appRow.querySelector('[data-onclick="pushPlaylistPage"]'));
+  await sleep(20);
+  check('its ▶ runs the app', calls.some(c => c.url === '/run_app' && JSON.parse(c.body).app === 'youtube'));
+  calls.length = 0;
+  click(document.querySelector('[data-onclick="sync"]'));
+  await sleep(20);
+  const pushedSteps = JSON.parse(calls.find(c => c.url === '/update_playlist').body).pages;
+  check('PUSH sends the app step as {app, delay}', JSON.stringify(pushedSteps[stepsBefore]) === '{"app":"youtube","delay":7}');
+  click(appRow.querySelector('[data-onclick="removeFromPlaylist"]'));
+  check('and it can be removed like a page', globalVar('playlist').length === stepsBefore);
 
   console.log('\n--- Home All is a POST ---');
   click(document.getElementById('tab-modules'));

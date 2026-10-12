@@ -1,7 +1,7 @@
 import requests
 
 from apps.base import App, Frame
-from apps.builtin._shared import cache_get_or_fetch, center_page
+from apps.builtin._shared import cache_get_or_fetch
 
 
 def fetch_youtube(settings):
@@ -29,13 +29,13 @@ class YoutubeApp(App):
     name = 'YouTube'
     icon = '▶️'
     desc = 'Sub counter'
-    # yt_channel_id lives in Global Settings — shared with Comments & Livestream.
-    settings_fields = []
+    order = 90
+    global_settings = ['yt_channel_id']
 
-    def get_pages(self, settings, cache):
+    def get_pages(self, settings, cache, grid):
         yt = cache_get_or_fetch(cache, 'youtube', 30, lambda: fetch_youtube(settings))
         if yt:
-            text = center_page('YOUTUBE', yt['name'][:16], f"{yt['subs']} SUBS")
+            text = grid.page('YOUTUBE', yt['name'], f"{yt['subs']} SUBS")
         else:
-            text = center_page('YOUTUBE', 'FETCH ERROR', 'CHECK API')
+            text = grid.page('YOUTUBE', 'FETCH ERROR', 'CHECK API')
         return [Frame(text=text, delay=5)]
